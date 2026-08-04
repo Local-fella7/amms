@@ -1,0 +1,1878 @@
+{
+  "info": {
+    "_postman_id": "c19d48c1-3484-46be-ba01-6407c06f272c",
+    "name": "AMMS API",
+    "description": "Association Membership Management System API\n\nBase URL: {{base_url}}\n\n1. Run **Auth > Login** first to obtain JWT token\n2. Token is auto-saved to collection variable `jwt_token`\n3. All protected requests use Bearer auth automatically",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "28189753",
+    "_collection_link": "https://go.postman.co/collection/21535695-c19d48c1-3484-46be-ba01-6407c06f272c?source=collection_link"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('jwt_token', json.data.token);",
+                  "    pm.test('Token saved', function () {",
+                  "        pm.expect(json.data.token).to.be.a('string');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@amms.local\",\n  \"password\": \"admin123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Me",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Roles",
+      "item": [
+        {
+          "name": "List Roles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/roles",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "roles"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Role",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/roles/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "roles",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Role",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"New Role\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/roles",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "roles"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Role",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Role\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/roles/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "roles",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Role",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/roles/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "roles",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Feature Groups",
+      "item": [
+        {
+          "name": "List Feature Groups",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/feature-groups",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "feature-groups"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Feature Group",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/feature-groups/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "feature-groups",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Feature Group",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"New Group\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/feature-groups",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "feature-groups"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Feature Group",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Group\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/feature-groups/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "feature-groups",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Feature Group",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/feature-groups/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "feature-groups",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Features",
+      "item": [
+        {
+          "name": "List Features",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/features",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "features"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Feature",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/features/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "features",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Feature",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Manage Reports\",\n  \"features_group_id\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/features",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "features"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Feature",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Feature\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/features/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "features",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Feature",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/features/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "features",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Role Features",
+      "item": [
+        {
+          "name": "List Role Features",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/role-features",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "role-features"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Role Feature",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/role-features/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "role-features",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Role Feature",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role_id\": 1,\n  \"feature_id\": 2\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/role-features",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "role-features"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Role Feature",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role_id\": 2\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/role-features/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "role-features",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Role Feature",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/role-features/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "role-features",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/users",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get User",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/users/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Jane\",\n  \"last_name\": \"Doe\",\n  \"email\": \"jane@example.com\",\n  \"phone\": \"255700000002\",\n  \"password\": \"password123\",\n  \"role_id\": 1,\n  \"status\": \"active\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/users",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Janet\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/users/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/users/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Association",
+      "item": [
+        {
+          "name": "List Association",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/association",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "association"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Association",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/association/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "association",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Association",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"New Association\",\n  \"address\": \"Dar es Salaam, Tanzania\",\n  \"chairman_phone\": \"255711111111\",\n  \"secretary_phone\": \"255722222222\",\n  \"treasurer_phone\": \"255733333333\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/association",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "association"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Association",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Association\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/association/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "association",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Association",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/association/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "association",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Age Groups",
+      "item": [
+        {
+          "name": "List Age Groups",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/age-groups",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "age-groups"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Age Group",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/age-groups/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "age-groups",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Age Group",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Infant\",\n  \"from_age\": 0,\n  \"to_age\": 5\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/age-groups",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "age-groups"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Age Group",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Age Group\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/age-groups/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "age-groups",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Age Group",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/age-groups/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "age-groups",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Notification Templates",
+      "item": [
+        {
+          "name": "List Templates",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/notification-templates",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "notification-templates"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Template",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/notification-templates/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "notification-templates",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Template",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Fee Reminder\",\n  \"content\": \"Dear {{first_name}}, please pay your annual fee.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/notification-templates",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "notification-templates"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Template",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Template\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/notification-templates/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "notification-templates",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Template",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/notification-templates/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "notification-templates",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Locations",
+      "item": [
+        {
+          "name": "List Locations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/locations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "locations"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Location",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/locations/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "locations",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Location",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Moshi\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/locations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "locations"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Location",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Location\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/locations/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "locations",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Location",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/locations/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "locations",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Fees",
+      "item": [
+        {
+          "name": "List Fees",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/fees",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "fees"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Fee",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/fees/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "fees",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Fee",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Annual Subscription 2027\",\n  \"amount\": 60000.00,\n  \"year\": 2027\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/fees",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "fees"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Fee",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 55000.00\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/fees/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "fees",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Fee",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/fees/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "fees",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Payment Modes",
+      "item": [
+        {
+          "name": "List Payment Modes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/payment-modes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "payment-modes"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Payment Mode",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/payment-modes/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "payment-modes",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Payment Mode",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Cheque\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/payment-modes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "payment-modes"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Payment Mode",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Mode\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/payment-modes/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "payment-modes",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Payment Mode",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/payment-modes/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "payment-modes",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Members",
+      "item": [
+        {
+          "name": "List Members",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/members",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "members"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Member",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/members/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "members",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Member",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Alice\",\n  \"last_name\": \"Smith\",\n  \"fathers_name\": \"Bob Smith\",\n  \"mothers_name\": \"Carol Smith\",\n  \"location_id\": 1,\n  \"date_of_birth\": \"1985-03-20\",\n  \"member_status\": \"active\",\n  \"marital_status\": \"single\",\n  \"phone\": \"255755555555\",\n  \"fee_exemption\": \"no\",\n  \"age_group_id\": 2,\n  \"registration_date\": \"2026-08-03\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/members",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "members"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Member",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"member_status\": \"inactive\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/members/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "members",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Member",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/members/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "members",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Fee Payments",
+      "item": [
+        {
+          "name": "List Fee Payments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/fee-payments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "fee-payments"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Fee Payment",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/fee-payments/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "fee-payments",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Fee Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date\": \"2026-08-03\",\n  \"payment_mode_id\": 1,\n  \"amount\": 50000.00,\n  \"fee_id\": 1,\n  \"member_id\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/fee-payments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "fee-payments"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Fee Payment",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 55000.00\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/fee-payments/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "fee-payments",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Fee Payment",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/fee-payments/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "fee-payments",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "List Notifications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/notifications",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "notifications"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Notification",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/notifications/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "notifications",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Notification",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Annual Meeting\",\n  \"notification_template_id\": 1,\n  \"content\": \"Dear members, our annual meeting is scheduled for March 1st.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/notifications",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "notifications"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Notification",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Notification\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/notifications/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "notifications",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Notification",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/notifications/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "notifications",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Notification Members",
+      "item": [
+        {
+          "name": "List Notification Members",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/notification-members",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "notification-members"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Notification Member",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/notification-members/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "notification-members",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Notification Member",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notification_id\": 1,\n  \"member_id\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/notification-members",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "notification-members"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Notification Member",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"member_id\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/notification-members/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "notification-members",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Notification Member",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/notification-members/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "notification-members",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Audit Logs",
+      "item": [
+        {
+          "name": "List Logs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/logs",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "logs"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Log",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/logs/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "logs",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Log",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"feature_id\": 1,\n  \"user_id\": 1,\n  \"datetime\": \"2026-08-03 10:00:00\",\n  \"before\": \"{}\",\n  \"after\": \"{\\\"action\\\":\\\"manual\\\"}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/logs",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "logs"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Log",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"after\": \"{\\\"updated\\\":true}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/logs/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "logs",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Log",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/logs/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "logs",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{jwt_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost/amms/public/api"
+    },
+    {
+      "key": "jwt_token",
+      "value": ""
+    }
+  ]
+}
