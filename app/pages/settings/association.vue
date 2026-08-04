@@ -131,8 +131,8 @@ onMounted(() => {
                 <i class="bi bi-building fs-2 amms-accent"></i>
               </div>
               <div>
-                <h5 class="fw-bold mb-0 text-white">Organization Configuration</h5>
-                <small class="text-white-50 text-xs">Official Association Registry Info</small>
+                <h5 class="fw-bold mb-0 text-white">{{ name || 'Association Profile' }}</h5>
+                <small class="text-white-50 text-xs">Official Association Registry & Leadership Contacts</small>
               </div>
             </div>
           </div>
