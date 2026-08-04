@@ -80,7 +80,9 @@ const schema = z.object({
   location_id: z.union([z.number(), z.string().min(1, 'Location branch is required')]),
   age_group_id: z.union([z.number(), z.string().min(1, 'Age group is required')]),
   date_of_birth: z.string().min(4, 'Date of birth is required'),
-  phone: z.string().min(10, 'Phone number must be at least 10 digits'),
+  phone: z.string()
+    .length(12, 'Phone number must be exactly 12 digits (e.g. 255755555555)')
+    .regex(/^255[0-9]{9}$/, 'Phone number must start with 255 followed by 9 digits'),
   member_status: z.enum(['active', 'inactive']),
   marital_status: z.enum(['single', 'married', 'divorced', 'widowed']),
   fee_exemption: z.enum(['yes', 'no']),
@@ -158,8 +160,83 @@ const paginatedMembers = computed(() => {
   return filteredMembers.value.slice(start, start + itemsPerPage.value)
 })
 
-watch([searchQuery, selectedLocationFilter, selectedStatusFilter, itemsPerPage], () => {
-  currentPage.value = 1
+interface AgeGroupItem {
+  id: number
+  name: string
+  from_age?: number
+  to_age?: number
+}
+
+const calculatedAge = ref<number | null>(null)
+
+// Auto-calculate member age & auto-select matching Age Group
+watch(dateOfBirth, (newDob) => {
+  if (!newDob) {
+    calculatedAge.value = null
+    return
+  }
+
+  let dobDate: Date
+  if (newDob instanceof Date) {
+    dobDate = newDob
+  } else {
+    dobDate = new Date(newDob)
+  }
+
+  if (isNaN(dobDate.getTime())) {
+    calculatedAge.value = null
+    return
+  }
+
+  const today = new Date()
+  let age = today.getFullYear() - dobDate.getFullYear()
+  const monthDiff = today.getMonth() - dobDate.getMonth()
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dobDate.getDate())) {
+    age--
+  }
+
+  calculatedAge.value = age >= 0 ? age : 0
+
+  // Match against loaded age groups [from_age, to_age]
+  if (ageGroups.value && ageGroups.value.length > 0 && calculatedAge.value !== null) {
+    const matched = ageGroups.value.find(g => {
+      const min = g.from_age !== undefined ? Number(g.from_age) : 0
+      const max = g.to_age !== undefined ? Number(g.to_age) : 999
+      return calculatedAge.value! >= min && calculatedAge.value! <= max
+    })
+
+    if (matched) {
+      ageGroupId.value = matched.id
+    }
+  }
+}, { immediate: true })
+
+// Auto-format & enforce 255 prefix, digits only, omit leading zero after 255, and max 12 characters
+watch(phone, (val) => {
+  if (!val) {
+    phone.value = '255'
+    return
+  }
+
+  // Strip all non-digit characters
+  let digits = val.replace(/\D/g, '')
+
+  // Ensure starts with 255
+  if (!digits.startsWith('255')) {
+    digits = '255' + digits.replace(/^255?/, '')
+  }
+
+  // Omit leading zero after 255 (e.g. 2550755555555 -> 255755555555)
+  if (digits.startsWith('2550')) {
+    digits = '255' + digits.slice(4).replace(/^0+/, '')
+  }
+
+  // Max 12 digits
+  if (digits.length > 12) {
+    digits = digits.slice(0, 12)
+  }
+
+  phone.value = digits
 })
 
 const openAddModal = () => {
@@ -171,7 +248,7 @@ const openAddModal = () => {
   locationId.value = locations.value && locations.value.length > 0 ? locations.value[0].id : ''
   ageGroupId.value = ageGroups.value && ageGroups.value.length > 0 ? ageGroups.value[0].id : ''
   dateOfBirth.value = '1990-01-01'
-  phone.value = ''
+  phone.value = '255'
   memberStatus.value = 'active'
   maritalStatus.value = 'single'
   feeExemption.value = 'no'
@@ -212,6 +289,20 @@ const closeModal = () => {
   isModalOpen.value = false
 }
 
+const formatDateToYMD = (val: any) => {
+  if (!val) return new Date().toISOString().substring(0, 10)
+  if (val instanceof Date) {
+    const yyyy = val.getFullYear()
+    const mm = String(val.getMonth() + 1).padStart(2, '0')
+    const dd = String(val.getDate()).padStart(2, '0')
+    return `${yyyy}-${mm}-${dd}`
+  }
+  if (typeof val === 'string') {
+    return val.substring(0, 10)
+  }
+  return String(val)
+}
+
 const handleSave = async () => {
   modalError.value = ''
   const payload = {
@@ -221,12 +312,12 @@ const handleSave = async () => {
     mothers_name: mothersName.value.trim() || undefined,
     location_id: Number(locationId.value),
     age_group_id: Number(ageGroupId.value),
-    date_of_birth: dateOfBirth.value,
+    date_of_birth: formatDateToYMD(dateOfBirth.value),
     phone: phone.value.trim(),
     member_status: memberStatus.value,
     marital_status: maritalStatus.value,
     fee_exemption: feeExemption.value,
-    registration_date: registrationDate.value
+    registration_date: formatDateToYMD(registrationDate.value)
   }
 
   const validation = schema.safeParse(payload)
@@ -623,7 +714,7 @@ onMounted(() => {
                 <div class="col-md-6">
                   <label for="regDate" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Registration Date *</label>
                   <ClientOnly>
-                    <VDatePicker v-model="registrationDate" mode="date" string-format="yyyy-MM-dd">
+                    <VDatePicker v-model="registrationDate" mode="date" string-format="yyyy-MM-dd" :masks="{ input: 'DD-MM-YYYY' }">
                       <template #default="{ inputValue, inputEvents }">
                         <div class="input-group">
                           <span class="input-group-text bg-transparent border-end-0 text-muted">
@@ -632,8 +723,8 @@ onMounted(() => {
                           <input
                             :value="inputValue"
                             v-on="inputEvents"
-                            class="form-control border-start-0 ps-1 py-2 text-sm bg-body"
-                            placeholder="YYYY-MM-DD"
+                            class="form-control border-start-0 ps-1 py-2 text-sm bg-body font-monospace"
+                            placeholder="DD-MM-YYYY"
                             readonly
                           />
                         </div>
@@ -643,9 +734,14 @@ onMounted(() => {
                 </div>
 
                 <div class="col-md-6">
-                  <label for="dateOfBirth" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Date of Birth *</label>
+                  <div class="d-flex align-items-center justify-content-between mb-1">
+                    <label for="dateOfBirth" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase mb-0">Date of Birth *</label>
+                    <span v-if="calculatedAge !== null" class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-20 rounded-pill text-xs">
+                      Age: {{ calculatedAge }} Years
+                    </span>
+                  </div>
                   <ClientOnly>
-                    <VDatePicker v-model="dateOfBirth" mode="date" string-format="yyyy-MM-dd">
+                    <VDatePicker v-model="dateOfBirth" mode="date" string-format="yyyy-MM-dd" :masks="{ input: 'DD-MM-YYYY' }">
                       <template #default="{ inputValue, inputEvents }">
                         <div class="input-group">
                           <span class="input-group-text bg-transparent border-end-0 text-muted">
@@ -654,8 +750,8 @@ onMounted(() => {
                           <input
                             :value="inputValue"
                             v-on="inputEvents"
-                            class="form-control border-start-0 ps-1 py-2 text-sm bg-body"
-                            placeholder="YYYY-MM-DD"
+                            class="form-control border-start-0 ps-1 py-2 text-sm bg-body font-monospace"
+                            placeholder="DD-MM-YYYY"
                             readonly
                           />
                         </div>
@@ -690,7 +786,7 @@ onMounted(() => {
               <div class="row g-3 mb-3">
                 <div class="col-md-6">
                   <label for="phone" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Phone Number *</label>
-                  <input id="phone" v-model="phone" type="tel" class="form-control py-2 text-sm font-monospace" placeholder="255755555555" required />
+                  <input id="phone" v-model="phone" type="tel" maxlength="12" class="form-control py-2 text-sm font-monospace" placeholder="255755555555" required />
                 </div>
                 <div class="col-md-6">
                   <label for="maritalStatus" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Marital Status *</label>
