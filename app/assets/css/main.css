@@ -1,12 +1,179 @@
-/* Global Styles */
-:root {
-  --primary-color: #43766C;
-  --bg-color: #F8FAE5;
-  --secondary-color: #B19470;
-  --accent-color: #76453B;
+/* ==========================================================================
+   AMMS — Association Membership Management System
+   Theme tokens: "Civic Registry" palette
+   Works with Bootstrap 5.3+ native color modes via [data-bs-theme]
+   ========================================================================== */
+
+:root,
+[data-bs-theme="light"] {
+  /* --- Brand --- */
+  --amms-primary: #1B2A4A;
+  --amms-primary-hover: #14213A;
+  --amms-secondary: #2E4372;
+  --amms-accent: #B8923D;      /* gold — badges, stamps, highlights */
+
+  /* --- Semantic --- */
+  --amms-success: #2F855A;
+  --amms-warning: #C97A2B;
+  --amms-danger: #B33A3A;
+  --amms-info: #3172B0;
+
+  /* --- Surfaces & text --- */
+  --amms-body-bg: #F6F7FB;
+  --amms-surface: #FFFFFF;
+  --amms-surface-elevated: #FFFFFF;
+  --amms-border: #DDE1EC;
+  --amms-text-primary: #1B2333;
+  --amms-text-secondary: #5B6478;
+  --amms-text-muted: #8A93A6;
+
+  /* --- Map to Bootstrap 5 variables --- */
+  --bs-primary: var(--amms-primary);
+  --bs-primary-rgb: 27, 42, 74;
+  --bs-secondary: var(--amms-secondary);
+  --bs-secondary-rgb: 46, 67, 114;
+  --bs-success: var(--amms-success);
+  --bs-success-rgb: 47, 133, 90;
+  --bs-warning: var(--amms-warning);
+  --bs-warning-rgb: 201, 122, 43;
+  --bs-danger: var(--amms-danger);
+  --bs-danger-rgb: 179, 58, 58;
+  --bs-info: var(--amms-info);
+  --bs-info-rgb: 49, 114, 176;
+
+  --bs-body-bg: var(--amms-body-bg);
+  --bs-body-color: var(--amms-text-primary);
+  --bs-border-color: var(--amms-border);
+  --bs-secondary-color: var(--amms-text-secondary);
+  --bs-tertiary-color: var(--amms-text-muted);
+  --bs-tertiary-bg: var(--amms-surface-elevated);
+
+  --bs-link-color: var(--amms-primary);
+  --bs-link-hover-color: var(--amms-primary-hover);
+
+  color-scheme: light;
 }
 
-body {
-  background-color: var(--bg-color);
-  color: #333;
+[data-bs-theme="dark"] {
+  /* --- Brand (brightened for dark surfaces) --- */
+  --amms-primary: #4A63A0;
+  --amms-primary-hover: #5E77B8;
+  --amms-secondary: #6B7FAE;
+  --amms-accent: #D4AF5A;
+
+  /* --- Semantic --- */
+  --amms-success: #4CAF7D;
+  --amms-warning: #E0954A;
+  --amms-danger: #D9615F;
+  --amms-info: #5C9AE0;
+
+  /* --- Surfaces & text --- */
+  --amms-body-bg: #0F1524;
+  --amms-surface: #182236;
+  --amms-surface-elevated: #202D46;
+  --amms-border: #2A3550;
+  --amms-text-primary: #E8EAF2;
+  --amms-text-secondary: #AEB6CC;
+  --amms-text-muted: #7C869E;
+
+  /* --- Map to Bootstrap 5 variables --- */
+  --bs-primary: var(--amms-primary);
+  --bs-primary-rgb: 74, 99, 160;
+  --bs-secondary: var(--amms-secondary);
+  --bs-secondary-rgb: 107, 127, 174;
+  --bs-success: var(--amms-success);
+  --bs-success-rgb: 76, 175, 125;
+  --bs-warning: var(--amms-warning);
+  --bs-warning-rgb: 224, 149, 74;
+  --bs-danger: var(--amms-danger);
+  --bs-danger-rgb: 217, 97, 95;
+  --bs-info: var(--amms-info);
+  --bs-info-rgb: 92, 154, 224;
+
+  --bs-body-bg: var(--amms-body-bg);
+  --bs-body-color: var(--amms-text-primary);
+  --bs-border-color: var(--amms-border);
+  --bs-secondary-color: var(--amms-text-secondary);
+  --bs-tertiary-color: var(--amms-text-muted);
+  --bs-tertiary-bg: var(--amms-surface-elevated);
+
+  --bs-link-color: var(--amms-accent);
+  --bs-link-hover-color: #E4C170;
+
+  color-scheme: dark;
+}
+
+/* ==========================================================================
+   App-specific helper classes (not covered by Bootstrap defaults)
+   ========================================================================== */
+
+.amms-surface {
+  background-color: var(--amms-surface);
+  border: 1px solid var(--amms-border);
+}
+
+.amms-surface-elevated {
+  background-color: var(--amms-surface-elevated);
+}
+
+.amms-accent {
+  color: var(--amms-accent);
+}
+
+.amms-badge-accent {
+  background-color: var(--amms-accent);
+  color: #1B2333; /* keep dark text on gold in both modes for contrast */
+}
+
+.text-secondary-amms {
+  color: var(--amms-text-secondary);
+}
+
+.text-muted-amms {
+  color: var(--amms-text-muted);
+}
+
+/* Sidebar / nav (common admin-shell pattern) */
+.amms-sidebar {
+  background-color: var(--amms-primary);
+  color: #E8EAF2;
+}
+
+.amms-sidebar .nav-link {
+  color: #C7CFE3;
+}
+
+.amms-sidebar .nav-link.active,
+.amms-sidebar .nav-link:hover {
+  color: #FFFFFF;
+  background-color: rgba(255, 255, 255, 0.08);
+  border-left: 3px solid var(--amms-accent);
+}
+
+/* Status pill helpers (member_status, fee payment state, etc.) */
+.amms-status-active {
+  color: var(--amms-success);
+  background-color: rgba(47, 133, 90, 0.12);
+}
+
+.amms-status-inactive {
+  color: var(--amms-text-muted);
+  background-color: rgba(138, 147, 166, 0.12);
+}
+
+.amms-status-overdue {
+  color: var(--amms-danger);
+  background-color: rgba(179, 58, 58, 0.12);
+}
+
+.amms-status-pending {
+  color: var(--amms-warning);
+  background-color: rgba(201, 122, 43, 0.12);
+}
+
+/* Smooth theme transition */
+body,
+.amms-surface,
+.amms-sidebar {
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
