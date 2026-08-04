@@ -88,7 +88,10 @@ watch([searchQuery, itemsPerPage], () => {
 
 const getAssignedCount = (roleId: number) => {
   if (!roleFeatures.value) return 0
-  return roleFeatures.value.filter(rf => Number(rf.role_id) === Number(roleId)).length
+  const records = Array.isArray(roleFeatures.value) 
+    ? roleFeatures.value 
+    : ((roleFeatures.value as any)?.data || [])
+  return records.filter((rf: any) => Number(rf.role_id || rf.roleId) === Number(roleId)).length
 }
 
 const openAddRoleModal = () => {
@@ -148,16 +151,36 @@ const handleSaveRole = async () => {
   }
 }
 
-const openPermsDrawer = (role: Role) => {
+const openPermsDrawer = async (role: Role) => {
   selectedRoleForPerms.value = role
-  if (roleFeatures.value) {
-    selectedFeatureIds.value = roleFeatures.value
-      .filter(rf => Number(rf.role_id) === Number(role.id))
-      .map(rf => Number(rf.feature_id))
-  } else {
+  isPermsDrawerOpen.value = true
+  
+  try {
+    const res: any = await fetchWithAuth('/api/role-features')
+    console.log('GET /api/role-features response:', res)
+    
+    let records = []
+    if (Array.isArray(res)) {
+      records = res
+    } else if (Array.isArray(res?.data)) {
+      records = res.data
+    } else if (Array.isArray(res?.data?.data)) {
+      records = res.data.data
+    } else if (res?.data && typeof res.data === 'object') {
+      records = Object.values(res.data)
+    }
+
+    console.log('Parsed role-feature records:', records)
+
+    selectedFeatureIds.value = records
+      .filter((rf: any) => Number(rf.role_id ?? rf.roleId ?? rf.role_id) === Number(role.id))
+      .map((rf: any) => Number(rf.feature_id ?? rf.featureId ?? rf.id))
+
+    console.log('Selected feature IDs for role', role.id, ':', selectedFeatureIds.value)
+  } catch (err) {
+    console.error('Error fetching role-features:', err)
     selectedFeatureIds.value = []
   }
-  isPermsDrawerOpen.value = true
 }
 
 const closePermsDrawer = () => {
@@ -165,12 +188,17 @@ const closePermsDrawer = () => {
   selectedRoleForPerms.value = null
 }
 
-const toggleFeaturePerm = (featureId: number) => {
-  const index = selectedFeatureIds.value.indexOf(featureId)
+const isFeatureSelected = (featureId: number | string) => {
+  return selectedFeatureIds.value.some(id => Number(id) === Number(featureId))
+}
+
+const toggleFeaturePerm = (featureId: number | string) => {
+  const numId = Number(featureId)
+  const index = selectedFeatureIds.value.findIndex(id => Number(id) === numId)
   if (index > -1) {
     selectedFeatureIds.value.splice(index, 1)
   } else {
-    selectedFeatureIds.value.push(featureId)
+    selectedFeatureIds.value.push(numId)
   }
 }
 
@@ -181,12 +209,30 @@ const handleSavePermissions = async () => {
   try {
     const roleId = selectedRoleForPerms.value.id
     
-    // Assign selected features
+    // 1. Fetch current existing records for this role
+    const currentRfList = await fetchWithAuth('/api/role-features').catch(() => [])
+    const allRecords = Array.isArray(currentRfList) ? currentRfList : (currentRfList?.data || [])
+    const existingRoleRecords = allRecords.filter((rf: any) => Number(rf.role_id) === Number(roleId))
+
+    const existingFeatureIds = existingRoleRecords.map((rf: any) => Number(rf.feature_id))
+
+    // 2. Add newly selected features
     for (const fId of selectedFeatureIds.value) {
-      await fetchWithAuth('/api/role-features', {
-        method: 'POST',
-        body: { role_id: roleId, feature_id: fId }
-      }).catch(() => {})
+      if (!existingFeatureIds.includes(fId)) {
+        await fetchWithAuth('/api/role-features', {
+          method: 'POST',
+          body: { role_id: roleId, feature_id: fId }
+        }).catch(() => {})
+      }
+    }
+
+    // 3. Delete unselected features
+    for (const record of existingRoleRecords) {
+      if (!selectedFeatureIds.value.includes(Number(record.feature_id))) {
+        await fetchWithAuth(`/api/role-features/${record.id}`, {
+          method: 'DELETE'
+        }).catch(() => {})
+      }
     }
 
     push.success(`Permissions for role "${selectedRoleForPerms.value.name}" saved!`)
@@ -518,15 +564,15 @@ onMounted(() => {
               <div v-for="feat in features" :key="feat.id" class="col-md-6">
                 <div 
                   class="p-3 rounded-3 border d-flex align-items-center justify-content-between cursor-pointer transition-all"
-                  :class="{ 'border-primary bg-primary bg-opacity-10': selectedFeatureIds.includes(feat.id) }"
+                  :class="{ 'border-primary bg-primary bg-opacity-10': isFeatureSelected(feat.id) }"
                   @click="toggleFeaturePerm(feat.id)"
                 >
                   <div class="d-flex align-items-center gap-2.5">
-                    <i :class="selectedFeatureIds.includes(feat.id) ? 'bi bi-check-circle-fill text-primary fs-5' : 'bi bi-circle text-muted fs-5'"></i>
+                    <i :class="isFeatureSelected(feat.id) ? 'bi bi-check-circle-fill text-primary fs-5' : 'bi bi-circle text-muted fs-5'"></i>
                     <span class="fw-semibold text-sm text-body">{{ feat.name }}</span>
                   </div>
-                  <span class="badge rounded-pill text-xs" :class="selectedFeatureIds.includes(feat.id) ? 'bg-primary text-white' : 'bg-body-tertiary text-muted'">
-                    {{ selectedFeatureIds.includes(feat.id) ? 'Enabled' : 'Disabled' }}
+                  <span class="badge rounded-pill text-xs" :class="isFeatureSelected(feat.id) ? 'bg-primary text-white' : 'bg-body-tertiary text-muted'">
+                    {{ isFeatureSelected(feat.id) ? 'Enabled' : 'Disabled' }}
                   </span>
                 </div>
               </div>
