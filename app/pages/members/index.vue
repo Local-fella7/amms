@@ -402,41 +402,58 @@ onMounted(() => {
       @add="openAddModal"
     />
 
-    <!-- Filter Control Bar -->
-    <div class="card amms-surface border-0 shadow-sm rounded-4 p-3 mb-4">
-      <div class="row g-2 align-items-center">
-        <div class="col-md-4">
-          <label class="form-label text-xs fw-semibold text-muted text-uppercase mb-1">Filter by Location Branch</label>
-          <select v-model="selectedLocationFilter" class="form-select form-select-sm rounded-pill text-xs">
-            <option value="">All Location Branches</option>
-            <option v-for="loc in locations" :key="loc.id" :value="loc.id">{{ loc.name }}</option>
-          </select>
-        </div>
-
-        <div class="col-md-4">
-          <label class="form-label text-xs fw-semibold text-muted text-uppercase mb-1">Filter by Membership Status</label>
-          <select v-model="selectedStatusFilter" class="form-select form-select-sm rounded-pill text-xs">
-            <option value="">All Membership Statuses</option>
-            <option value="active">Active Members</option>
-            <option value="inactive">Inactive Members</option>
-          </select>
-        </div>
-
-        <div class="col-md-4 d-flex align-items-end justify-content-end" v-if="selectedLocationFilter || selectedStatusFilter || searchQuery">
-          <button 
-            type="button" 
-            class="btn btn-sm btn-link text-danger text-xs text-decoration-none"
-            @click="selectedLocationFilter = ''; selectedStatusFilter = ''; searchQuery = ''"
-          >
-            <i class="bi bi-x-circle me-1"></i> Reset Filters
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Main Data Table Container -->
+    <!-- Integrated Table Container with Top Toolbar -->
     <div class="card amms-surface border-0 shadow-sm rounded-4 overflow-hidden mb-4 position-relative">
       
+      <!-- Top Table Toolbar with Integrated Filters -->
+      <div class="card-header bg-body-tertiary border-bottom px-4 py-3 d-flex flex-wrap align-items-center justify-content-between gap-3">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+          <span class="text-xs fw-bold text-uppercase text-secondary-amms tracking-wider me-1">
+            <i class="bi bi-funnel-fill text-primary me-1"></i> Quick Filters:
+          </span>
+
+          <!-- Location Branch Filter Pill -->
+          <div class="dropdown">
+            <select 
+              v-model="selectedLocationFilter" 
+              class="form-select form-select-sm rounded-pill text-xs fw-semibold border bg-body ps-3 pe-4 shadow-none cursor-pointer"
+              :class="selectedLocationFilter ? 'border-primary text-primary bg-primary bg-opacity-10' : 'text-body'"
+            >
+              <option value="">All Branches</option>
+              <option v-for="loc in locations" :key="loc.id" :value="loc.id">Branch: {{ loc.name }}</option>
+            </select>
+          </div>
+
+          <!-- Membership Status Filter Pill -->
+          <div class="dropdown">
+            <select 
+              v-model="selectedStatusFilter" 
+              class="form-select form-select-sm rounded-pill text-xs fw-semibold border bg-body ps-3 pe-4 shadow-none cursor-pointer"
+              :class="selectedStatusFilter ? 'border-primary text-primary bg-primary bg-opacity-10' : 'text-body'"
+            >
+              <option value="">All Statuses</option>
+              <option value="active">Active Members</option>
+              <option value="inactive">Inactive Members</option>
+            </select>
+          </div>
+
+          <!-- Clear Filters Link -->
+          <button 
+            v-if="selectedLocationFilter || selectedStatusFilter || searchQuery"
+            type="button" 
+            class="btn btn-xs btn-link text-danger text-xs text-decoration-none px-2 fw-semibold ms-1"
+            @click="selectedLocationFilter = ''; selectedStatusFilter = ''; searchQuery = ''"
+          >
+            <i class="bi bi-x-lg me-1"></i> Clear Filters
+          </button>
+        </div>
+
+        <!-- Total Filtered Counter Badge -->
+        <div class="text-xs text-muted font-monospace">
+          Showing <span class="fw-bold text-primary">{{ filteredMembers.length }}</span> members
+        </div>
+      </div>
+
       <!-- Center Loading Spinner Overlay -->
       <div v-if="loading" class="position-absolute top-0 start-0 w-100 h-100 bg-body bg-opacity-75 d-flex flex-column align-items-center justify-content-center z-3">
         <div class="spinner-border text-primary" role="status" style="width: 2.5rem; height: 2.5rem;">
