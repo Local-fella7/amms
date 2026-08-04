@@ -1,3 +1,21 @@
+<script setup lang="ts">
+useHead({
+  script: [
+    {
+      innerHTML: `(function() {
+        try {
+          var saved = localStorage.getItem('amms_theme');
+          if (saved) {
+            document.documentElement.setAttribute('data-bs-theme', saved);
+          }
+        } catch (e) {}
+      })();`,
+      type: 'text/javascript'
+    }
+  ]
+})
+</script>
+
 <template>
   <NuxtLayout>
     <NuxtPage />

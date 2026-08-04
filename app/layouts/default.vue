@@ -24,11 +24,16 @@ const toggleProfileMenu = () => {
 const toggleTheme = () => {
   currentTheme.value = currentTheme.value === 'light' ? 'dark' : 'light'
   document.documentElement.setAttribute('data-bs-theme', currentTheme.value)
+  if (import.meta.client) {
+    localStorage.setItem('amms_theme', currentTheme.value)
+  }
 }
 
 onMounted(() => {
-  const theme = document.documentElement.getAttribute('data-bs-theme') || 'light'
+  const savedTheme = import.meta.client ? localStorage.getItem('amms_theme') : null
+  const theme = savedTheme || document.documentElement.getAttribute('data-bs-theme') || 'light'
   currentTheme.value = theme
+  document.documentElement.setAttribute('data-bs-theme', theme)
   if (route.path.startsWith('/settings')) {
     isSettingsOpen.value = true
   }
