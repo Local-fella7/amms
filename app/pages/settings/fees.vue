@@ -31,7 +31,18 @@ const currentPage = ref(1)
 const itemsPerPage = ref(10)
 
 // Delete Modal State
-const itemToDelete = ref<FeeSchedule | null>(null)
+const viewingFee = ref<FeeSchedule | null>(null)
+const isViewModalOpen = ref(false)
+
+const openViewModal = (fee: FeeSchedule) => {
+  viewingFee.value = fee
+  isViewModalOpen.value = true
+}
+
+const closeViewModal = () => {
+  viewingFee.value = null
+  isViewModalOpen.value = false
+}
 const isDeleteModalOpen = ref(false)
 const isDeleting = ref(false)
 
@@ -294,6 +305,13 @@ onMounted(() => {
                 <div class="d-flex align-items-center justify-content-end gap-1">
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
+                    @click="openViewModal(fee)"
+                    title="View Fee Schedule Details"
+                  >
+                    <i class="bi bi-eye-fill text-primary"></i>
+                  </button>
+                  <button 
+                    class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
                     @click="openEditModal(fee)"
                     title="Edit Fee Schedule"
                   >
@@ -323,6 +341,40 @@ onMounted(() => {
       />
 
     </div>
+
+    <!-- View Fee Schedule Details Modal -->
+    <ViewDetailModal
+      v-if="isViewModalOpen"
+      id="viewFeeModal"
+      title="Fee Schedule Details"
+      icon="bi bi-receipt"
+      @close="closeViewModal"
+    >
+      <div class="p-3 bg-body-tertiary rounded-3 border mb-3">
+        <div class="row g-3">
+          <div class="col-6">
+            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Fee Year</span>
+            <span class="fw-bold text-primary font-monospace fs-6">{{ viewingFee ? getFeeYear(viewingFee) : '' }}</span>
+          </div>
+          <div class="col-6">
+            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Annual Amount</span>
+            <span class="fw-bold text-success font-monospace fs-6">{{ viewingFee ? formatCurrency(viewingFee.amount) : '' }}</span>
+          </div>
+          <div class="col-12">
+            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Description</span>
+            <span class="fw-medium text-body text-xs">{{ viewingFee?.description || viewingFee?.name || '—' }}</span>
+          </div>
+          <div class="col-6" v-if="viewingFee?.created_at">
+            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Created Date</span>
+            <span class="text-xs text-secondary-amms font-monospace">{{ viewingFee.created_at }}</span>
+          </div>
+          <div class="col-6" v-if="viewingFee?.updated_at">
+            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Last Updated</span>
+            <span class="text-xs text-secondary-amms font-monospace">{{ viewingFee.updated_at }}</span>
+          </div>
+        </div>
+      </div>
+    </ViewDetailModal>
 
     <!-- Custom Delete Confirmation Modal -->
     <div v-if="isDeleteModalOpen" class="modal-backdrop fade show" style="z-index: 1060;"></div>

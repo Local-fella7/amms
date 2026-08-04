@@ -25,7 +25,18 @@ const currentPage = ref(1)
 const itemsPerPage = ref(10)
 
 // Delete Modal State
-const itemToDelete = ref<PaymentMode | null>(null)
+const viewingMode = ref<PaymentMode | null>(null)
+const isViewModalOpen = ref(false)
+
+const openViewModal = (mode: PaymentMode) => {
+  viewingMode.value = mode
+  isViewModalOpen.value = true
+}
+
+const closeViewModal = () => {
+  viewingMode.value = null
+  isViewModalOpen.value = false
+}
 const isDeleteModalOpen = ref(false)
 const isDeleting = ref(false)
 
@@ -234,6 +245,13 @@ onMounted(() => {
                 <div class="d-flex align-items-center justify-content-end gap-1">
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
+                    @click="openViewModal(mode)"
+                    title="View Payment Mode Details"
+                  >
+                    <i class="bi bi-eye-fill text-primary"></i>
+                  </button>
+                  <button 
+                    class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
                     @click="openEditModal(mode)"
                     title="Edit Payment Mode"
                   >
@@ -263,6 +281,32 @@ onMounted(() => {
       />
 
     </div>
+
+    <!-- View Payment Mode Details Modal -->
+    <ViewDetailModal
+      v-if="isViewModalOpen"
+      id="viewPaymentModeModal"
+      title="Payment Mode Details"
+      icon="bi bi-credit-card"
+      @close="closeViewModal"
+    >
+      <div class="p-3 bg-body-tertiary rounded-3 border mb-3">
+        <div class="row g-3">
+          <div class="col-12">
+            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Mode Name</span>
+            <span class="fw-bold text-primary fs-6">{{ viewingMode?.name }}</span>
+          </div>
+          <div class="col-6" v-if="viewingMode?.created_at">
+            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Created Date</span>
+            <span class="text-xs text-secondary-amms font-monospace">{{ viewingMode.created_at }}</span>
+          </div>
+          <div class="col-6" v-if="viewingMode?.updated_at">
+            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Last Updated</span>
+            <span class="text-xs text-secondary-amms font-monospace">{{ viewingMode.updated_at }}</span>
+          </div>
+        </div>
+      </div>
+    </ViewDetailModal>
 
     <!-- Custom Delete Confirmation Modal -->
     <div v-if="isDeleteModalOpen" class="modal-backdrop fade show" style="z-index: 1060;"></div>

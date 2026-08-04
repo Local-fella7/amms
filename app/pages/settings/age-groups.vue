@@ -135,7 +135,18 @@ const handleSave = async () => {
   }
 }
 
-const itemToDelete = ref<AgeGroup | null>(null)
+const viewingGroup = ref<AgeGroup | null>(null)
+const isViewModalOpen = ref(false)
+
+const openViewModal = (group: AgeGroup) => {
+  viewingGroup.value = group
+  isViewModalOpen.value = true
+}
+
+const closeViewModal = () => {
+  viewingGroup.value = null
+  isViewModalOpen.value = false
+}
 const isDeleteModalOpen = ref(false)
 const isDeleting = ref(false)
 
@@ -257,6 +268,13 @@ onMounted(() => {
                 <div class="d-flex align-items-center justify-content-end gap-1">
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
+                    @click="openViewModal(group)"
+                    title="View Age Group Details"
+                  >
+                    <i class="bi bi-eye-fill text-primary"></i>
+                  </button>
+                  <button 
+                    class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
                     @click="openEditModal(group)"
                     title="Edit Age Group"
                   >
@@ -286,6 +304,40 @@ onMounted(() => {
       />
 
     </div>
+
+    <!-- View Age Group Details Modal -->
+    <ViewDetailModal
+      v-if="isViewModalOpen"
+      id="viewAgeGroupModal"
+      title="Age Group Bracket Details"
+      icon="bi bi-people"
+      @close="closeViewModal"
+    >
+      <div class="p-3 bg-body-tertiary rounded-3 border mb-3">
+        <div class="row g-3">
+          <div class="col-12">
+            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Group Name</span>
+            <span class="fw-bold text-primary fs-6">{{ viewingGroup?.name }}</span>
+          </div>
+          <div class="col-6">
+            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Minimum Age</span>
+            <span class="fw-semibold text-body">{{ viewingGroup?.from_age }} Years</span>
+          </div>
+          <div class="col-6">
+            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Maximum Age</span>
+            <span class="fw-semibold text-body">{{ viewingGroup?.to_age }} Years</span>
+          </div>
+          <div class="col-6" v-if="viewingGroup?.created_at">
+            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Created Date</span>
+            <span class="text-xs text-secondary-amms font-monospace">{{ viewingGroup.created_at }}</span>
+          </div>
+          <div class="col-6" v-if="viewingGroup?.updated_at">
+            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Last Updated</span>
+            <span class="text-xs text-secondary-amms font-monospace">{{ viewingGroup.updated_at }}</span>
+          </div>
+        </div>
+      </div>
+    </ViewDetailModal>
 
     <!-- Vue-Controlled Custom Delete Modal Overlay -->
     <div v-if="isDeleteModalOpen" class="modal-backdrop fade show" style="z-index: 1060;"></div>
