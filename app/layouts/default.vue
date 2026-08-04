@@ -162,6 +162,12 @@ onMounted(() => {
                 <span v-if="!isSidebarCollapsed" class="fw-medium text-sm">Broadcasts</span>
               </NuxtLink>
             </li>
+            <li class="nav-item">
+              <NuxtLink to="/notification-members" class="nav-link d-flex align-items-center gap-3 px-3 py-2.5 rounded-3" active-class="active">
+                <i class="bi bi-person-lines-fill fs-5"></i>
+                <span v-if="!isSidebarCollapsed" class="fw-medium text-sm">Broadcast Recipients</span>
+              </NuxtLink>
+            </li>
           </ul>
 
           <!-- System Settings Accordion -->
