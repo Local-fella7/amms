@@ -6,6 +6,7 @@ const route = useRoute()
 const authStore = useAuthStore()
 const isSidebarCollapsed = ref(false)
 const isSettingsOpen = ref(false)
+const isProfileMenuOpen = ref(false)
 const currentTheme = ref('light')
 
 const toggleSidebar = () => {
@@ -14,6 +15,10 @@ const toggleSidebar = () => {
 
 const toggleSettings = () => {
   isSettingsOpen.value = !isSettingsOpen.value
+}
+
+const toggleProfileMenu = () => {
+  isProfileMenuOpen.value = !isProfileMenuOpen.value
 }
 
 const toggleTheme = () => {
@@ -85,12 +90,11 @@ onMounted(() => {
         </button>
 
         <!-- Profile Dropdown -->
-        <div class="dropdown">
+        <div class="dropdown position-relative">
           <button 
-            class="btn btn-sm btn-light border-0 rounded-pill d-flex align-items-center gap-2 px-2 py-1"
+            class="btn btn-sm btn-light border-0 rounded-pill d-flex align-items-center gap-2 px-2 py-1 cursor-pointer"
             type="button"
-            data-bs-toggle="dropdown"
-            aria-expanded="false"
+            @click="toggleProfileMenu"
           >
             <div class="avatar-circle rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold text-xs">
               {{ authStore.user?.first_name ? authStore.user.first_name[0] : 'A' }}
@@ -98,22 +102,22 @@ onMounted(() => {
             <span class="d-none d-md-inline small fw-semibold text-body">
               {{ authStore.user?.first_name || 'Admin' }}
             </span>
-            <i class="bi bi-chevron-down text-muted text-xs me-1"></i>
+            <i class="bi bi-chevron-down text-muted text-xs me-1 transition-transform" :class="{ 'rotate-180': isProfileMenuOpen }"></i>
           </button>
 
-          <ul class="dropdown-menu dropdown-menu-end shadow-sm rounded-3 border mt-2">
-            <li class="px-3 py-2 border-bottom">
-              <p class="mb-0 fw-semibold text-sm">{{ authStore.user?.first_name }} {{ authStore.user?.last_name }}</p>
-              <small class="text-muted d-block text-truncate">{{ authStore.user?.email || 'admin@amms.local' }}</small>
+          <ul v-if="isProfileMenuOpen" class="dropdown-menu dropdown-menu-end show shadow-lg rounded-3 border mt-2 position-absolute end-0" style="min-width: 220px; z-index: 1070;">
+            <li class="px-3 py-2 border-bottom bg-body-tertiary">
+              <p class="mb-0 fw-bold text-primary text-sm">{{ authStore.user?.first_name }} {{ authStore.user?.last_name }}</p>
+              <small class="text-muted d-block text-truncate font-monospace text-xs">{{ authStore.user?.email || 'admin@amms.local' }}</small>
             </li>
             <li>
-              <NuxtLink to="/settings/association" class="dropdown-menu-item dropdown-item d-flex align-items-center gap-2 py-2 text-sm">
-                <i class="bi bi-gear text-muted"></i> System Settings
+              <NuxtLink to="/settings/association" class="dropdown-item d-flex align-items-center gap-2 py-2 text-xs fw-medium" @click="isProfileMenuOpen = false">
+                <i class="bi bi-gear text-primary"></i> System Settings
               </NuxtLink>
             </li>
             <li><hr class="dropdown-divider my-1"></li>
             <li>
-              <button class="dropdown-item d-flex align-items-center gap-2 py-2 text-sm text-danger" @click="authStore.logout()">
+              <button class="dropdown-item d-flex align-items-center gap-2 py-2 text-xs fw-semibold text-danger cursor-pointer" @click="isProfileMenuOpen = false; authStore.logout()">
                 <i class="bi bi-box-arrow-right"></i> Sign Out
               </button>
             </li>
