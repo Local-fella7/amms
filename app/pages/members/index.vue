@@ -303,6 +303,16 @@ const formatDateToYMD = (val: any) => {
   return String(val)
 }
 
+const formatDateDisplay = (val?: string) => {
+  if (!val) return '—'
+  const str = String(val).trim()
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    const parts = str.substring(0, 10).split('-')
+    return `${parts[2]}-${parts[1]}-${parts[0]}`
+  }
+  return str
+}
+
 const handleSave = async () => {
   modalError.value = ''
   const payload = {
@@ -480,6 +490,7 @@ onMounted(() => {
               <th>Phone Number</th>
               <th>Location Branch</th>
               <th>Age Group</th>
+              <th>Registration Date</th>
               <th>Exemption</th>
               <th>Status</th>
               <th class="text-end pe-4" style="width: 140px;">Actions</th>
@@ -494,6 +505,7 @@ onMounted(() => {
                 <td><span class="placeholder col-6"></span></td>
                 <td><span class="placeholder col-6"></span></td>
                 <td><span class="placeholder col-6"></span></td>
+                <td><span class="placeholder col-6"></span></td>
                 <td><span class="placeholder col-4"></span></td>
                 <td><span class="placeholder col-4"></span></td>
                 <td class="pe-4 text-end"><span class="placeholder col-10"></span></td>
@@ -502,7 +514,7 @@ onMounted(() => {
 
             <!-- Empty State -->
             <tr v-else-if="filteredMembers.length === 0">
-              <td colspan="8" class="text-center py-5 text-muted">
+              <td colspan="9" class="text-center py-5 text-muted">
                 <i class="bi bi-person-x fs-1 d-block mb-2 text-opacity-50"></i>
                 <p class="mb-0 fw-medium">No members found matching criteria</p>
                 <small>Click "Register New Member" above to add a member to the registry.</small>
@@ -530,6 +542,9 @@ onMounted(() => {
               </td>
               <td class="text-xs text-secondary-amms">
                 {{ m.age_group?.name || getAgeGroupName(m.age_group_id) }}
+              </td>
+              <td class="font-monospace text-xs text-body">
+                {{ formatDateDisplay(m.registration_date) }}
               </td>
               <td>
                 <span 
@@ -625,7 +640,7 @@ onMounted(() => {
           </div>
           <div class="col-md-4">
             <span class="text-xs text-muted text-uppercase fw-semibold d-block">Date of Birth</span>
-            <span class="font-monospace text-xs text-body">{{ viewingMember?.date_of_birth }}</span>
+            <span class="font-monospace text-xs text-body">{{ formatDateDisplay(viewingMember?.date_of_birth) }}</span>
           </div>
           <div class="col-md-4">
             <span class="text-xs text-muted text-uppercase fw-semibold d-block">Marital Status</span>
@@ -639,7 +654,7 @@ onMounted(() => {
           </div>
           <div class="col-md-4">
             <span class="text-xs text-muted text-uppercase fw-semibold d-block">Registration Date</span>
-            <span class="font-monospace text-xs text-body">{{ viewingMember?.registration_date }}</span>
+            <span class="font-monospace text-xs text-body">{{ formatDateDisplay(viewingMember?.registration_date) }}</span>
           </div>
         </div>
       </div>

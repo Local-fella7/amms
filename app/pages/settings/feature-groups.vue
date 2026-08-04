@@ -170,6 +170,16 @@ const confirmDelete = async () => {
   }
 }
 
+const formatDateDisplay = (val?: string) => {
+  if (!val) return '—'
+  const str = String(val).trim()
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    const parts = str.substring(0, 10).split('-')
+    return `${parts[2]}-${parts[1]}-${parts[0]}`
+  }
+  return str
+}
+
 onMounted(() => {
   loadData()
 })
@@ -245,7 +255,7 @@ onMounted(() => {
                 </div>
               </td>
               <td class="text-xs text-secondary-amms font-monospace">
-                {{ g.created_at || '—' }}
+                {{ formatDateDisplay(g.created_at) }}
               </td>
               <td class="pe-4 text-end">
                 <div class="d-flex align-items-center justify-content-end gap-1">
@@ -291,11 +301,11 @@ onMounted(() => {
           </div>
           <div class="col-md-6" v-if="viewingGroup?.created_at">
             <span class="text-xs text-muted text-uppercase fw-semibold d-block">Created At</span>
-            <span class="text-xs text-secondary-amms font-monospace">{{ viewingGroup.created_at }}</span>
+            <span class="text-xs text-secondary-amms font-monospace">{{ formatDateDisplay(viewingGroup.created_at) }}</span>
           </div>
           <div class="col-md-6" v-if="viewingGroup?.updated_at">
             <span class="text-xs text-muted text-uppercase fw-semibold d-block">Last Updated</span>
-            <span class="text-xs text-secondary-amms font-monospace">{{ viewingGroup.updated_at }}</span>
+            <span class="text-xs text-secondary-amms font-monospace">{{ formatDateDisplay(viewingGroup.updated_at) }}</span>
           </div>
         </div>
       </div>
