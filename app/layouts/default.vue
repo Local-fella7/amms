@@ -184,6 +184,10 @@ onMounted(() => {
 
               <!-- Collapsable Submenu -->
               <div v-if="isSettingsOpen && !isSidebarCollapsed" class="sub-menu-box ps-3 mt-1.5 d-flex flex-column gap-1.5 border-start border-white border-opacity-20 ms-3 py-1">
+                <NuxtLink to="/settings/users" class="nav-link d-flex align-items-center gap-3 px-3 py-2 rounded-2 text-xs" active-class="active">
+                  <i class="bi bi-person-badge fs-6 text-white-50 flex-shrink-0"></i>
+                  <span>System Users</span>
+                </NuxtLink>
                 <NuxtLink to="/settings/association" class="nav-link d-flex align-items-center gap-3 px-3 py-2 rounded-2 text-xs" active-class="active">
                   <i class="bi bi-building fs-6 text-white-50 flex-shrink-0"></i>
                   <span>Association Profile</span>
@@ -191,6 +195,14 @@ onMounted(() => {
                 <NuxtLink to="/settings/roles" class="nav-link d-flex align-items-center gap-3 px-3 py-2 rounded-2 text-xs" active-class="active">
                   <i class="bi bi-shield-lock fs-6 text-white-50 flex-shrink-0"></i>
                   <span>Roles & Permissions</span>
+                </NuxtLink>
+                <NuxtLink to="/settings/feature-groups" class="nav-link d-flex align-items-center gap-3 px-3 py-2 rounded-2 text-xs" active-class="active">
+                  <i class="bi bi-folder fs-6 text-white-50 flex-shrink-0"></i>
+                  <span>Feature Groups</span>
+                </NuxtLink>
+                <NuxtLink to="/settings/features" class="nav-link d-flex align-items-center gap-3 px-3 py-2 rounded-2 text-xs" active-class="active">
+                  <i class="bi bi-key fs-6 text-white-50 flex-shrink-0"></i>
+                  <span>System Features</span>
                 </NuxtLink>
                 <NuxtLink to="/settings/locations" class="nav-link d-flex align-items-center gap-3 px-3 py-2 rounded-2 text-xs" active-class="active">
                   <i class="bi bi-geo-alt fs-6 text-white-50 flex-shrink-0"></i>

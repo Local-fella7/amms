@@ -414,11 +414,11 @@ onMounted(() => {
           </span>
 
           <!-- Payment Mode Filter Pill -->
-          <div class="dropdown">
+          <div style="min-width: 170px;">
             <select 
               v-model="selectedPaymentModeFilter" 
-              class="form-select form-select-sm rounded-pill text-xs fw-semibold border bg-body ps-3 pe-4 shadow-none cursor-pointer"
-              :class="selectedPaymentModeFilter ? 'border-primary text-primary bg-primary bg-opacity-10' : 'text-body'"
+              class="form-select form-select-sm rounded-pill text-xs fw-semibold border bg-body ps-3 pe-4 shadow-sm cursor-pointer filter-pill-select"
+              :class="selectedPaymentModeFilter ? 'border-primary text-primary bg-primary bg-opacity-10' : 'text-body-secondary'"
             >
               <option value="">All Payment Modes</option>
               <option v-for="pm in paymentModes" :key="pm.id" :value="pm.id">{{ pm.name }}</option>
@@ -426,14 +426,16 @@ onMounted(() => {
           </div>
 
           <!-- Fee Year Filter Pill -->
-          <div class="dropdown">
+          <div style="min-width: 220px;">
             <select 
               v-model="selectedFeeYearFilter" 
-              class="form-select form-select-sm rounded-pill text-xs fw-semibold border bg-body ps-3 pe-4 shadow-none cursor-pointer"
-              :class="selectedFeeYearFilter ? 'border-primary text-primary bg-primary bg-opacity-10' : 'text-body'"
+              class="form-select form-select-sm rounded-pill text-xs fw-semibold border bg-body ps-3 pe-4 shadow-sm cursor-pointer filter-pill-select"
+              :class="selectedFeeYearFilter ? 'border-primary text-primary bg-primary bg-opacity-10' : 'text-body-secondary'"
             >
               <option value="">All Fee Years</option>
-              <option v-for="f in fees" :key="f.id" :value="f.id">Year: {{ getFeeYear(f) }}</option>
+              <option v-for="f in fees" :key="f.id" :value="f.id">
+                Year: {{ getFeeYear(f) }} - {{ formatCurrency(f.amount) }}
+              </option>
             </select>
           </div>
 
@@ -821,6 +823,16 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.filter-pill-select {
+  height: 34px;
+  line-height: 1.5;
+  transition: all 0.2s ease;
+}
+
+.filter-pill-select:hover {
+  border-color: var(--amms-primary) !important;
+}
+
 .text-xs { font-size: 0.775rem; }
 .text-sm { font-size: 0.875rem; }
 

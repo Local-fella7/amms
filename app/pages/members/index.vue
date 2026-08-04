@@ -413,11 +413,11 @@ onMounted(() => {
           </span>
 
           <!-- Location Branch Filter Pill -->
-          <div class="dropdown">
+          <div style="min-width: 170px;">
             <select 
               v-model="selectedLocationFilter" 
-              class="form-select form-select-sm rounded-pill text-xs fw-semibold border bg-body ps-3 pe-4 shadow-none cursor-pointer"
-              :class="selectedLocationFilter ? 'border-primary text-primary bg-primary bg-opacity-10' : 'text-body'"
+              class="form-select form-select-sm rounded-pill text-xs fw-semibold border bg-body ps-3 pe-4 shadow-sm cursor-pointer filter-pill-select"
+              :class="selectedLocationFilter ? 'border-primary text-primary bg-primary bg-opacity-10' : 'text-body-secondary'"
             >
               <option value="">All Branches</option>
               <option v-for="loc in locations" :key="loc.id" :value="loc.id">Branch: {{ loc.name }}</option>
@@ -425,11 +425,11 @@ onMounted(() => {
           </div>
 
           <!-- Membership Status Filter Pill -->
-          <div class="dropdown">
+          <div style="min-width: 160px;">
             <select 
               v-model="selectedStatusFilter" 
-              class="form-select form-select-sm rounded-pill text-xs fw-semibold border bg-body ps-3 pe-4 shadow-none cursor-pointer"
-              :class="selectedStatusFilter ? 'border-primary text-primary bg-primary bg-opacity-10' : 'text-body'"
+              class="form-select form-select-sm rounded-pill text-xs fw-semibold border bg-body ps-3 pe-4 shadow-sm cursor-pointer filter-pill-select"
+              :class="selectedStatusFilter ? 'border-primary text-primary bg-primary bg-opacity-10' : 'text-body-secondary'"
             >
               <option value="">All Statuses</option>
               <option value="active">Active Members</option>
@@ -879,6 +879,16 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.filter-pill-select {
+  height: 34px;
+  line-height: 1.5;
+  transition: all 0.2s ease;
+}
+
+.filter-pill-select:hover {
+  border-color: var(--amms-primary) !important;
+}
+
 .text-xs { font-size: 0.775rem; }
 .text-sm { font-size: 0.875rem; }
 
