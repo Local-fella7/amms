@@ -27,7 +27,18 @@ const currentPage = ref(1)
 const itemsPerPage = ref(10)
 
 // Delete Modal State
-const itemToDelete = ref<NotificationTemplate | null>(null)
+const viewingTemplate = ref<NotificationTemplate | null>(null)
+const isViewModalOpen = ref(false)
+
+const openViewModal = (tmpl: NotificationTemplate) => {
+  viewingTemplate.value = tmpl
+  isViewModalOpen.value = true
+}
+
+const closeViewModal = () => {
+  viewingTemplate.value = null
+  isViewModalOpen.value = false
+}
 const isDeleteModalOpen = ref(false)
 const isDeleting = ref(false)
 
@@ -254,6 +265,13 @@ onMounted(() => {
                 <div class="d-flex align-items-center justify-content-end gap-1">
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
+                    @click="openViewModal(tmpl)"
+                    title="View Template Details"
+                  >
+                    <i class="bi bi-eye-fill text-primary"></i>
+                  </button>
+                  <button 
+                    class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
                     @click="openEditModal(tmpl)"
                     title="Edit Template"
                   >
@@ -283,6 +301,38 @@ onMounted(() => {
       />
 
     </div>
+
+    <!-- View Notification Template Details Modal -->
+    <ViewDetailModal
+      v-if="isViewModalOpen"
+      id="viewTemplateModal"
+      title="Notification Template Details"
+      icon="bi bi-file-text"
+      @close="closeViewModal"
+    >
+      <div class="p-3 bg-body-tertiary rounded-3 border mb-3">
+        <div class="row g-3">
+          <div class="col-12">
+            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Template Title</span>
+            <span class="fw-bold text-primary fs-6">{{ viewingTemplate?.name }}</span>
+          </div>
+          <div class="col-12">
+            <span class="text-xs text-muted text-uppercase fw-semibold d-block mb-1">Full Message Content</span>
+            <div class="p-3 bg-body rounded-3 border font-monospace text-xs text-body">
+              {{ viewingTemplate?.content }}
+            </div>
+          </div>
+          <div class="col-6" v-if="viewingTemplate?.created_at">
+            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Created Date</span>
+            <span class="text-xs text-secondary-amms font-monospace">{{ viewingTemplate.created_at }}</span>
+          </div>
+          <div class="col-6" v-if="viewingTemplate?.updated_at">
+            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Last Updated</span>
+            <span class="text-xs text-secondary-amms font-monospace">{{ viewingTemplate.updated_at }}</span>
+          </div>
+        </div>
+      </div>
+    </ViewDetailModal>
 
     <!-- Custom Delete Confirmation Modal -->
     <div v-if="isDeleteModalOpen" class="modal-backdrop fade show" style="z-index: 1060;"></div>

@@ -112,7 +112,18 @@ const handleSave = async () => {
   }
 }
 
-const itemToDelete = ref<Location | null>(null)
+const viewingLocation = ref<Location | null>(null)
+const isViewModalOpen = ref(false)
+
+const openViewModal = (loc: Location) => {
+  viewingLocation.value = loc
+  isViewModalOpen.value = true
+}
+
+const closeViewModal = () => {
+  viewingLocation.value = null
+  isViewModalOpen.value = false
+}
 const isDeleteModalOpen = ref(false)
 const isDeleting = ref(false)
 
@@ -226,6 +237,13 @@ onMounted(() => {
                 <div class="d-flex align-items-center justify-content-end gap-1">
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
+                    @click="openViewModal(loc)"
+                    title="View Location Details"
+                  >
+                    <i class="bi bi-eye-fill text-primary"></i>
+                  </button>
+                  <button 
+                    class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
                     @click="openEditModal(loc)"
                     title="Edit Location"
                   >
@@ -255,6 +273,32 @@ onMounted(() => {
       />
 
     </div>
+
+    <!-- View Location Details Modal -->
+    <ViewDetailModal
+      v-if="isViewModalOpen"
+      id="viewLocationModal"
+      title="Location Branch Details"
+      icon="bi bi-geo-alt"
+      @close="closeViewModal"
+    >
+      <div class="p-3 bg-body-tertiary rounded-3 border mb-3">
+        <div class="row g-3">
+          <div class="col-12">
+            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Location / City Name</span>
+            <span class="fw-bold text-primary fs-6">{{ viewingLocation?.name }}</span>
+          </div>
+          <div class="col-6" v-if="viewingLocation?.created_at">
+            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Created Date</span>
+            <span class="text-xs text-secondary-amms font-monospace">{{ viewingLocation.created_at }}</span>
+          </div>
+          <div class="col-6" v-if="viewingLocation?.updated_at">
+            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Last Updated</span>
+            <span class="text-xs text-secondary-amms font-monospace">{{ viewingLocation.updated_at }}</span>
+          </div>
+        </div>
+      </div>
+    </ViewDetailModal>
 
     <!-- Vue-Controlled Custom Delete Modal Overlay -->
     <div v-if="isDeleteModalOpen" class="modal-backdrop fade show" style="z-index: 1060;"></div>
