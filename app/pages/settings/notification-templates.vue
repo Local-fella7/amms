@@ -1,0 +1,526 @@
+<script setup lang="ts">
+import { ref, computed, watch, onMounted } from 'vue'
+import { z } from 'zod'
+
+interface NotificationTemplate {
+  id: number
+  name: string
+  content: string
+  created_at?: string
+  updated_at?: string
+}
+
+const { data: templates, loading, error, execute: fetchTemplates, fetchWithAuth } = useApi<NotificationTemplate[]>()
+
+const searchQuery = ref('')
+const isSubmitting = ref(false)
+const modalError = ref('')
+const editingTemplate = ref<NotificationTemplate | null>(null)
+const isModalOpen = ref(false)
+
+// Form Fields
+const name = ref('')
+const content = ref('')
+
+// Pagination State
+const currentPage = ref(1)
+const itemsPerPage = ref(10)
+
+// Delete Modal State
+const itemToDelete = ref<NotificationTemplate | null>(null)
+const isDeleteModalOpen = ref(false)
+const isDeleting = ref(false)
+
+const schema = z.object({
+  name: z.string().min(2, 'Template title must be at least 2 characters'),
+  content: z.string().min(5, 'Template message content must be at least 5 characters')
+})
+
+const loadData = async () => {
+  try {
+    await fetchTemplates((api) => api('/api/notification-templates'))
+  } catch (err) {
+    // Error handled by composable
+  }
+}
+
+const filteredTemplates = computed(() => {
+  if (!templates.value) return []
+  let result = [...templates.value]
+  if (searchQuery.value.trim()) {
+    const q = searchQuery.value.toLowerCase()
+    result = result.filter(t => 
+      t.name.toLowerCase().includes(q) ||
+      (t.content && t.content.toLowerCase().includes(q))
+    )
+  }
+  // Sort descending by ID (newest first)
+  return result.sort((a, b) => b.id - a.id)
+})
+
+// Pagination Slicing
+const totalPages = computed(() => Math.ceil(filteredTemplates.value.length / itemsPerPage.value) || 1)
+
+const paginatedTemplates = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage.value
+  return filteredTemplates.value.slice(start, start + itemsPerPage.value)
+})
+
+// Reset to page 1 on search or page size change
+watch([searchQuery, itemsPerPage], () => {
+  currentPage.value = 1
+})
+
+const openAddModal = () => {
+  editingTemplate.value = null
+  name.value = ''
+  content.value = ''
+  modalError.value = ''
+  isModalOpen.value = true
+}
+
+const openEditModal = (tmpl: NotificationTemplate) => {
+  editingTemplate.value = tmpl
+  name.value = tmpl.name
+  content.value = tmpl.content || ''
+  modalError.value = ''
+  isModalOpen.value = true
+}
+
+const closeModal = () => {
+  isModalOpen.value = false
+}
+
+const insertTag = (tag: string) => {
+  content.value += ` ${tag}`
+}
+
+const handleSave = async () => {
+  modalError.value = ''
+  const payload = {
+    name: name.value.trim(),
+    content: content.value.trim()
+  }
+
+  const validation = schema.safeParse(payload)
+  if (!validation.success) {
+    modalError.value = validation.error.issues[0].message
+    push.error(modalError.value)
+    return
+  }
+
+  isSubmitting.value = true
+  try {
+    if (editingTemplate.value) {
+      await fetchWithAuth(`/api/notification-templates/${editingTemplate.value.id}`, {
+        method: 'PUT',
+        body: payload
+      })
+      push.success(`Template "${name.value}" updated successfully!`)
+    } else {
+      await fetchWithAuth('/api/notification-templates', {
+        method: 'POST',
+        body: payload
+      })
+      push.success(`Template "${name.value}" created successfully!`)
+    }
+    
+    closeModal()
+    await loadData()
+  } catch (err: any) {
+    console.error('Save template error:', err)
+    const serverErrors = err?.data?.errors ? Object.values(err.data.errors).flat().join(', ') : null
+    modalError.value = serverErrors || err?.data?.message || err?.message || 'Failed to save template'
+    push.error(modalError.value)
+  } finally {
+    isSubmitting.value = false
+  }
+}
+
+const promptDelete = (tmpl: NotificationTemplate) => {
+  itemToDelete.value = tmpl
+  isDeleteModalOpen.value = true
+}
+
+const cancelDelete = () => {
+  itemToDelete.value = null
+  isDeleteModalOpen.value = false
+}
+
+const confirmDelete = async () => {
+  if (!itemToDelete.value) return
+  
+  isDeleting.value = true
+  try {
+    await fetchWithAuth(`/api/notification-templates/${itemToDelete.value.id}`, { method: 'DELETE' })
+    push.success(`Template "${itemToDelete.value.name}" deleted successfully!`)
+    cancelDelete()
+    await loadData()
+  } catch (err: any) {
+    const msg = err?.data?.message || 'Failed to delete template'
+    push.error(msg)
+  } finally {
+    isDeleting.value = false
+  }
+}
+
+onMounted(() => {
+  loadData()
+})
+</script>
+
+<template>
+  <div>
+    <!-- Page Header -->
+    <PageHeader
+      title="SMS / Email Templates"
+      subtitle="Manage reusable message templates for broadcast notifications"
+      v-model:searchQuery="searchQuery"
+      searchPlaceholder="Search templates..."
+      :loading="loading"
+      hideRefresh
+      showAddButton
+      addButtonText="New Template"
+      @add="openAddModal"
+    />
+
+    <!-- Main Data Table Container -->
+    <div class="card amms-surface border-0 shadow-sm rounded-4 overflow-hidden mb-4 position-relative">
+      
+      <!-- Center Loading Spinner Overlay -->
+      <div v-if="loading" class="position-absolute top-0 start-0 w-100 h-100 bg-body bg-opacity-75 d-flex flex-column align-items-center justify-content-center z-3">
+        <div class="spinner-border text-primary" role="status" style="width: 2.5rem; height: 2.5rem;">
+          <span class="visually-hidden">Loading templates...</span>
+        </div>
+        <span class="text-xs fw-semibold text-primary mt-2">Loading template data...</span>
+      </div>
+
+      <!-- Error Alert -->
+      <div v-if="error" class="alert alert-danger rounded-0 mb-0 py-3 px-4 d-flex align-items-center justify-content-between">
+        <div class="d-flex align-items-center gap-2">
+          <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+          <span>{{ error }}</span>
+        </div>
+        <button class="btn btn-sm btn-outline-danger rounded-pill" @click="loadData">Retry</button>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table align-middle mb-0 custom-amms-table">
+          <thead>
+            <tr>
+              <th class="ps-4" style="width: 90px;"># ID</th>
+              <th>Template Title</th>
+              <th>Message Content Preview</th>
+              <th class="text-end pe-4" style="width: 140px;">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- Loading Skeleton -->
+            <template v-if="loading && (!templates || templates.length === 0)">
+              <tr v-for="i in 4" :key="i">
+                <td class="ps-4"><span class="placeholder col-6"></span></td>
+                <td><span class="placeholder col-8"></span></td>
+                <td><span class="placeholder col-10"></span></td>
+                <td class="pe-4 text-end"><span class="placeholder col-10"></span></td>
+              </tr>
+            </template>
+
+            <!-- Empty State -->
+            <tr v-else-if="filteredTemplates.length === 0">
+              <td colspan="4" class="text-center py-5 text-muted">
+                <i class="bi bi-file-earmark-text fs-1 d-block mb-2 text-opacity-50"></i>
+                <p class="mb-0 fw-medium">No templates found</p>
+                <small>Click "New Template" above to create your first notification template.</small>
+              </td>
+            </tr>
+
+            <!-- Template Rows -->
+            <tr v-for="tmpl in paginatedTemplates" :key="tmpl.id">
+              <td class="ps-4 font-monospace text-muted text-xs">#{{ tmpl.id }}</td>
+              <td class="fw-semibold text-primary">
+                <div class="d-flex align-items-center gap-2.5">
+                  <div class="tmpl-icon-badge rounded-circle d-flex align-items-center justify-content-center">
+                    <i class="bi bi-file-text-fill text-primary text-xs"></i>
+                  </div>
+                  <span>{{ tmpl.name }}</span>
+                </div>
+              </td>
+              <td class="text-secondary-amms text-xs font-monospace">
+                <div class="text-truncate" style="max-width: 450px;">
+                  "{{ tmpl.content }}"
+                </div>
+              </td>
+              <td class="pe-4 text-end">
+                <div class="d-flex align-items-center justify-content-end gap-1">
+                  <button 
+                    class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
+                    @click="openEditModal(tmpl)"
+                    title="Edit Template"
+                  >
+                    <i class="bi bi-pencil-fill text-muted"></i>
+                  </button>
+                  <button 
+                    class="btn btn-sm btn-light border-0 rounded-circle action-btn hover-danger" 
+                    @click="promptDelete(tmpl)"
+                    title="Delete Template"
+                  >
+                    <i class="bi bi-trash-fill text-danger"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Reusable Pagination Control Footer -->
+      <PaginationControl
+        v-if="filteredTemplates.length > 0"
+        v-model:currentPage="currentPage"
+        v-model:itemsPerPage="itemsPerPage"
+        :totalPages="totalPages"
+        :totalItems="filteredTemplates.length"
+      />
+
+    </div>
+
+    <!-- Custom Delete Confirmation Modal -->
+    <div v-if="isDeleteModalOpen" class="modal-backdrop fade show" style="z-index: 1060;"></div>
+    
+    <div 
+      v-if="isDeleteModalOpen" 
+      class="modal fade show d-block" 
+      tabindex="-1" 
+      role="dialog"
+      style="z-index: 1065;"
+      @click.self="cancelDelete"
+    >
+      <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content amms-surface border-0 shadow-lg rounded-4 overflow-hidden text-center p-4">
+          
+          <div class="d-inline-flex align-items-center justify-content-center bg-danger bg-opacity-10 text-danger rounded-circle p-3 mx-auto mb-3" style="width: 56px; height: 56px;">
+            <i class="bi bi-trash3-fill fs-3"></i>
+          </div>
+
+          <h5 class="fw-bold text-primary text-sm mb-1">Confirm Deletion</h5>
+          <p class="text-secondary-amms text-xs mb-2">Are you sure you want to permanently delete this notification template?</p>
+          
+          <p class="fw-bold text-danger text-xs mb-4 font-monospace bg-danger bg-opacity-10 py-1.5 px-3 rounded-3 d-inline-block mx-auto">
+            "{{ itemToDelete?.name }}"
+          </p>
+
+          <div class="d-flex align-items-center justify-content-center gap-2">
+            <button 
+              type="button" 
+              class="btn btn-sm btn-light border rounded-pill px-3.5 text-xs fw-semibold" 
+              @click="cancelDelete"
+            >
+              Cancel
+            </button>
+            <button 
+              type="button" 
+              class="btn btn-sm btn-danger rounded-pill px-4 text-xs fw-semibold d-flex align-items-center gap-1.5 shadow-sm"
+              :disabled="isDeleting"
+              @click="confirmDelete"
+            >
+              <span v-if="isDeleting" class="spinner-border spinner-border-sm" role="status"></span>
+              <span>{{ isDeleting ? 'Deleting...' : 'Delete Template' }}</span>
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Create / Edit Vue Pure Modal -->
+    <div v-if="isModalOpen" class="modal-backdrop fade show"></div>
+    
+    <div 
+      v-if="isModalOpen" 
+      class="modal fade show d-block" 
+      tabindex="-1" 
+      role="dialog"
+      @click.self="closeModal"
+    >
+      <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content amms-surface border-0 shadow-lg rounded-4 overflow-hidden">
+          
+          <div class="modal-header border-bottom px-4 py-3 bg-body-tertiary position-relative justify-content-center">
+            <h5 class="modal-title fw-bold text-primary text-sm mb-0 text-center">
+              <i class="bi bi-file-text me-1.5 amms-accent"></i>
+              <span>{{ editingTemplate ? 'Edit Notification Template' : 'Add New Notification Template' }}</span>
+            </h5>
+            <button 
+              type="button" 
+              class="btn-close position-absolute end-0 me-3" 
+              @click="closeModal"
+              aria-label="Close"
+            ></button>
+          </div>
+
+          <form @submit.prevent="handleSave">
+            <div class="modal-body p-4">
+              <div v-if="modalError" class="alert alert-danger py-2 px-3 mb-3 rounded-3 small">
+                <i class="bi bi-exclamation-triangle-fill me-1"></i> {{ modalError }}
+              </div>
+
+              <!-- Template Title -->
+              <div class="mb-3">
+                <label for="tmplName" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase tracking-wider">
+                  Template Title *
+                </label>
+                <div class="input-group">
+                  <span class="input-group-text bg-transparent border-end-0 text-muted">
+                    <i class="bi bi-tag"></i>
+                  </span>
+                  <input
+                    id="tmplName"
+                    v-model="name"
+                    type="text"
+                    class="form-control border-start-0 ps-1 py-2.5 text-sm"
+                    placeholder="e.g. Annual Fee Reminder, Meeting Notice"
+                    required
+                  />
+                </div>
+              </div>
+
+              <!-- Message Content & Insert Tags -->
+              <div class="mb-2">
+                <label for="tmplContent" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase tracking-wider mb-2">
+                  Message Content *
+                </label>
+
+                <!-- Quick Placeholders Bar with Tooltips -->
+                <div class="p-3 bg-body-tertiary border rounded-3 mb-3 d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2.5">
+                  <div class="d-flex align-items-center gap-2 text-xs text-secondary-amms fw-semibold">
+                    <i class="bi bi-info-circle text-primary fs-6"></i>
+                    <span>Quick Placeholders:</span>
+                  </div>
+                  
+                  <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <button 
+                      type="button" 
+                      class="placeholder-chip border-0 rounded-pill font-monospace text-xs px-3 py-1.5 d-inline-flex align-items-center gap-1.5 cursor-pointer transition-all" 
+                      @click="insertTag('{{first_name}}')"
+                      title="Click to insert member's first name placeholder"
+                    >
+                      <i class="bi bi-tag-fill text-primary opacity-75"></i>
+                      <span class="fw-semibold text-primary">&#123;&#123;first_name&#125;&#125;</span>
+                    </button>
+                    <button 
+                      type="button" 
+                      class="placeholder-chip border-0 rounded-pill font-monospace text-xs px-3 py-1.5 d-inline-flex align-items-center gap-1.5 cursor-pointer transition-all" 
+                      @click="insertTag('{{last_name}}')"
+                      title="Click to insert member's last name placeholder"
+                    >
+                      <i class="bi bi-tag-fill text-primary opacity-75"></i>
+                      <span class="fw-semibold text-primary">&#123;&#123;last_name&#125;&#125;</span>
+                    </button>
+                    <button 
+                      type="button" 
+                      class="placeholder-chip border-0 rounded-pill font-monospace text-xs px-3 py-1.5 d-inline-flex align-items-center gap-1.5 cursor-pointer transition-all" 
+                      @click="insertTag('{{fee_year}}')"
+                      title="Click to insert annual fee year placeholder"
+                    >
+                      <i class="bi bi-tag-fill text-primary opacity-75"></i>
+                      <span class="fw-semibold text-primary">&#123;&#123;fee_year&#125;&#125;</span>
+                    </button>
+                  </div>
+                </div>
+
+                <textarea
+                  id="tmplContent"
+                  v-model="content"
+                  rows="4"
+                  class="form-control py-2.5 text-sm font-monospace"
+                  placeholder="Dear {{first_name}}, please pay your annual fee for {{fee_year}}."
+                  required
+                ></textarea>
+              </div>
+
+            </div>
+
+            <div class="modal-footer border-top px-4 py-3 bg-body-tertiary">
+              <button 
+                type="button" 
+                class="btn btn-sm btn-outline-secondary rounded-pill px-3" 
+                @click="closeModal"
+              >
+                Cancel
+              </button>
+              <button 
+                type="submit" 
+                class="btn btn-sm btn-primary rounded-pill px-4 fw-semibold d-flex align-items-center gap-2 shadow-sm"
+                :disabled="isSubmitting"
+              >
+                <span v-if="isSubmitting" class="spinner-border spinner-border-sm" role="status"></span>
+                <span>{{ isSubmitting ? 'Saving...' : (editingTemplate ? 'Update Template' : 'Save Template') }}</span>
+              </button>
+            </div>
+          </form>
+
+        </div>
+      </div>
+    </div>
+
+  </div>
+</template>
+
+<style scoped>
+.text-xs { font-size: 0.775rem; }
+.text-sm { font-size: 0.875rem; }
+.btn-xs { font-size: 0.725rem; padding: 0.15rem 0.5rem; }
+
+/* Civic Registry Custom Table Styling */
+.custom-amms-table {
+  --bs-table-bg: transparent;
+  --bs-table-hover-bg: rgba(27, 42, 74, 0.03);
+}
+
+.custom-amms-table thead {
+  background-color: var(--amms-primary) !important;
+}
+
+.custom-amms-table thead th {
+  color: #FFFFFF !important;
+  border-bottom: 2px solid var(--amms-accent);
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  padding-top: 0.85rem;
+  padding-bottom: 0.85rem;
+}
+
+.tmpl-icon-badge {
+  width: 28px;
+  height: 28px;
+  background-color: rgba(27, 42, 74, 0.08);
+}
+
+.action-btn {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s ease;
+}
+
+.placeholder-chip {
+  background-color: rgba(27, 42, 74, 0.08);
+  border: 1px solid rgba(27, 42, 74, 0.15) !important;
+}
+
+.placeholder-chip:hover {
+  background-color: var(--amms-primary);
+  border-color: var(--amms-primary) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(27, 42, 74, 0.2);
+}
+
+.placeholder-chip:hover span,
+.placeholder-chip:hover i {
+  color: #FFFFFF !important;
+  opacity: 1 !important;
+}
+</style>
