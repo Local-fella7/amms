@@ -16,14 +16,18 @@ export default defineNuxtConfig({
   },
   modules: [
     '@pinia/nuxt',
-    '@nuxtjs/google-fonts'
+    '@nuxtjs/google-fonts',
+    'notivue/nuxt'
   ],
   css: [
     'bootstrap/dist/css/bootstrap.min.css',
     'bootstrap-icons/font/bootstrap-icons.css',
+    'notivue/notification.css',
+    'notivue/animations.css',
     '~/assets/css/main.css'
   ]
 })
+
 
 
 
