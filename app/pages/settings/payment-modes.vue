@@ -2,73 +2,79 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { z } from 'zod'
 
-interface Location {
+interface PaymentMode {
   id: number
   name: string
   created_at?: string
   updated_at?: string
 }
 
-const { data: locations, loading, error, execute: fetchLocations, fetchWithAuth } = useApi<Location[]>()
+const { data: paymentModes, loading, error, execute: fetchPaymentModes, fetchWithAuth } = useApi<PaymentMode[]>()
 
 const searchQuery = ref('')
 const isSubmitting = ref(false)
 const modalError = ref('')
-const editingLocation = ref<Location | null>(null)
-const locationName = ref('')
+const editingMode = ref<PaymentMode | null>(null)
 const isModalOpen = ref(false)
 
-// Pagination Reactive State
+// Form Fields
+const name = ref('')
+
+// Pagination State
 const currentPage = ref(1)
 const itemsPerPage = ref(10)
 
+// Delete Modal State
+const itemToDelete = ref<PaymentMode | null>(null)
+const isDeleteModalOpen = ref(false)
+const isDeleting = ref(false)
+
 const schema = z.object({
-  name: z.string().min(2, 'Location name must be at least 2 characters')
+  name: z.string().min(2, 'Payment mode name must be at least 2 characters')
 })
 
 const loadData = async () => {
   try {
-    await fetchLocations((api) => api('/api/locations'))
+    await fetchPaymentModes((api) => api('/api/payment-modes'))
   } catch (err) {
     // Error handled by composable
   }
 }
 
-const filteredLocations = computed(() => {
-  if (!locations.value) return []
-  let result = [...locations.value]
+const filteredPaymentModes = computed(() => {
+  if (!paymentModes.value) return []
+  let result = [...paymentModes.value]
   if (searchQuery.value.trim()) {
-    result = result.filter(loc => 
-      loc.name.toLowerCase().includes(searchQuery.value.toLowerCase())
-    )
+    const q = searchQuery.value.toLowerCase()
+    result = result.filter(m => m.name.toLowerCase().includes(q))
   }
   // Sort descending by ID (newest first)
   return result.sort((a, b) => b.id - a.id)
 })
 
-// Paginated Locations Slice
-const totalPages = computed(() => Math.ceil(filteredLocations.value.length / itemsPerPage.value) || 1)
+// Pagination Slicing
+const totalPages = computed(() => Math.ceil(filteredPaymentModes.value.length / itemsPerPage.value) || 1)
 
-const paginatedLocations = computed(() => {
+const paginatedPaymentModes = computed(() => {
   const start = (currentPage.value - 1) * itemsPerPage.value
-  return filteredLocations.value.slice(start, start + itemsPerPage.value)
+  return filteredPaymentModes.value.slice(start, start + itemsPerPage.value)
 })
 
-// Reset to page 1 whenever search query or items per page changes
+// Reset to page 1 on search or page size change
 watch([searchQuery, itemsPerPage], () => {
   currentPage.value = 1
 })
 
 const openAddModal = () => {
-  editingLocation.value = null
-  locationName.value = ''
+  editingMode.value = null
+  name.value = ''
   modalError.value = ''
   isModalOpen.value = true
 }
 
-const openEditModal = (loc: Location) => {
-  editingLocation.value = loc
-  locationName.value = loc.name
+const openEditModal = (mode: PaymentMode) => {
+  editingMode.value = mode
+  name.value = mode.name
   modalError.value = ''
   isModalOpen.value = true
 }
@@ -79,7 +85,11 @@ const closeModal = () => {
 
 const handleSave = async () => {
   modalError.value = ''
-  const validation = schema.safeParse({ name: locationName.value })
+  const payload = {
+    name: name.value.trim()
+  }
+
+  const validation = schema.safeParse(payload)
   if (!validation.success) {
     modalError.value = validation.error.issues[0].message
     push.error(modalError.value)
@@ -88,36 +98,34 @@ const handleSave = async () => {
 
   isSubmitting.value = true
   try {
-    if (editingLocation.value) {
-      await fetchWithAuth(`/api/locations/${editingLocation.value.id}`, {
+    if (editingMode.value) {
+      await fetchWithAuth(`/api/payment-modes/${editingMode.value.id}`, {
         method: 'PUT',
-        body: { name: locationName.value }
+        body: payload
       })
-      push.success(`Location "${locationName.value}" updated successfully!`)
+      push.success(`Payment mode "${name.value}" updated successfully!`)
     } else {
-      await fetchWithAuth('/api/locations', {
+      await fetchWithAuth('/api/payment-modes', {
         method: 'POST',
-        body: { name: locationName.value }
+        body: payload
       })
-      push.success(`Location "${locationName.value}" created successfully!`)
+      push.success(`Payment mode "${name.value}" created successfully!`)
     }
     
     closeModal()
     await loadData()
   } catch (err: any) {
-    modalError.value = err?.data?.message || err?.message || 'Failed to save location'
+    console.error('Save payment mode error:', err)
+    const serverErrors = err?.data?.errors ? Object.values(err.data.errors).flat().join(', ') : null
+    modalError.value = serverErrors || err?.data?.message || err?.message || 'Failed to save payment mode'
     push.error(modalError.value)
   } finally {
     isSubmitting.value = false
   }
 }
 
-const itemToDelete = ref<Location | null>(null)
-const isDeleteModalOpen = ref(false)
-const isDeleting = ref(false)
-
-const promptDelete = (loc: Location) => {
-  itemToDelete.value = loc
+const promptDelete = (mode: PaymentMode) => {
+  itemToDelete.value = mode
   isDeleteModalOpen.value = true
 }
 
@@ -131,12 +139,12 @@ const confirmDelete = async () => {
   
   isDeleting.value = true
   try {
-    await fetchWithAuth(`/api/locations/${itemToDelete.value.id}`, { method: 'DELETE' })
-    push.success(`Location "${itemToDelete.value.name}" deleted successfully!`)
+    await fetchWithAuth(`/api/payment-modes/${itemToDelete.value.id}`, { method: 'DELETE' })
+    push.success(`Payment mode "${itemToDelete.value.name}" deleted successfully!`)
     cancelDelete()
     await loadData()
   } catch (err: any) {
-    const msg = err?.data?.message || 'Failed to delete location'
+    const msg = err?.data?.message || 'Failed to delete payment mode'
     push.error(msg)
   } finally {
     isDeleting.value = false
@@ -152,14 +160,14 @@ onMounted(() => {
   <div>
     <!-- Page Header -->
     <PageHeader
-      title="Locations & Regions"
-      subtitle="Manage geographic branches and member registration locations"
+      title="Payment Modes"
+      subtitle="Manage accepted fee payment channels (e.g. Cash, Cheque, Mobile Money)"
       v-model:searchQuery="searchQuery"
-      searchPlaceholder="Search locations..."
+      searchPlaceholder="Search payment modes..."
       :loading="loading"
       hideRefresh
       showAddButton
-      addButtonText="New Location"
+      addButtonText="New Payment Mode"
       @add="openAddModal"
     />
 
@@ -169,9 +177,9 @@ onMounted(() => {
       <!-- Center Loading Spinner Overlay -->
       <div v-if="loading" class="position-absolute top-0 start-0 w-100 h-100 bg-body bg-opacity-75 d-flex flex-column align-items-center justify-content-center z-3">
         <div class="spinner-border text-primary" role="status" style="width: 2.5rem; height: 2.5rem;">
-          <span class="visually-hidden">Loading locations...</span>
+          <span class="visually-hidden">Loading payment modes...</span>
         </div>
-        <span class="text-xs fw-semibold text-primary mt-2">Loading locations data...</span>
+        <span class="text-xs fw-semibold text-primary mt-2">Loading payment mode data...</span>
       </div>
 
       <!-- Error Alert -->
@@ -188,13 +196,13 @@ onMounted(() => {
           <thead>
             <tr>
               <th class="ps-4" style="width: 90px;"># ID</th>
-              <th>Location Name</th>
+              <th>Mode Name</th>
               <th class="text-end pe-4" style="width: 140px;">Actions</th>
             </tr>
           </thead>
           <tbody>
             <!-- Loading Skeleton -->
-            <template v-if="loading && (!locations || locations.length === 0)">
+            <template v-if="loading && (!paymentModes || paymentModes.length === 0)">
               <tr v-for="i in 4" :key="i">
                 <td class="ps-4"><span class="placeholder col-6"></span></td>
                 <td><span class="placeholder col-8"></span></td>
@@ -203,38 +211,38 @@ onMounted(() => {
             </template>
 
             <!-- Empty State -->
-            <tr v-else-if="filteredLocations.length === 0">
+            <tr v-else-if="filteredPaymentModes.length === 0">
               <td colspan="3" class="text-center py-5 text-muted">
-                <i class="bi bi-geo-alt fs-1 d-block mb-2 text-opacity-50"></i>
-                <p class="mb-0 fw-medium">No locations found</p>
-                <small>Click "New Location" above to add your first location branch.</small>
+                <i class="bi bi-credit-card fs-1 d-block mb-2 text-opacity-50"></i>
+                <p class="mb-0 fw-medium">No payment modes found</p>
+                <small>Click "New Payment Mode" above to add an accepted payment channel.</small>
               </td>
             </tr>
 
-            <!-- Location Rows -->
-            <tr v-for="loc in paginatedLocations" :key="loc.id">
-              <td class="ps-4 font-monospace text-muted text-xs">#{{ loc.id }}</td>
+            <!-- Payment Mode Rows -->
+            <tr v-for="mode in paginatedPaymentModes" :key="mode.id">
+              <td class="ps-4 font-monospace text-muted text-xs">#{{ mode.id }}</td>
               <td class="fw-semibold text-primary">
                 <div class="d-flex align-items-center gap-2.5">
-                  <div class="loc-icon-badge rounded-circle d-flex align-items-center justify-content-center">
-                    <i class="bi bi-geo-alt-fill text-primary text-xs"></i>
+                  <div class="mode-icon-badge rounded-circle d-flex align-items-center justify-content-center">
+                    <i class="bi bi-credit-card-2-front text-primary text-xs"></i>
                   </div>
-                  <span>{{ loc.name }}</span>
+                  <span>{{ mode.name }}</span>
                 </div>
               </td>
               <td class="pe-4 text-end">
                 <div class="d-flex align-items-center justify-content-end gap-1">
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
-                    @click="openEditModal(loc)"
-                    title="Edit Location"
+                    @click="openEditModal(mode)"
+                    title="Edit Payment Mode"
                   >
                     <i class="bi bi-pencil-fill text-muted"></i>
                   </button>
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn hover-danger" 
-                    @click="promptDelete(loc)"
-                    title="Delete Location"
+                    @click="promptDelete(mode)"
+                    title="Delete Payment Mode"
                   >
                     <i class="bi bi-trash-fill text-danger"></i>
                   </button>
@@ -247,16 +255,16 @@ onMounted(() => {
 
       <!-- Reusable Pagination Control Footer -->
       <PaginationControl
-        v-if="filteredLocations.length > 0"
+        v-if="filteredPaymentModes.length > 0"
         v-model:currentPage="currentPage"
         v-model:itemsPerPage="itemsPerPage"
         :totalPages="totalPages"
-        :totalItems="filteredLocations.length"
+        :totalItems="filteredPaymentModes.length"
       />
 
     </div>
 
-    <!-- Vue-Controlled Custom Delete Modal Overlay -->
+    <!-- Custom Delete Confirmation Modal -->
     <div v-if="isDeleteModalOpen" class="modal-backdrop fade show" style="z-index: 1060;"></div>
     
     <div 
@@ -275,7 +283,7 @@ onMounted(() => {
           </div>
 
           <h5 class="fw-bold text-primary text-sm mb-1">Confirm Deletion</h5>
-          <p class="text-secondary-amms text-xs mb-2">Are you sure you want to permanently delete this location branch?</p>
+          <p class="text-secondary-amms text-xs mb-2">Are you sure you want to permanently delete this payment mode?</p>
           
           <p class="fw-bold text-danger text-xs mb-4 font-monospace bg-danger bg-opacity-10 py-1.5 px-3 rounded-3 d-inline-block mx-auto">
             "{{ itemToDelete?.name }}"
@@ -296,7 +304,7 @@ onMounted(() => {
               @click="confirmDelete"
             >
               <span v-if="isDeleting" class="spinner-border spinner-border-sm" role="status"></span>
-              <span>{{ isDeleting ? 'Deleting...' : 'Delete Branch' }}</span>
+              <span>{{ isDeleting ? 'Deleting...' : 'Delete Mode' }}</span>
             </button>
           </div>
 
@@ -304,7 +312,7 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- Vue-Controlled Pure Modal Overlay (Reliable & No Bootstrap JS Dependencies) -->
+    <!-- Create / Edit Vue Pure Modal -->
     <div v-if="isModalOpen" class="modal-backdrop fade show"></div>
     
     <div 
@@ -319,8 +327,8 @@ onMounted(() => {
           
           <div class="modal-header border-bottom px-4 py-3 bg-body-tertiary position-relative justify-content-center">
             <h5 class="modal-title fw-bold text-primary text-sm mb-0 text-center">
-              <i class="bi bi-geo-alt me-1.5 amms-accent"></i>
-              <span>{{ editingLocation ? 'Edit Location Branch' : 'Add New Location Branch' }}</span>
+              <i class="bi bi-credit-card me-1.5 amms-accent"></i>
+              <span>{{ editingMode ? 'Edit Payment Mode' : 'Add New Payment Mode' }}</span>
             </h5>
             <button 
               type="button" 
@@ -336,24 +344,26 @@ onMounted(() => {
                 <i class="bi bi-exclamation-triangle-fill me-1"></i> {{ modalError }}
               </div>
 
-              <div class="mb-3">
-                <label for="locNameModal" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase tracking-wider">
-                  Location / City Name *
+              <!-- Payment Mode Name -->
+              <div class="mb-2">
+                <label for="modeName" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase tracking-wider">
+                  Payment Mode Name *
                 </label>
                 <div class="input-group">
                   <span class="input-group-text bg-transparent border-end-0 text-muted">
-                    <i class="bi bi-building"></i>
+                    <i class="bi bi-wallet"></i>
                   </span>
                   <input
-                    id="locNameModal"
-                    v-model="locationName"
+                    id="modeName"
+                    v-model="name"
                     type="text"
                     class="form-control border-start-0 ps-1 py-2.5 text-sm"
-                    placeholder="e.g. Dar es Salaam, Moshi"
+                    placeholder="e.g. Cash, Cheque, Mobile Money"
                     required
                   />
                 </div>
               </div>
+
             </div>
 
             <div class="modal-footer border-top px-4 py-3 bg-body-tertiary">
@@ -370,7 +380,7 @@ onMounted(() => {
                 :disabled="isSubmitting"
               >
                 <span v-if="isSubmitting" class="spinner-border spinner-border-sm" role="status"></span>
-                <span>{{ isSubmitting ? 'Saving...' : (editingLocation ? 'Update Location' : 'Save Location') }}</span>
+                <span>{{ isSubmitting ? 'Saving...' : (editingMode ? 'Update Mode' : 'Save Mode') }}</span>
               </button>
             </div>
           </form>
@@ -406,7 +416,7 @@ onMounted(() => {
   padding-bottom: 0.85rem;
 }
 
-.loc-icon-badge {
+.mode-icon-badge {
   width: 28px;
   height: 28px;
   background-color: rgba(27, 42, 74, 0.08);
