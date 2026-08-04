@@ -1,0 +1,12 @@
+/* Global Styles */
+:root {
+  --primary-color: #43766C;
+  --bg-color: #F8FAE5;
+  --secondary-color: #B19470;
+  --accent-color: #76453B;
+}
+
+body {
+  background-color: var(--bg-color);
+  color: #333;
+}
