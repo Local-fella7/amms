@@ -7,6 +7,8 @@ interface UserItem {
   first_name: string
   last_name: string
   email: string
+  phone?: string
+  status?: 'active' | 'inactive' | string
   role_id: number | string
   role?: {
     id: number
@@ -26,6 +28,7 @@ const { data: roles, execute: fetchRoles } = useApi<RoleOption[]>()
 
 const searchQuery = ref('')
 const selectedRoleFilter = ref<string>('')
+const selectedStatusFilter = ref<string>('')
 
 const isSubmitting = ref(false)
 const modalError = ref('')
@@ -35,6 +38,8 @@ const isModalOpen = ref(false)
 const firstName = ref('')
 const lastName = ref('')
 const email = ref('')
+const phone = ref('')
+const status = ref<'active' | 'inactive'>('active')
 const password = ref('')
 const roleId = ref<number | string>('')
 
@@ -55,6 +60,8 @@ const schema = z.object({
   first_name: z.string().min(2, 'First name is required'),
   last_name: z.string().min(2, 'Last name is required'),
   email: z.string().email('Invalid email address'),
+  phone: z.string().optional(),
+  status: z.enum(['active', 'inactive']),
   password: z.string().optional(),
   role_id: z.union([z.number(), z.string().min(1, 'Role assignment is required')])
 })
@@ -122,6 +129,8 @@ const openAddModal = () => {
   firstName.value = ''
   lastName.value = ''
   email.value = ''
+  phone.value = '255'
+  status.value = 'active'
   password.value = ''
   roleId.value = roles.value && roles.value.length > 0 ? roles.value[0].id : ''
   modalError.value = ''
@@ -133,6 +142,8 @@ const openEditModal = (u: UserItem) => {
   firstName.value = u.first_name
   lastName.value = u.last_name
   email.value = u.email
+  phone.value = u.phone || ''
+  status.value = (u.status as any) || 'active'
   password.value = ''
   roleId.value = u.role_id
   modalError.value = ''
@@ -159,6 +170,8 @@ const handleSave = async () => {
     first_name: firstName.value.trim(),
     last_name: lastName.value.trim(),
     email: email.value.trim(),
+    phone: phone.value.trim() || undefined,
+    status: status.value,
     role_id: Number(roleId.value)
   }
 
@@ -242,7 +255,7 @@ onMounted(() => {
       title="System Users"
       subtitle="Manage administrative user accounts and role assignments"
       v-model:searchQuery="searchQuery"
-      searchPlaceholder="Search users by name or email..."
+      searchPlaceholder="Search users by name, email, phone..."
       :loading="loading"
       hideRefresh
       showAddButton
@@ -270,11 +283,23 @@ onMounted(() => {
             </select>
           </div>
 
+          <div style="min-width: 140px;">
+            <select 
+              v-model="selectedStatusFilter" 
+              class="form-select form-select-sm rounded-pill text-xs fw-semibold border bg-body ps-3 pe-4 shadow-sm cursor-pointer filter-pill-select"
+              :class="selectedStatusFilter ? 'border-primary text-primary bg-primary bg-opacity-10' : 'text-body-secondary'"
+            >
+              <option value="">All Statuses</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+
           <button 
-            v-if="selectedRoleFilter || searchQuery"
+            v-if="selectedRoleFilter || selectedStatusFilter || searchQuery"
             type="button" 
             class="btn btn-xs btn-link text-danger text-xs text-decoration-none px-2 fw-semibold ms-1"
-            @click="selectedRoleFilter = ''; searchQuery = ''"
+            @click="selectedRoleFilter = ''; selectedStatusFilter = ''; searchQuery = ''"
           >
             <i class="bi bi-x-lg me-1"></i> Clear Filters
           </button>
@@ -304,10 +329,11 @@ onMounted(() => {
         <table class="table align-middle mb-0 custom-amms-table">
           <thead>
             <tr>
-              <th class="ps-4" style="width: 80px;"># ID</th>
+              <th class="ps-4" style="width: 70px;"># ID</th>
               <th>User Name</th>
-              <th>Email Address</th>
+              <th>Email & Phone</th>
               <th>Assigned Role</th>
+              <th>Status</th>
               <th class="text-end pe-4" style="width: 140px;">Actions</th>
             </tr>
           </thead>
@@ -318,12 +344,13 @@ onMounted(() => {
                 <td><span class="placeholder col-8"></span></td>
                 <td><span class="placeholder col-6"></span></td>
                 <td><span class="placeholder col-6"></span></td>
+                <td><span class="placeholder col-4"></span></td>
                 <td class="pe-4 text-end"><span class="placeholder col-10"></span></td>
               </tr>
             </template>
 
             <tr v-else-if="filteredUsers.length === 0">
-              <td colspan="5" class="text-center py-5 text-muted">
+              <td colspan="6" class="text-center py-5 text-muted">
                 <i class="bi bi-person-x fs-1 d-block mb-2 text-opacity-50"></i>
                 <p class="mb-0 fw-medium">No system users found</p>
                 <small>Click "Add System User" above to create one.</small>
@@ -340,13 +367,23 @@ onMounted(() => {
                   <span>{{ u.first_name }} {{ u.last_name }}</span>
                 </div>
               </td>
-              <td class="text-xs font-monospace text-body">
-                {{ u.email }}
+              <td>
+                <div class="text-xs font-monospace text-body">{{ u.email }}</div>
+                <small v-if="u.phone" class="text-muted font-monospace text-xs">{{ u.phone }}</small>
               </td>
               <td>
                 <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-20 px-2.5 py-1 rounded-pill text-xs">
                   <i class="bi bi-shield-check me-1"></i>
                   {{ u.role?.name || getRoleName(u.role_id) }}
+                </span>
+              </td>
+              <td>
+                <span 
+                  class="badge px-2.5 py-1 rounded-pill text-xs fw-semibold"
+                  :class="u.status === 'inactive' ? 'bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-20' : 'bg-success bg-opacity-10 text-success border border-success border-opacity-20'"
+                >
+                  <i :class="u.status === 'inactive' ? 'bi bi-dash-circle-fill me-1' : 'bi bi-check-circle-fill me-1'"></i>
+                  {{ u.status === 'inactive' ? 'Inactive' : 'Active' }}
                 </span>
               </td>
               <td class="pe-4 text-end">
@@ -396,14 +433,24 @@ onMounted(() => {
             <span class="fw-semibold text-body font-monospace text-xs">{{ viewingUser?.email }}</span>
           </div>
           <div class="col-md-4">
+            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Phone Number</span>
+            <span class="fw-medium text-body font-monospace text-xs">{{ viewingUser?.phone || '—' }}</span>
+          </div>
+          <div class="col-md-4">
             <span class="text-xs text-muted text-uppercase fw-semibold d-block">Assigned Role</span>
             <span class="fw-semibold text-body text-xs">{{ viewingUser ? (viewingUser.role?.name || getRoleName(viewingUser.role_id)) : '—' }}</span>
           </div>
-          <div class="col-md-4" v-if="viewingUser?.created_at">
+          <div class="col-md-4">
+            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Account Status</span>
+            <span class="badge px-2.5 py-1 rounded-pill text-xs" :class="viewingUser?.status === 'inactive' ? 'bg-secondary text-white' : 'bg-success text-white'">
+              {{ viewingUser?.status === 'inactive' ? 'Inactive' : 'Active' }}
+            </span>
+          </div>
+          <div class="col-md-6" v-if="viewingUser?.created_at">
             <span class="text-xs text-muted text-uppercase fw-semibold d-block">Account Created</span>
             <span class="text-xs text-secondary-amms font-monospace">{{ viewingUser.created_at }}</span>
           </div>
-          <div class="col-md-4" v-if="viewingUser?.updated_at">
+          <div class="col-md-6" v-if="viewingUser?.updated_at">
             <span class="text-xs text-muted text-uppercase fw-semibold d-block">Last Modified</span>
             <span class="text-xs text-secondary-amms font-monospace">{{ viewingUser.updated_at }}</span>
           </div>
@@ -464,23 +511,38 @@ onMounted(() => {
                   <input id="usrLast" v-model="lastName" type="text" class="form-control py-2.5 text-sm" placeholder="e.g. Doe" required />
                 </div>
               </div>
-              <div class="mb-3">
-                <label for="usrEmail" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Email Address *</label>
-                <input id="usrEmail" v-model="email" type="email" class="form-control py-2.5 text-sm font-monospace" placeholder="john@amms.local" required />
+              <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                  <label for="usrEmail" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Email Address *</label>
+                  <input id="usrEmail" v-model="email" type="email" class="form-control py-2.5 text-sm font-monospace" placeholder="john@amms.local" required />
+                </div>
+                <div class="col-md-6">
+                  <label for="usrPhone" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Phone Number</label>
+                  <input id="usrPhone" v-model="phone" type="tel" class="form-control py-2.5 text-sm font-monospace" placeholder="255700000000" />
+                </div>
               </div>
-              <div class="mb-3">
+              <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                  <label for="usrRole" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Assigned Role *</label>
+                  <select id="usrRole" v-model="roleId" class="form-select py-2.5 text-sm" required>
+                    <option v-for="r in roles" :key="r.id" :value="r.id">
+                      {{ r.name }}
+                    </option>
+                  </select>
+                </div>
+                <div class="col-md-6">
+                  <label for="usrStatus" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Account Status *</label>
+                  <select id="usrStatus" v-model="status" class="form-select py-2.5 text-sm" required>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </div>
+              </div>
+              <div class="mb-2">
                 <label for="usrPass" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">
                   Password {{ editingUser ? '(Leave blank to keep unchanged)' : '*' }}
                 </label>
                 <input id="usrPass" v-model="password" type="password" class="form-control py-2.5 text-sm font-monospace" placeholder="••••••••" :required="!editingUser" />
-              </div>
-              <div class="mb-2">
-                <label for="usrRole" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Assigned Role *</label>
-                <select id="usrRole" v-model="roleId" class="form-select py-2.5 text-sm" required>
-                  <option v-for="r in roles" :key="r.id" :value="r.id">
-                    {{ r.name }}
-                  </option>
-                </select>
               </div>
             </div>
             <div class="modal-footer border-top px-4 py-3 bg-body-tertiary">

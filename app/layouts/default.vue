@@ -177,6 +177,12 @@ onMounted(() => {
                 <span v-if="!isSidebarCollapsed" class="fw-medium text-sm">Broadcast Recipients</span>
               </NuxtLink>
             </li>
+            <li class="nav-item">
+              <NuxtLink to="/reports" class="nav-link d-flex align-items-center gap-3 px-3 py-2.5 rounded-3" active-class="active">
+                <i class="bi bi-file-earmark-pdf-fill fs-5"></i>
+                <span v-if="!isSidebarCollapsed" class="fw-medium text-sm">Reports Center</span>
+              </NuxtLink>
+            </li>
           </ul>
 
           <!-- System Settings Accordion -->
@@ -245,22 +251,31 @@ onMounted(() => {
         </div>
 
         <!-- Sidebar Footer & Audit Trail -->
-        <div class="sidebar-footer pt-2" v-if="!isSidebarCollapsed">
-          <ul class="nav nav-pills flex-column gap-1 mb-2">
+        <div class="sidebar-footer pt-2 border-top border-white border-opacity-10 mt-auto">
+          <ul class="nav nav-pills flex-column gap-1 mb-1">
             <li class="nav-item">
-              <NuxtLink to="/audit-logs" class="nav-link d-flex align-items-center gap-3 px-3 py-2 rounded-3" active-class="active">
-                <i class="bi bi-journal-text fs-5"></i>
-                <span class="fw-medium text-sm">Audit Trail</span>
+              <NuxtLink 
+                to="/audit-logs" 
+                class="nav-link d-flex align-items-center gap-3 px-3 py-2 rounded-3" 
+                active-class="active"
+                :title="isSidebarCollapsed ? 'Audit Trail' : ''"
+              >
+                <i class="bi bi-journal-text fs-5 flex-shrink-0"></i>
+                <span v-if="!isSidebarCollapsed" class="fw-medium text-sm">Audit Trail</span>
               </NuxtLink>
             </li>
             <li class="nav-item">
-              <button class="nav-link w-100 border-0 bg-transparent text-start d-flex align-items-center gap-3 px-3 py-2 rounded-3 text-danger cursor-pointer" @click="authStore.logout()">
-                <i class="bi bi-box-arrow-right fs-5"></i>
-                <span class="fw-medium text-sm">Log Out</span>
+              <button 
+                class="nav-link w-100 border-0 bg-transparent text-start d-flex align-items-center gap-3 px-3 py-2 rounded-3 text-danger cursor-pointer" 
+                @click="authStore.logout()"
+                :title="isSidebarCollapsed ? 'Sign Out' : ''"
+              >
+                <i class="bi bi-box-arrow-right fs-5 flex-shrink-0"></i>
+                <span v-if="!isSidebarCollapsed" class="fw-medium text-sm">Log Out</span>
               </button>
             </li>
           </ul>
-          <div class="text-center pt-2 border-top border-white border-opacity-10">
+          <div class="text-center pt-1.5" v-if="!isSidebarCollapsed">
             <small class="text-white-50 text-xs">&copy; AMMS Civic Registry</small>
           </div>
         </div>
@@ -305,6 +320,19 @@ onMounted(() => {
 
 .amms-sidebar.collapsed {
   width: 72px;
+  padding-left: 0.5rem !important;
+  padding-right: 0.5rem !important;
+}
+
+.amms-sidebar.collapsed .nav-link {
+  justify-content: center !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  gap: 0 !important;
+}
+
+.amms-sidebar.collapsed .nav-link i {
+  margin: 0 !important;
 }
 
 .rotate-180 {

@@ -36,6 +36,14 @@ const schema = z.object({
   password: z.string().min(6, 'Password must be at least 6 characters')
 })
 
+// Mandatory Password Change State
+const isChangePasswordModalOpen = ref(false)
+const currentPasswordInput = ref('')
+const newPasswordInput = ref('')
+const confirmPasswordInput = ref('')
+const changePasswordError = ref('')
+const isChangingPassword = ref(false)
+
 const handleLogin = async () => {
   errorMessage.value = ''
   
@@ -61,10 +69,17 @@ const handleLogin = async () => {
 
     const token = response?.data?.token || response?.token || response?.data?.jwt_token
     const user = response?.data?.user || response?.user
+    const requiresPasswordChange = response?.data?.requires_password_change ?? response?.requires_password_change ?? false
 
     if (token) {
       authStore.setToken(token, user)
-      await navigateTo('/', { replace: true })
+
+      if (requiresPasswordChange) {
+        currentPasswordInput.value = password.value
+        isChangePasswordModalOpen.value = true
+      } else {
+        await navigateTo('/', { replace: true })
+      }
     } else {
       errorMessage.value = response?.message || response?.error || 'Login failed. Please check your credentials.'
     }
@@ -73,6 +88,45 @@ const handleLogin = async () => {
     errorMessage.value = err.data?.message || err.response?._data?.message || err.message || 'An error occurred during authentication.'
   } finally {
     loading.value = false
+  }
+}
+
+const submitPasswordChange = async () => {
+  changePasswordError.value = ''
+
+  if (newPasswordInput.value.length < 6) {
+    changePasswordError.value = 'New password must be at least 6 characters long'
+    return
+  }
+
+  if (newPasswordInput.value !== confirmPasswordInput.value) {
+    changePasswordError.value = 'New password and confirmation do not match'
+    return
+  }
+
+  if (newPasswordInput.value === currentPasswordInput.value) {
+    changePasswordError.value = 'New password must be different from current password'
+    return
+  }
+
+  isChangingPassword.value = true
+  try {
+    const token = authStore.token
+    await $fetch('/api/auth/change-password', {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: {
+        current_password: currentPasswordInput.value,
+        new_password: newPasswordInput.value
+      }
+    })
+
+    isChangePasswordModalOpen.value = false
+    await navigateTo('/', { replace: true })
+  } catch (err: any) {
+    changePasswordError.value = err.data?.message || err.response?._data?.message || err.message || 'Failed to update password'
+  } finally {
+    isChangingPassword.value = false
   }
 }
 </script>
@@ -244,6 +298,92 @@ const handleLogin = async () => {
       </div>
 
     </div>
+
+    <!-- Mandatory Password Change Modal -->
+    <div v-if="isChangePasswordModalOpen" class="modal-backdrop fade show" style="z-index: 1060;"></div>
+    
+    <div 
+      v-if="isChangePasswordModalOpen" 
+      class="modal fade show d-block" 
+      tabindex="-1" 
+      role="dialog"
+      style="z-index: 1065;"
+    >
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content amms-surface border-0 shadow-lg rounded-4 overflow-hidden">
+          
+          <div class="modal-header border-bottom px-4 py-3 bg-body-tertiary">
+            <div class="d-flex align-items-center gap-2">
+              <i class="bi bi-shield-lock-fill text-warning fs-5"></i>
+              <h5 class="modal-title fw-bold text-primary text-sm mb-0">
+                Password Change Required
+              </h5>
+            </div>
+          </div>
+
+          <form @submit.prevent="submitPasswordChange">
+            <div class="modal-body p-4">
+              <p class="text-secondary-amms text-xs mb-3">
+                Your account requires a password change before you can access the system. Please choose a new secure password.
+              </p>
+
+              <div v-if="changePasswordError" class="alert alert-danger py-2 px-3 mb-3 rounded-3 text-xs">
+                <i class="bi bi-exclamation-triangle-fill me-1"></i> {{ changePasswordError }}
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Current Password</label>
+                <input
+                  v-model="currentPasswordInput"
+                  type="password"
+                  class="form-control text-sm font-monospace py-2"
+                  placeholder="••••••••"
+                  required
+                />
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">New Password (Min 6 Characters)</label>
+                <input
+                  v-model="newPasswordInput"
+                  type="password"
+                  class="form-control text-sm font-monospace py-2"
+                  placeholder="••••••••"
+                  minlength="6"
+                  required
+                />
+              </div>
+
+              <div class="mb-2">
+                <label class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Confirm New Password</label>
+                <input
+                  v-model="confirmPasswordInput"
+                  type="password"
+                  class="form-control text-sm font-monospace py-2"
+                  placeholder="••••••••"
+                  minlength="6"
+                  required
+                />
+              </div>
+            </div>
+
+            <div class="modal-footer border-top px-4 py-3 bg-body-tertiary">
+              <button
+                type="submit"
+                class="btn btn-primary rounded-pill w-100 py-2.5 fw-semibold text-xs d-flex align-items-center justify-content-center gap-2 shadow-sm"
+                :disabled="isChangingPassword"
+              >
+                <span v-if="isChangingPassword" class="spinner-border spinner-border-sm" role="status"></span>
+                <span>{{ isChangingPassword ? 'Updating Password...' : 'Change Password & Proceed' }}</span>
+                <i v-if="!isChangingPassword" class="bi bi-check2-circle fs-5"></i>
+              </button>
+            </div>
+          </form>
+
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>
 

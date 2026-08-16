@@ -1,4 +1,5 @@
 const apiBase = process.env.NUXT_PUBLIC_API_BASE || 'http://192.168.100.100/amms/public/api'
+const backendBase = apiBase.replace(/\/api\/?$/, '')
 
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
@@ -12,6 +13,9 @@ export default defineNuxtConfig({
     routeRules: {
       '/api/**': {
         proxy: `${apiBase}/**`
+      },
+      '/uploads/**': {
+        proxy: `${backendBase}/uploads/**`
       }
     }
   },
