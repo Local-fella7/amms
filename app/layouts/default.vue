@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useAuthStore } from '~/stores/useAuthStore'
 
 const route = useRoute()
@@ -41,8 +41,8 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="app-layout min-vh-100 d-flex flex-column">
-    
+  <div class="app-layout d-flex flex-column" style="height: 100vh; overflow: hidden;">
+
     <!-- Top Navigation Header -->
     <header class="app-header border-bottom bg-body sticky-top px-3 py-2.5 d-flex align-items-center justify-content-between z-3 shadow-xs">
       
@@ -129,11 +129,11 @@ onMounted(() => {
           </ul>
         </div>
 
-      </div>
+</div>
     </header>
 
-    <div class="d-flex flex-grow-1 position-relative">
-      
+    <div class="d-flex flex-grow-1 position-relative" style="min-height: 0; overflow: hidden;">
+
       <!-- Collapsible Main Sidebar -->
       <aside 
         class="amms-sidebar d-flex flex-column justify-content-between p-3 border-end transition-all"
@@ -266,8 +266,8 @@ onMounted(() => {
         </div>
       </aside>
 
-      <!-- Main Workspace Page Content -->
-      <main class="main-content flex-grow-1 p-3 p-md-4 overflow-auto">
+<!-- Main Workspace Page Content -->
+      <main class="main-content flex-grow-1 p-3 p-md-4 overflow-auto" style="min-height: 0;">
         <slot />
       </main>
 
@@ -298,7 +298,8 @@ onMounted(() => {
 
 .amms-sidebar {
   width: 240px;
-  min-height: calc(100vh - 57px);
+  max-height: calc(100vh - 57px);
+  overflow-y: auto;
   transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 

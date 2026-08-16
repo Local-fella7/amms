@@ -359,7 +359,7 @@ const sendReminder = async (m: any) => {
 </script>
 
 <template>
-  <div>
+  <div class="amms-dashboard">
     <!-- Top Greeting Banner -->
     <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between mb-4 gap-3">
       <div>
@@ -380,7 +380,7 @@ const sendReminder = async (m: any) => {
 
     <!-- Loading placeholder -->
     <div v-if="loading" class="row g-3 mb-4">
-      <div v-for="i in 6" :key="i" class="col-sm-6 col-xl-2">
+      <div v-for="i in 4" :key="i" class="col-sm-6 col-xl-3">
         <div class="card amms-surface border-0 shadow-sm rounded-4 p-4 h-100">
           <span class="placeholder col-8"></span>
           <span class="placeholder col-5 mt-2"></span>
@@ -390,111 +390,142 @@ const sendReminder = async (m: any) => {
     </div>
 
     <!-- Error alert -->
-    <div v-else-if="error" class="alert alert-danger mb-4 d-flex align-items-center justify-content-between">
+    <div v-else-if="error" class="alert alert-danger mb-4 d-flex align-items-center justify-content-between rounded-4 border-0 shadow-sm">
       <div><i class="bi bi-exclamation-triangle-fill me-2"></i>{{ error }}</div>
       <button class="btn btn-sm btn-outline-danger rounded-pill" @click="loadDashboard">Retry</button>
     </div>
 
     <template v-else>
-      <!-- KPI Stat Cards -->
-      <div class="row g-3 mb-4">
-        <div class="col-sm-6 col-xl-2">
-          <div class="card amms-surface border-0 shadow-sm p-3.5 rounded-4 h-100">
-            <div class="d-flex align-items-center justify-content-between">
-              <div>
+      <!-- ================= HERO KPI ROW (4 cards) ================= -->
+      <div class="row g-3 mb-3">
+        <!-- Total Members (absorbs Active count as secondary stat) -->
+        <div class="col-sm-6 col-xl-3">
+          <div class="card kpi-card kpi-accent-primary amms-surface border-0 shadow-sm rounded-4 h-100">
+            <div class="p-4">
+              <div class="d-flex align-items-start justify-content-between mb-2">
                 <span class="text-secondary-amms text-uppercase text-xs fw-semibold tracking-wider">Total Members</span>
-                <h3 class="fw-bold text-primary mb-0 mt-1">{{ totalMembers }}</h3>
-                <small class="text-muted text-xs">{{ activeMembers }} active</small>
+                <div class="kpi-icon bg-primary bg-opacity-10 text-primary">
+                  <i class="bi bi-people-fill"></i>
+                </div>
               </div>
-              <div class="p-3 bg-primary bg-opacity-10 rounded-3 text-primary">
-                <i class="bi bi-people-fill fs-3"></i>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="col-sm-6 col-xl-2">
-          <div class="card amms-surface border-0 shadow-sm p-3.5 rounded-4 h-100">
-            <div class="d-flex align-items-center justify-content-between">
-              <div>
-                <span class="text-secondary-amms text-uppercase text-xs fw-semibold tracking-wider">Active Members</span>
-                <h3 class="fw-bold text-success mb-0 mt-1">{{ activeMembers }}</h3>
-                <small class="text-muted text-xs">{{ activeRate }}% of total</small>
-              </div>
-              <div class="p-3 bg-success bg-opacity-10 rounded-3 text-success">
-                <i class="bi bi-person-check-fill fs-3"></i>
+              <h2 class="fw-bold text-primary mb-2 kpi-number">{{ totalMembers }}</h2>
+              <div class="d-flex align-items-center gap-2">
+                <span class="kpi-pill kpi-pill-success">
+                  <i class="bi bi-person-check-fill"></i> {{ activeMembers }} active
+                </span>
+                <span class="kpi-pill kpi-pill-muted">{{ activeRate }}%</span>
               </div>
             </div>
           </div>
         </div>
 
-        <div class="col-sm-6 col-xl-2">
-          <div class="card amms-surface border-0 shadow-sm p-3.5 rounded-4 h-100">
-            <div class="d-flex align-items-center justify-content-between">
-              <div>
+        <!-- Revenue YTD (absorbs lifetime total as secondary stat) -->
+        <div class="col-sm-6 col-xl-3">
+          <div class="card kpi-card kpi-accent-warning amms-surface border-0 shadow-sm rounded-4 h-100">
+            <div class="p-4">
+              <div class="d-flex align-items-start justify-content-between mb-2">
                 <span class="text-secondary-amms text-uppercase text-xs fw-semibold tracking-wider">Revenue YTD</span>
-                <h3 class="fw-bold text-warning mb-0 mt-1" style="font-size: 1.05rem;">{{ formatCompactCurrency(revenueYTD) }}</h3>
-                <small class="text-muted text-xs">Total: {{ formatCompactCurrency(totalRevenue) }}</small>
+                <div class="kpi-icon bg-warning bg-opacity-10 text-warning">
+                  <i class="bi bi-wallet2"></i>
+                </div>
               </div>
-              <div class="p-3 bg-warning bg-opacity-10 rounded-3 text-warning">
-                <i class="bi bi-wallet2 fs-3"></i>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="col-sm-6 col-xl-2">
-          <div class="card amms-surface border-0 shadow-sm p-3.5 rounded-4 h-100">
-            <div class="d-flex align-items-center justify-content-between">
-              <div>
-                <span class="text-secondary-amms text-uppercase text-xs fw-semibold tracking-wider">Overdue</span>
-                <h3 class="fw-bold text-danger mb-0 mt-1">{{ overdueCount }}</h3>
-                <small class="text-danger text-xs">Need reminders</small>
-              </div>
-              <div class="p-3 bg-danger bg-opacity-10 rounded-3 text-danger">
-                <i class="bi bi-exclamation-triangle-fill fs-3"></i>
+              <h2 class="fw-bold text-warning-emphasis mb-2 kpi-number kpi-number-currency">{{ formatCompactCurrency(revenueYTD) }}</h2>
+              <div class="d-flex align-items-center gap-2">
+                <span class="kpi-pill kpi-pill-muted">
+                  <i class="bi bi-clock-history"></i> lifetime {{ formatCompactCurrency(totalRevenue) }}
+                </span>
               </div>
             </div>
           </div>
         </div>
 
-        <div class="col-sm-6 col-xl-2">
-          <div class="card amms-surface border-0 shadow-sm p-3.5 rounded-4 h-100">
-            <div class="d-flex align-items-center justify-content-between">
-              <div>
-                <span class="text-secondary-amms text-uppercase text-xs fw-semibold tracking-wider">Compliance</span>
-                <h3 class="fw-bold text-info mb-0 mt-1">{{ complianceRate }}%</h3>
-                <small class="text-muted text-xs">Paid this year</small>
+        <!-- Fee Compliance -->
+        <div class="col-sm-6 col-xl-3">
+          <div class="card kpi-card kpi-accent-info amms-surface border-0 shadow-sm rounded-4 h-100">
+            <div class="p-4">
+              <div class="d-flex align-items-start justify-content-between mb-2">
+                <span class="text-secondary-amms text-uppercase text-xs fw-semibold tracking-wider">Fee Compliance</span>
+                <div class="kpi-icon bg-info bg-opacity-10 text-info">
+                  <i class="bi bi-check2-circle"></i>
+                </div>
               </div>
-              <div class="p-3 bg-info bg-opacity-10 rounded-3 text-info">
-                <i class="bi bi-check2-circle fs-3"></i>
+              <h2 class="fw-bold text-info-emphasis mb-2 kpi-number">{{ complianceRate }}%</h2>
+              <div class="progress rounded-pill mb-2" style="height: 6px;">
+                <div class="progress-bar bg-info rounded-pill" :style="{ width: complianceRate + '%' }"></div>
               </div>
+              <span class="kpi-pill kpi-pill-muted">{{ paidMembersThisYear.size }} of {{ activeMembers }} paid</span>
             </div>
           </div>
         </div>
 
-        <div class="col-sm-6 col-xl-2">
-          <div class="card amms-surface border-0 shadow-sm p-3.5 rounded-4 h-100">
-            <div class="d-flex align-items-center justify-content-between">
-              <div>
-                <span class="text-secondary-amms text-uppercase text-xs fw-semibold tracking-wider">Broadcasts</span>
-                <h3 class="fw-bold text-secondary mb-0 mt-1">{{ broadcastCount }}</h3>
-                <small class="text-muted text-xs">Sent to date</small>
+        <!-- Overdue Members (actionable) -->
+        <div class="col-sm-6 col-xl-3">
+          <div class="card kpi-card kpi-accent-danger amms-surface border-0 shadow-sm rounded-4 h-100">
+            <div class="p-4">
+              <div class="d-flex align-items-start justify-content-between mb-2">
+                <span class="text-secondary-amms text-uppercase text-xs fw-semibold tracking-wider">Overdue Members</span>
+                <div class="kpi-icon bg-danger bg-opacity-10 text-danger">
+                  <i class="bi bi-exclamation-triangle-fill"></i>
+                </div>
               </div>
-              <div class="p-3 bg-secondary bg-opacity-10 rounded-3 text-secondary">
-                <i class="bi bi-megaphone-fill fs-3"></i>
-              </div>
+              <h2 class="fw-bold text-danger mb-2 kpi-number">{{ overdueCount }}</h2>
+              <span class="kpi-pill" :class="overdueCount > 0 ? 'kpi-pill-danger' : 'kpi-pill-success'">
+                <i class="bi" :class="overdueCount > 0 ? 'bi-bell-fill' : 'bi-check2'"></i>
+                {{ overdueCount > 0 ? 'Needs reminders' : 'All settled' }}
+              </span>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Charts Row -->
+      <!-- ================= QUICK ACTIONS (icon-forward buttons, directly under KPIs) ================= -->
+      <div class="quick-actions-panel mb-4">
+        <h6 class="fw-bold mb-3 text-secondary-amms text-uppercase text-xs tracking-wider">
+          <i class="bi bi-lightning-charge-fill amms-accent me-1"></i>Quick Actions
+        </h6>
+        <div class="quick-actions-grid">
+          <NuxtLink to="/members" class="icon-action-btn">
+            <span class="icon-action-circle bg-primary bg-opacity-10 text-primary">
+              <i class="bi bi-person-plus-fill"></i>
+            </span>
+            <span class="icon-action-label">Register<br />Member</span>
+          </NuxtLink>
+          <NuxtLink to="/fee-payments" class="icon-action-btn">
+            <span class="icon-action-circle bg-success bg-opacity-10 text-success">
+              <i class="bi bi-credit-card-2-front-fill"></i>
+            </span>
+            <span class="icon-action-label">Record<br />Payment</span>
+          </NuxtLink>
+          <NuxtLink to="/notifications" class="icon-action-btn">
+            <span class="icon-action-circle bg-warning bg-opacity-10 text-warning">
+              <i class="bi bi-chat-dots-fill"></i>
+            </span>
+            <span class="icon-action-label">Send<br />Broadcast</span>
+          </NuxtLink>
+          <NuxtLink to="/fee-payments" class="icon-action-btn">
+            <span class="icon-action-circle bg-danger bg-opacity-10 text-danger">
+              <i class="bi bi-bell-fill"></i>
+            </span>
+            <span class="icon-action-label">Remind<br />Overdue</span>
+          </NuxtLink>
+          <NuxtLink to="/members" class="icon-action-btn">
+            <span class="icon-action-circle bg-info bg-opacity-10 text-info">
+              <i class="bi bi-search"></i>
+            </span>
+            <span class="icon-action-label">Find<br />Member</span>
+          </NuxtLink>
+        </div>
+      </div>
+
+      <!-- ================= ANALYTICS SECTION ================= -->
+      <div class="d-flex align-items-center justify-content-between mb-2 ms-1">
+        <h6 class="fw-bold text-secondary-amms text-uppercase text-xs tracking-wider mb-0">Analytics</h6>
+      </div>
       <div class="row g-4 mb-4">
         <div class="col-lg-6">
           <div class="card amms-surface border-0 shadow-sm rounded-4 p-4 h-100">
-<div class="d-flex align-items-center justify-content-between mb-3">
-                <div>
+            <div class="d-flex align-items-center justify-content-between mb-3">
+              <div>
                 <h6 class="fw-bold mb-0 text-primary">Revenue Trend</h6>
                 <small class="text-muted">Collections over the last 6 months</small>
               </div>
@@ -515,7 +546,7 @@ const sendReminder = async (m: any) => {
               </div>
               <i class="bi bi-bar-chart-fill text-primary fs-4"></i>
             </div>
-<div style="height: 240px;">
+            <div style="height: 240px;">
               <Bar :data="growthChartData" :options="growthChartOptions" />
             </div>
           </div>
@@ -587,13 +618,14 @@ const sendReminder = async (m: any) => {
         </div>
       </div>
 
-      <!-- Overdue + Recent Broadcasts + Recent Registrations -->
-      <div class="row g-4 mb-4">
-        
+      <!-- ================= ACTIVITY SECTION ================= -->
+      <h6 class="fw-bold text-secondary-amms text-uppercase text-xs tracking-wider mb-2 ms-1">Activity</h6>
+      <div class="row g-4">
+
         <!-- Overdue Members -->
         <div class="col-lg-4">
           <div class="card amms-surface border-0 shadow-sm rounded-4 overflow-hidden h-100">
-            <div class="card-header bg-transparent border-bottom p-3.5 d-flex align-items-center justify-content-between">
+            <div class="card-header bg-transparent border-bottom p-3 d-flex align-items-center justify-content-between">
               <h6 class="fw-bold mb-0 text-danger"><i class="bi bi-exclamation-triangle me-1"></i> Overdue Members</h6>
               <NuxtLink to="/fee-payments" class="text-xs fw-semibold text-decoration-none">Track Payments</NuxtLink>
             </div>
@@ -603,7 +635,7 @@ const sendReminder = async (m: any) => {
                 <span class="text-xs">All active members are up to date!</span>
               </div>
               <div v-else class="d-flex flex-column gap-2">
-                <div v-for="m in overdueMembers" :key="m.id" class="d-flex align-items-center justify-content-between border rounded-3 p-2.5">
+                <div v-for="m in overdueMembers" :key="m.id" class="d-flex align-items-center justify-content-between border rounded-3 p-2 activity-row">
                   <div class="d-flex align-items-center gap-2">
                     <div class="avatar-circle rounded-circle bg-danger bg-opacity-10 text-danger d-flex align-items-center justify-content-center fw-bold text-xs">
                       {{ m.first_name ? m.first_name[0] : '?' }}{{ m.last_name ? m.last_name[0] : '' }}
@@ -622,11 +654,14 @@ const sendReminder = async (m: any) => {
           </div>
         </div>
 
-        <!-- Recent Broadcasts -->
+        <!-- Recent Broadcasts (badge shows broadcastCount, contextual instead of a top KPI) -->
         <div class="col-lg-4">
           <div class="card amms-surface border-0 shadow-sm rounded-4 overflow-hidden h-100">
-            <div class="card-header bg-transparent border-bottom p-3.5 d-flex align-items-center justify-content-between">
-              <h6 class="fw-bold mb-0 text-primary"><i class="bi bi-megaphone me-1"></i> Recent Broadcasts</h6>
+            <div class="card-header bg-transparent border-bottom p-3 d-flex align-items-center justify-content-between">
+              <h6 class="fw-bold mb-0 text-primary">
+                <i class="bi bi-megaphone me-1"></i> Recent Broadcasts
+                <span class="badge rounded-pill bg-primary bg-opacity-10 text-primary ms-1">{{ broadcastCount }}</span>
+              </h6>
               <NuxtLink to="/notifications" class="text-xs fw-semibold text-decoration-none">View All</NuxtLink>
             </div>
             <div class="p-3">
@@ -635,7 +670,7 @@ const sendReminder = async (m: any) => {
                 <span class="text-xs">No broadcasts sent yet</span>
               </div>
               <div v-else class="d-flex flex-column gap-2">
-                <div v-for="n in recentBroadcasts" :key="n.id" class="border rounded-3 p-2.5">
+                <div v-for="n in recentBroadcasts" :key="n.id" class="border rounded-3 p-2 activity-row">
                   <div class="d-flex align-items-center justify-content-between mb-1">
                     <span class="fw-semibold text-sm text-primary text-truncate">{{ n.name }}</span>
                     <small class="text-muted text-xs text-nowrap ms-2">{{ formatDate(n.created_at) }}</small>
@@ -650,7 +685,7 @@ const sendReminder = async (m: any) => {
         <!-- Recent Registrations Table -->
         <div class="col-lg-4">
           <div class="card amms-surface border-0 shadow-sm rounded-4 overflow-hidden h-100">
-            <div class="card-header bg-transparent border-bottom p-3.5 d-flex align-items-center justify-content-between">
+            <div class="card-header bg-transparent border-bottom p-3 d-flex align-items-center justify-content-between">
               <h6 class="fw-bold mb-0 text-primary">Recent Registrations</h6>
               <NuxtLink to="/members" class="text-xs fw-semibold text-decoration-none">View All &rarr;</NuxtLink>
             </div>
@@ -667,7 +702,7 @@ const sendReminder = async (m: any) => {
                   <tr v-for="member in recentMembers" :key="member.id">
                     <td class="ps-4 fw-semibold text-primary">{{ member.first_name }} {{ member.last_name }}</td>
                     <td>
-                      <span 
+                      <span
                         class="badge rounded-pill px-2.5 py-1 text-capitalize fw-semibold"
                         :class="member.member_status === 'active' ? 'amms-status-active' : 'amms-status-inactive'"
                       >
@@ -682,64 +717,129 @@ const sendReminder = async (m: any) => {
           </div>
         </div>
       </div>
-
-      <!-- Quick Action Modules -->
-      <div class="card amms-surface border-0 shadow-sm rounded-4 p-4">
-        <h6 class="fw-bold mb-3 text-primary"><i class="bi bi-lightning-charge-fill me-1 amms-accent"></i> Quick Actions</h6>
-        <div class="row g-3">
-          <div class="col-md-4">
-            <NuxtLink to="/members" class="btn btn-outline-light text-body border p-3 rounded-3 d-flex align-items-center justify-content-between text-decoration-none hover-shadow w-100">
-              <div class="d-flex align-items-center gap-3">
-                <div class="p-2 bg-primary bg-opacity-10 rounded-circle text-primary">
-                  <i class="bi bi-person-plus-fill fs-5"></i>
-                </div>
-                <div class="text-start">
-                  <span class="fw-semibold d-block text-sm">Register New Member</span>
-                  <small class="text-muted text-xs">Add demographic & contact info</small>
-                </div>
-              </div>
-              <i class="bi bi-chevron-right text-muted"></i>
-            </NuxtLink>
-          </div>
-          <div class="col-md-4">
-            <NuxtLink to="/fee-payments" class="btn btn-outline-light text-body border p-3 rounded-3 d-flex align-items-center justify-content-between text-decoration-none hover-shadow w-100">
-              <div class="d-flex align-items-center gap-3">
-                <div class="p-2 bg-success bg-opacity-10 rounded-circle text-success">
-                  <i class="bi bi-credit-card-2-front-fill fs-5"></i>
-                </div>
-                <div class="text-start">
-                  <span class="fw-semibold d-block text-sm">Record Fee Payment</span>
-                  <small class="text-muted text-xs">Issue receipt for annual fee</small>
-                </div>
-              </div>
-              <i class="bi bi-chevron-right text-muted"></i>
-            </NuxtLink>
-          </div>
-          <div class="col-md-4">
-            <NuxtLink to="/notifications" class="btn btn-outline-light text-body border p-3 rounded-3 d-flex align-items-center justify-content-between text-decoration-none hover-shadow w-100">
-              <div class="d-flex align-items-center gap-3">
-                <div class="p-2 bg-warning bg-opacity-10 rounded-circle text-warning">
-                  <i class="bi bi-chat-dots-fill fs-5"></i>
-                </div>
-                <div class="text-start">
-                  <span class="fw-semibold d-block text-sm">Send SMS Broadcast</span>
-                  <small class="text-muted text-xs">Notify targeted member groups</small>
-                </div>
-              </div>
-              <i class="bi bi-chevron-right text-muted"></i>
-            </NuxtLink>
-          </div>
-        </div>
-      </div>
     </template>
   </div>
 </template>
 
 <style scoped>
+.amms-dashboard {
+  --amms-transition: 0.15s ease;
+}
+
 .text-xs { font-size: 0.775rem; }
 .text-sm { font-size: 0.875rem; }
-.hover-shadow { transition: transform 0.15s ease, box-shadow 0.15s ease; }
-.hover-shadow:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); }
+.tracking-wider { letter-spacing: 0.04em; }
+
+/* ===== Hero KPI cards ===== */
+.kpi-card {
+  position: relative;
+  transition: transform var(--amms-transition), box-shadow var(--amms-transition);
+  border-left: 4px solid transparent;
+}
+.kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.07) !important;
+}
+.kpi-accent-primary { border-left-color: #1B2A4A; }
+.kpi-accent-warning { border-left-color: #B8923D; }
+.kpi-accent-info    { border-left-color: #3172B0; }
+.kpi-accent-danger  { border-left-color: #B33A3A; }
+
+.kpi-icon {
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  border-radius: 0.65rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+}
+
+.kpi-number {
+  font-size: 2rem;
+  line-height: 1.1;
+}
+.kpi-number-currency {
+  font-size: 1.35rem;
+}
+
+.kpi-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--bs-secondary-color, #6c757d);
+}
+.kpi-pill-success { background: rgba(47, 133, 90, 0.1); color: #2F855A; }
+.kpi-pill-danger  { background: rgba(179, 58, 58, 0.1); color: #B33A3A; }
+.kpi-pill-muted   { background: rgba(0, 0, 0, 0.05); color: #6c757d; }
+
+/* ===== Quick actions: icon-forward buttons ===== */
+.quick-actions-panel {
+  background: var(--bs-body-bg, #fff);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 1rem;
+  padding: 1.1rem 1.25rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+.quick-actions-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.icon-action-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.5rem;
+  width: 96px;
+  padding: 0.85rem 0.5rem;
+  border-radius: 0.9rem;
+  text-decoration: none;
+  color: inherit;
+  text-align: center;
+  transition: transform var(--amms-transition), background-color var(--amms-transition);
+}
+.icon-action-btn:hover {
+  transform: translateY(-2px);
+  background-color: var(--bs-tertiary-bg, rgba(0, 0, 0, 0.03));
+  color: inherit;
+}
+.icon-action-circle {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  transition: transform var(--amms-transition), box-shadow var(--amms-transition);
+}
+.icon-action-btn:hover .icon-action-circle {
+  transform: scale(1.06);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+}
+.icon-action-label {
+  font-size: 0.74rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--bs-secondary-color, #495057);
+}
+
+/* ===== Activity rows ===== */
+.activity-row {
+  transition: background-color var(--amms-transition);
+}
+.activity-row:hover {
+  background-color: var(--bs-tertiary-bg, rgba(0, 0, 0, 0.02));
+}
+
 .avatar-circle { width: 32px; height: 32px; }
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }

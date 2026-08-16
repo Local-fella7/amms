@@ -1,0 +1,244 @@
+{
+  "info": {
+    "name": "AMMS API",
+    "description": "Association Membership Management System API\n\nBase URL: {{base_url}}\n\n1. Run **Auth > Login** first to obtain JWT token\n2. Token is auto-saved to collection variable `jwt_token`\n3. All protected requests use Bearer auth automatically",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "amms-api-v1"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost/amms/public/api",
+      "type": "string"
+    },
+    {
+      "key": "jwt_token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{jwt_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('jwt_token', json.data.token);",
+                  "    pm.test('Token saved', function () {",
+                  "        pm.expect(json.data.token).to.be.a('string');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@amms.local\",\n  \"password\": \"admin123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Get Me",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/auth/me",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "me"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Roles",
+      "item": [
+        { "name": "List Roles", "request": { "method": "GET", "url": "{{base_url}}/roles" } },
+        { "name": "Get Role", "request": { "method": "GET", "url": "{{base_url}}/roles/1" } },
+        { "name": "Create Role", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"New Role\"\n}" }, "url": "{{base_url}}/roles" } },
+        { "name": "Update Role", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Updated Role\"\n}" }, "url": "{{base_url}}/roles/1" } },
+        { "name": "Delete Role", "request": { "method": "DELETE", "url": "{{base_url}}/roles/1" } }
+      ]
+    },
+    {
+      "name": "Feature Groups",
+      "item": [
+        { "name": "List Feature Groups", "request": { "method": "GET", "url": "{{base_url}}/feature-groups" } },
+        { "name": "Get Feature Group", "request": { "method": "GET", "url": "{{base_url}}/feature-groups/1" } },
+        { "name": "Create Feature Group", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"New Group\"\n}" }, "url": "{{base_url}}/feature-groups" } },
+        { "name": "Update Feature Group", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Updated Group\"\n}" }, "url": "{{base_url}}/feature-groups/1" } },
+        { "name": "Delete Feature Group", "request": { "method": "DELETE", "url": "{{base_url}}/feature-groups/1" } }
+      ]
+    },
+    {
+      "name": "Features",
+      "item": [
+        { "name": "List Features", "request": { "method": "GET", "url": "{{base_url}}/features" } },
+        { "name": "Get Feature", "request": { "method": "GET", "url": "{{base_url}}/features/1" } },
+        { "name": "Create Feature", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Manage Reports\",\n  \"features_group_id\": 1\n}" }, "url": "{{base_url}}/features" } },
+        { "name": "Update Feature", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Updated Feature\"\n}" }, "url": "{{base_url}}/features/1" } },
+        { "name": "Delete Feature", "request": { "method": "DELETE", "url": "{{base_url}}/features/1" } }
+      ]
+    },
+    {
+      "name": "Role Features",
+      "item": [
+        { "name": "List Role Features", "request": { "method": "GET", "url": "{{base_url}}/role-features" } },
+        { "name": "Get Role Feature", "request": { "method": "GET", "url": "{{base_url}}/role-features/1" } },
+        { "name": "Create Role Feature", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"role_id\": 1,\n  \"feature_id\": 2\n}" }, "url": "{{base_url}}/role-features" } },
+        { "name": "Update Role Feature", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"role_id\": 2\n}" }, "url": "{{base_url}}/role-features/1" } },
+        { "name": "Delete Role Feature", "request": { "method": "DELETE", "url": "{{base_url}}/role-features/1" } }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        { "name": "List Users", "request": { "method": "GET", "url": "{{base_url}}/users" } },
+        { "name": "Get User", "request": { "method": "GET", "url": "{{base_url}}/users/1" } },
+        { "name": "Create User", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"first_name\": \"Jane\",\n  \"last_name\": \"Doe\",\n  \"email\": \"jane@example.com\",\n  \"phone\": \"255700000002\",\n  \"password\": \"password123\",\n  \"role_id\": 1,\n  \"status\": \"active\"\n}" }, "url": "{{base_url}}/users" } },
+        { "name": "Update User", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"first_name\": \"Janet\"\n}" }, "url": "{{base_url}}/users/1" } },
+        { "name": "Delete User", "request": { "method": "DELETE", "url": "{{base_url}}/users/1" } }
+      ]
+    },
+    {
+      "name": "Association",
+      "item": [
+        { "name": "List Association", "request": { "method": "GET", "url": "{{base_url}}/association" } },
+        { "name": "Get Association", "request": { "method": "GET", "url": "{{base_url}}/association/1" } },
+        { "name": "Create Association", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"New Association\",\n  \"address\": \"Dar es Salaam, Tanzania\",\n  \"chairman_phone\": \"255711111111\",\n  \"secretary_phone\": \"255722222222\",\n  \"treasurer_phone\": \"255733333333\"\n}" }, "url": "{{base_url}}/association" } },
+        { "name": "Update Association", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Updated Association\"\n}" }, "url": "{{base_url}}/association/1" } },
+        { "name": "Delete Association", "request": { "method": "DELETE", "url": "{{base_url}}/association/1" } }
+      ]
+    },
+    {
+      "name": "Age Groups",
+      "item": [
+        { "name": "List Age Groups", "request": { "method": "GET", "url": "{{base_url}}/age-groups" } },
+        { "name": "Get Age Group", "request": { "method": "GET", "url": "{{base_url}}/age-groups/1" } },
+        { "name": "Create Age Group", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Infant\",\n  \"from_age\": 0,\n  \"to_age\": 5\n}" }, "url": "{{base_url}}/age-groups" } },
+        { "name": "Update Age Group", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Updated Age Group\"\n}" }, "url": "{{base_url}}/age-groups/1" } },
+        { "name": "Delete Age Group", "request": { "method": "DELETE", "url": "{{base_url}}/age-groups/1" } }
+      ]
+    },
+    {
+      "name": "Notification Templates",
+      "item": [
+        { "name": "List Templates", "request": { "method": "GET", "url": "{{base_url}}/notification-templates" } },
+        { "name": "Get Template", "request": { "method": "GET", "url": "{{base_url}}/notification-templates/1" } },
+        { "name": "Create Template", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Fee Reminder\",\n  \"content\": \"Dear {{first_name}}, please pay your annual fee.\"\n}" }, "url": "{{base_url}}/notification-templates" } },
+        { "name": "Update Template", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Updated Template\"\n}" }, "url": "{{base_url}}/notification-templates/1" } },
+        { "name": "Delete Template", "request": { "method": "DELETE", "url": "{{base_url}}/notification-templates/1" } }
+      ]
+    },
+    {
+      "name": "Locations",
+      "item": [
+        { "name": "List Locations", "request": { "method": "GET", "url": "{{base_url}}/locations" } },
+        { "name": "Get Location", "request": { "method": "GET", "url": "{{base_url}}/locations/1" } },
+        { "name": "Create Location", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Moshi\"\n}" }, "url": "{{base_url}}/locations" } },
+        { "name": "Update Location", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Updated Location\"\n}" }, "url": "{{base_url}}/locations/1" } },
+        { "name": "Delete Location", "request": { "method": "DELETE", "url": "{{base_url}}/locations/1" } }
+      ]
+    },
+    {
+      "name": "Fees",
+      "item": [
+        { "name": "List Fees", "request": { "method": "GET", "url": "{{base_url}}/fees" } },
+        { "name": "Get Fee", "request": { "method": "GET", "url": "{{base_url}}/fees/1" } },
+        { "name": "Create Fee", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Annual Subscription 2027\",\n  \"amount\": 60000.00,\n  \"year\": 2027\n}" }, "url": "{{base_url}}/fees" } },
+        { "name": "Update Fee", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"amount\": 55000.00\n}" }, "url": "{{base_url}}/fees/1" } },
+        { "name": "Delete Fee", "request": { "method": "DELETE", "url": "{{base_url}}/fees/1" } }
+      ]
+    },
+    {
+      "name": "Payment Modes",
+      "item": [
+        { "name": "List Payment Modes", "request": { "method": "GET", "url": "{{base_url}}/payment-modes" } },
+        { "name": "Get Payment Mode", "request": { "method": "GET", "url": "{{base_url}}/payment-modes/1" } },
+        { "name": "Create Payment Mode", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Cheque\"\n}" }, "url": "{{base_url}}/payment-modes" } },
+        { "name": "Update Payment Mode", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Updated Mode\"\n}" }, "url": "{{base_url}}/payment-modes/1" } },
+        { "name": "Delete Payment Mode", "request": { "method": "DELETE", "url": "{{base_url}}/payment-modes/1" } }
+      ]
+    },
+    {
+      "name": "Members",
+      "item": [
+        { "name": "List Members", "request": { "method": "GET", "url": "{{base_url}}/members" } },
+        { "name": "Get Member", "request": { "method": "GET", "url": "{{base_url}}/members/1" } },
+        { "name": "Create Member", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"first_name\": \"Alice\",\n  \"last_name\": \"Smith\",\n  \"fathers_name\": \"Bob Smith\",\n  \"mothers_name\": \"Carol Smith\",\n  \"location_id\": 1,\n  \"date_of_birth\": \"1985-03-20\",\n  \"member_status\": \"active\",\n  \"marital_status\": \"single\",\n  \"phone\": \"255755555555\",\n  \"fee_exemption\": \"no\",\n  \"age_group_id\": 2,\n  \"registration_date\": \"2026-08-03\"\n}" }, "url": "{{base_url}}/members" } },
+        { "name": "Update Member", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"member_status\": \"inactive\"\n}" }, "url": "{{base_url}}/members/1" } },
+        { "name": "Delete Member", "request": { "method": "DELETE", "url": "{{base_url}}/members/1" } }
+      ]
+    },
+    {
+      "name": "Fee Payments",
+      "item": [
+        { "name": "List Fee Payments", "request": { "method": "GET", "url": "{{base_url}}/fee-payments" } },
+        { "name": "Get Fee Payment", "request": { "method": "GET", "url": "{{base_url}}/fee-payments/1" } },
+        { "name": "Create Fee Payment", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"date\": \"2026-08-03\",\n  \"payment_mode_id\": 1,\n  \"amount\": 50000.00,\n  \"fee_id\": 1,\n  \"member_id\": 1\n}" }, "url": "{{base_url}}/fee-payments" } },
+        { "name": "Update Fee Payment", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"amount\": 55000.00\n}" }, "url": "{{base_url}}/fee-payments/1" } },
+        { "name": "Delete Fee Payment", "request": { "method": "DELETE", "url": "{{base_url}}/fee-payments/1" } }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        { "name": "List Notifications", "request": { "method": "GET", "url": "{{base_url}}/notifications" } },
+        { "name": "Get Notification", "request": { "method": "GET", "url": "{{base_url}}/notifications/1" } },
+        { "name": "Create Notification", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Annual Meeting\",\n  \"notification_template_id\": 1,\n  \"content\": \"Dear members, our annual meeting is scheduled for March 1st.\"\n}" }, "url": "{{base_url}}/notifications" } },
+        { "name": "Update Notification", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Updated Notification\"\n}" }, "url": "{{base_url}}/notifications/1" } },
+        { "name": "Delete Notification", "request": { "method": "DELETE", "url": "{{base_url}}/notifications/1" } }
+      ]
+    },
+    {
+      "name": "Notification Members",
+      "item": [
+        { "name": "List Notification Members", "request": { "method": "GET", "url": "{{base_url}}/notification-members" } },
+        { "name": "Get Notification Member", "request": { "method": "GET", "url": "{{base_url}}/notification-members/1" } },
+        { "name": "Create Notification Member", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"notification_id\": 1,\n  \"member_id\": 1\n}" }, "url": "{{base_url}}/notification-members" } },
+        { "name": "Update Notification Member", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"member_id\": 1\n}" }, "url": "{{base_url}}/notification-members/1" } },
+        { "name": "Delete Notification Member", "request": { "method": "DELETE", "url": "{{base_url}}/notification-members/1" } }
+      ]
+    },
+    {
+      "name": "Audit Logs",
+      "item": [
+        { "name": "List Logs", "request": { "method": "GET", "url": "{{base_url}}/logs" } },
+        { "name": "Get Log", "request": { "method": "GET", "url": "{{base_url}}/logs/1" } },
+        { "name": "Create Log", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"feature_id\": 1,\n  \"user_id\": 1,\n  \"datetime\": \"2026-08-03 10:00:00\",\n  \"before\": \"{}\",\n  \"after\": \"{\\\"action\\\":\\\"manual\\\"}\"\n}" }, "url": "{{base_url}}/logs" } },
+        { "name": "Update Log", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"after\": \"{\\\"updated\\\":true}\"\n}" }, "url": "{{base_url}}/logs/1" } },
+        { "name": "Delete Log", "request": { "method": "DELETE", "url": "{{base_url}}/logs/1" } }
+      ]
+    }
+  ]
+}

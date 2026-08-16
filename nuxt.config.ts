@@ -1,16 +1,17 @@
-// https://nuxt.com/docs/api/configuration/nuxt-config
+const apiBase = process.env.NUXT_PUBLIC_API_BASE || 'http://192.168.100.100/amms/public/api'
+
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
   runtimeConfig: {
     public: {
-      apiBase: process.env.NUXT_PUBLIC_API_BASE || 'http://192.168.100.100/amms/public/api'
+      apiBase
     }
   },
   nitro: {
     routeRules: {
       '/api/**': {
-        proxy: 'http://192.168.100.100/amms/public/api/**'
+        proxy: `${apiBase}/**`
       }
     }
   },
