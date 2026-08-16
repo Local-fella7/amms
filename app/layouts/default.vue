@@ -61,8 +61,8 @@ onMounted(() => {
             <i class="bi bi-shield-check fs-5 amms-accent"></i>
           </div>
           <div class="d-none d-sm-block">
-            <h6 class="fw-bold mb-0 text-primary leading-none">AMMS</h6>
-            <small class="text-muted-amms fs-7">Civic Registry</small>
+            <h6 class="fw-bold mb-0 text-primary leading-none">ASA</h6>
+            <small class="text-muted-amms fs-7">Arusha Somali Association</small>
           </div>
         </NuxtLink>
       </div>
@@ -276,7 +276,7 @@ onMounted(() => {
             </li>
           </ul>
           <div class="text-center pt-1.5" v-if="!isSidebarCollapsed">
-            <small class="text-white-50 text-xs">&copy; AMMS Civic Registry</small>
+            <small class="text-white-50 text-xs">&copy; ASA — Arusha Somali Association</small>
           </div>
         </div>
       </aside>

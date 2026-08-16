@@ -144,8 +144,8 @@ const submitPasswordChange = async () => {
             <i class="bi bi-shield-check display-4 amms-accent"></i>
           </div>
           <div>
-            <h1 class="display-3 fw-bold mb-1 text-white tracking-tight">AMMS</h1>
-            <p class="fs-4 text-white-50 fw-normal mb-0">Association Membership Management System</p>
+            <h1 class="display-3 fw-bold mb-1 text-white tracking-tight">ASA</h1>
+            <p class="fs-4 text-white-50 fw-normal mb-0">Arusha Somali Association</p>
           </div>
         </div>
 
@@ -181,7 +181,7 @@ const submitPasswordChange = async () => {
 
         <!-- Footer / Quote -->
         <div class="position-relative z-1 pt-4 border-top border-white border-opacity-10 d-flex justify-content-between align-items-center">
-          <small class="text-white-50">&copy; {{ new Date().getFullYear() }} AMMS Civic Registry</small>
+          <small class="text-white-50">&copy; {{ new Date().getFullYear() }} ASA Civic Registry</small>
           <div class="d-flex gap-3 text-white-50 small">
             <span>Privacy Policy</span>
             <span>Terms of Service</span>
@@ -212,7 +212,7 @@ const submitPasswordChange = async () => {
             <div class="d-inline-flex align-items-center justify-content-center bg-primary bg-opacity-10 p-3 rounded-circle mb-2">
               <i class="bi bi-shield-check fs-1 amms-accent"></i>
             </div>
-            <h3 class="fw-bold text-primary mb-0">AMMS Portal</h3>
+            <h3 class="fw-bold text-primary mb-0">ASA Portal</h3>
           </div>
 
           <div class="mb-4 text-center text-lg-start">
@@ -292,7 +292,7 @@ const submitPasswordChange = async () => {
 
         <!-- Right Footer -->
         <div class="w-100 text-center pt-3">
-          <small class="text-muted">&copy; {{ new Date().getFullYear() }} AMMS — Association Membership Management System</small>
+          <small class="text-muted">&copy; {{ new Date().getFullYear() }} ASA — Arusha Somali Association</small>
         </div>
 
       </div>
