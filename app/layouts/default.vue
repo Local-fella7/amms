@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useAuthStore } from '~/stores/useAuthStore'
 
 const route = useRoute()
@@ -41,8 +41,8 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="app-layout min-vh-100 d-flex flex-column">
-    
+  <div class="app-layout d-flex flex-column" style="height: 100vh; overflow: hidden;">
+
     <!-- Top Navigation Header -->
     <header class="app-header border-bottom bg-body sticky-top px-3 py-2.5 d-flex align-items-center justify-content-between z-3 shadow-xs">
       
@@ -61,8 +61,8 @@ onMounted(() => {
             <i class="bi bi-shield-check fs-5 amms-accent"></i>
           </div>
           <div class="d-none d-sm-block">
-            <h6 class="fw-bold mb-0 text-primary leading-none">AMMS</h6>
-            <small class="text-muted-amms fs-7">Civic Registry</small>
+            <h6 class="fw-bold mb-0 text-primary leading-none">ASA</h6>
+            <small class="text-muted-amms fs-7">Arusha Somali Association</small>
           </div>
         </NuxtLink>
       </div>
@@ -129,11 +129,11 @@ onMounted(() => {
           </ul>
         </div>
 
-      </div>
+</div>
     </header>
 
-    <div class="d-flex flex-grow-1 position-relative">
-      
+    <div class="d-flex flex-grow-1 position-relative" style="min-height: 0; overflow: hidden;">
+
       <!-- Collapsible Main Sidebar -->
       <aside 
         class="amms-sidebar d-flex flex-column justify-content-between p-3 border-end transition-all"
@@ -175,6 +175,12 @@ onMounted(() => {
               <NuxtLink to="/notification-members" class="nav-link d-flex align-items-center gap-3 px-3 py-2.5 rounded-3" active-class="active">
                 <i class="bi bi-person-lines-fill fs-5"></i>
                 <span v-if="!isSidebarCollapsed" class="fw-medium text-sm">Broadcast Recipients</span>
+              </NuxtLink>
+            </li>
+            <li class="nav-item">
+              <NuxtLink to="/reports" class="nav-link d-flex align-items-center gap-3 px-3 py-2.5 rounded-3" active-class="active">
+                <i class="bi bi-file-earmark-pdf-fill fs-5"></i>
+                <span v-if="!isSidebarCollapsed" class="fw-medium text-sm">Reports Center</span>
               </NuxtLink>
             </li>
           </ul>
@@ -245,29 +251,38 @@ onMounted(() => {
         </div>
 
         <!-- Sidebar Footer & Audit Trail -->
-        <div class="sidebar-footer pt-2" v-if="!isSidebarCollapsed">
-          <ul class="nav nav-pills flex-column gap-1 mb-2">
+        <div class="sidebar-footer pt-2 border-top border-white border-opacity-10 mt-auto">
+          <ul class="nav nav-pills flex-column gap-1 mb-1">
             <li class="nav-item">
-              <NuxtLink to="/audit-logs" class="nav-link d-flex align-items-center gap-3 px-3 py-2 rounded-3" active-class="active">
-                <i class="bi bi-journal-text fs-5"></i>
-                <span class="fw-medium text-sm">Audit Trail</span>
+              <NuxtLink 
+                to="/audit-logs" 
+                class="nav-link d-flex align-items-center gap-3 px-3 py-2 rounded-3" 
+                active-class="active"
+                :title="isSidebarCollapsed ? 'Audit Trail' : ''"
+              >
+                <i class="bi bi-journal-text fs-5 flex-shrink-0"></i>
+                <span v-if="!isSidebarCollapsed" class="fw-medium text-sm">Audit Trail</span>
               </NuxtLink>
             </li>
             <li class="nav-item">
-              <button class="nav-link w-100 border-0 bg-transparent text-start d-flex align-items-center gap-3 px-3 py-2 rounded-3 text-danger cursor-pointer" @click="authStore.logout()">
-                <i class="bi bi-box-arrow-right fs-5"></i>
-                <span class="fw-medium text-sm">Log Out</span>
+              <button 
+                class="nav-link w-100 border-0 bg-transparent text-start d-flex align-items-center gap-3 px-3 py-2 rounded-3 text-danger cursor-pointer" 
+                @click="authStore.logout()"
+                :title="isSidebarCollapsed ? 'Sign Out' : ''"
+              >
+                <i class="bi bi-box-arrow-right fs-5 flex-shrink-0"></i>
+                <span v-if="!isSidebarCollapsed" class="fw-medium text-sm">Log Out</span>
               </button>
             </li>
           </ul>
-          <div class="text-center pt-2 border-top border-white border-opacity-10">
-            <small class="text-white-50 text-xs">&copy; AMMS Civic Registry</small>
+          <div class="text-center pt-1.5" v-if="!isSidebarCollapsed">
+            <small class="text-white-50 text-xs">&copy; ASA — Arusha Somali Association</small>
           </div>
         </div>
       </aside>
 
-      <!-- Main Workspace Page Content -->
-      <main class="main-content flex-grow-1 p-3 p-md-4 overflow-auto">
+<!-- Main Workspace Page Content -->
+      <main class="main-content flex-grow-1 p-3 p-md-4 overflow-auto" style="min-height: 0;">
         <slot />
       </main>
 
@@ -298,12 +313,26 @@ onMounted(() => {
 
 .amms-sidebar {
   width: 240px;
-  min-height: calc(100vh - 57px);
+  max-height: calc(100vh - 57px);
+  overflow-y: auto;
   transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .amms-sidebar.collapsed {
   width: 72px;
+  padding-left: 0.5rem !important;
+  padding-right: 0.5rem !important;
+}
+
+.amms-sidebar.collapsed .nav-link {
+  justify-content: center !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  gap: 0 !important;
+}
+
+.amms-sidebar.collapsed .nav-link i {
+  margin: 0 !important;
 }
 
 .rotate-180 {

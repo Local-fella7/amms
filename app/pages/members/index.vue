@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { z } from 'zod'
+import { useReportPdf } from '~/composables/useReportPdf'
 
 interface Member {
   id: number
   first_name: string
   last_name: string
+  gender: 'male' | 'female' | string
   fathers_name?: string
   mothers_name?: string
   location_id: number | string
+  picture?: string
   date_of_birth: string
-  member_status: 'active' | 'inactive' | string
+  member_status: 'active' | 'inactive' | 'deceased' | string
   marital_status: 'single' | 'married' | 'divorced' | 'widowed' | string
   phone: string
   fee_exemption: 'yes' | 'no' | string
@@ -30,15 +33,19 @@ interface LocationItem {
 interface AgeGroupItem {
   id: number
   name: string
+  from_age?: number | string
+  to_age?: number | string
 }
 
 const { data: membersResponse, loading, error, execute: fetchMembers, fetchWithAuth } = useApi<any>()
 const { data: locations, execute: fetchLocations } = useApi<LocationItem[]>()
 const { data: ageGroups, execute: fetchAgeGroups } = useApi<AgeGroupItem[]>()
+const { downloadPdf, openPdfInNewTab, isGenerating: isDownloadingPdf } = useReportPdf()
 
 const searchQuery = ref('')
 const selectedLocationFilter = ref<string>('')
 const selectedStatusFilter = ref<string>('')
+const selectedGenderFilter = ref<string>('')
 
 const isSubmitting = ref(false)
 const modalError = ref('')
@@ -48,16 +55,27 @@ const isModalOpen = ref(false)
 // Form Fields
 const firstName = ref('')
 const lastName = ref('')
+const gender = ref<'male' | 'female'>('male')
 const fathersName = ref('')
 const mothersName = ref('')
 const locationId = ref<string | number>('')
 const ageGroupId = ref<string | number>('')
 const dateOfBirth = ref('')
 const phone = ref('')
-const memberStatus = ref<'active' | 'inactive'>('active')
+const memberStatus = ref<'active' | 'inactive' | 'deceased'>('active')
 const maritalStatus = ref<'single' | 'married' | 'divorced' | 'widowed'>('single')
 const feeExemption = ref<'yes' | 'no'>('no')
 const registrationDate = ref(new Date().toISOString().substring(0, 10))
+
+// Photo Upload State
+const photoFileInput = ref<HTMLInputElement | null>(null)
+const selectedPhotoFile = ref<File | null>(null)
+const photoPreview = ref<string | null>(null)
+const cropX = ref<number>(0)
+const cropY = ref<number>(0)
+const cropWidth = ref<number>(400)
+const cropHeight = ref<number>(400)
+const showCropSettings = ref(false)
 
 // View Modal State
 const viewingMember = ref<Member | null>(null)
@@ -75,6 +93,7 @@ const itemsPerPage = ref(10)
 const schema = z.object({
   first_name: z.string().min(2, 'First name is required'),
   last_name: z.string().min(2, 'Last name is required'),
+  gender: z.enum(['male', 'female']),
   fathers_name: z.string().optional(),
   mothers_name: z.string().optional(),
   location_id: z.union([z.number(), z.string().min(1, 'Location branch is required')]),
@@ -83,7 +102,7 @@ const schema = z.object({
   phone: z.string()
     .length(12, 'Phone number must be exactly 12 digits (e.g. 255755555555)')
     .regex(/^255[0-9]{9}$/, 'Phone number must start with 255 followed by 9 digits'),
-  member_status: z.enum(['active', 'inactive']),
+  member_status: z.enum(['active', 'inactive', 'deceased']),
   marital_status: z.enum(['single', 'married', 'divorced', 'widowed']),
   fee_exemption: z.enum(['yes', 'no']),
   registration_date: z.string().min(4, 'Registration date is required')
@@ -148,6 +167,10 @@ const filteredMembers = computed(() => {
     result = result.filter(m => m.member_status === selectedStatusFilter.value)
   }
 
+  if (selectedGenderFilter.value) {
+    result = result.filter(m => (m.gender || 'male') === selectedGenderFilter.value)
+  }
+
   // Descending sort by Member ID
   return result.sort((a, b) => b.id - a.id)
 })
@@ -170,17 +193,17 @@ interface AgeGroupItem {
 const calculatedAge = ref<number | null>(null)
 
 // Auto-calculate member age & auto-select matching Age Group
-watch(dateOfBirth, (newDob) => {
-  if (!newDob) {
+const updateAgeGroupFromDob = () => {
+  if (!dateOfBirth.value) {
     calculatedAge.value = null
     return
   }
 
   let dobDate: Date
-  if (newDob instanceof Date) {
-    dobDate = newDob
+  if (dateOfBirth.value instanceof Date) {
+    dobDate = dateOfBirth.value
   } else {
-    dobDate = new Date(newDob)
+    dobDate = new Date(dateOfBirth.value)
   }
 
   if (isNaN(dobDate.getTime())) {
@@ -200,16 +223,27 @@ watch(dateOfBirth, (newDob) => {
   // Match against loaded age groups [from_age, to_age]
   if (ageGroups.value && ageGroups.value.length > 0 && calculatedAge.value !== null) {
     const matched = ageGroups.value.find(g => {
-      const min = g.from_age !== undefined ? Number(g.from_age) : 0
-      const max = g.to_age !== undefined ? Number(g.to_age) : 999
+      const min = g.from_age !== undefined && g.from_age !== null && g.from_age !== '' ? Number(g.from_age) : 0
+      const max = g.to_age !== undefined && g.to_age !== null && g.to_age !== '' ? Number(g.to_age) : 999
       return calculatedAge.value! >= min && calculatedAge.value! <= max
     })
 
     if (matched) {
       ageGroupId.value = matched.id
+    } else if (ageGroups.value.length > 0 && !ageGroupId.value) {
+      ageGroupId.value = ageGroups.value[0].id
     }
   }
-}, { immediate: true })
+}
+
+watch(dateOfBirth, updateAgeGroupFromDob, { immediate: true })
+watch(ageGroups, updateAgeGroupFromDob)
+
+const currentMatchedAgeGroupName = computed(() => {
+  if (!ageGroupId.value || !ageGroups.value) return 'Auto-assigned from Age'
+  const matched = ageGroups.value.find(g => Number(g.id) === Number(ageGroupId.value))
+  return matched ? matched.name : 'Auto-assigned from Age'
+})
 
 // Auto-format & enforce 255 prefix, digits only, omit leading zero after 255, and max 12 characters
 watch(phone, (val) => {
@@ -239,10 +273,28 @@ watch(phone, (val) => {
   phone.value = digits
 })
 
+const onPhotoSelected = (e: Event) => {
+  const target = e.target as HTMLInputElement
+  if (target.files && target.files[0]) {
+    const file = target.files[0]
+    selectedPhotoFile.value = file
+    photoPreview.value = URL.createObjectURL(file)
+  }
+}
+
+const clearPhoto = () => {
+  selectedPhotoFile.value = null
+  photoPreview.value = null
+  if (photoFileInput.value) {
+    photoFileInput.value.value = ''
+  }
+}
+
 const openAddModal = () => {
   editingMember.value = null
   firstName.value = ''
   lastName.value = ''
+  gender.value = 'male'
   fathersName.value = ''
   mothersName.value = ''
   locationId.value = locations.value && locations.value.length > 0 ? locations.value[0].id : ''
@@ -253,6 +305,7 @@ const openAddModal = () => {
   maritalStatus.value = 'single'
   feeExemption.value = 'no'
   registrationDate.value = new Date().toISOString().substring(0, 10)
+  clearPhoto()
   modalError.value = ''
   isModalOpen.value = true
 }
@@ -261,6 +314,7 @@ const openEditModal = (m: Member) => {
   editingMember.value = m
   firstName.value = m.first_name
   lastName.value = m.last_name
+  gender.value = (m.gender as any) || 'male'
   fathersName.value = m.fathers_name || ''
   mothersName.value = m.mothers_name || ''
   locationId.value = m.location_id
@@ -271,6 +325,10 @@ const openEditModal = (m: Member) => {
   maritalStatus.value = (m.marital_status as any) || 'single'
   feeExemption.value = (m.fee_exemption as any) || 'no'
   registrationDate.value = m.registration_date || new Date().toISOString().substring(0, 10)
+  clearPhoto()
+  if (m.picture) {
+    photoPreview.value = m.picture.startsWith('http') ? m.picture : `/${m.picture}`
+  }
   modalError.value = ''
   isModalOpen.value = true
 }
@@ -318,6 +376,7 @@ const handleSave = async () => {
   const payload = {
     first_name: firstName.value.trim(),
     last_name: lastName.value.trim(),
+    gender: gender.value,
     fathers_name: fathersName.value.trim() || undefined,
     mothers_name: mothersName.value.trim() || undefined,
     location_id: Number(locationId.value),
@@ -346,9 +405,36 @@ const handleSave = async () => {
       })
       push.success(`Member "${firstName.value} ${lastName.value}" updated successfully!`)
     } else {
+      let requestBody: any = payload
+
+      if (selectedPhotoFile.value) {
+        const formData = new FormData()
+        formData.append('first_name', payload.first_name)
+        formData.append('last_name', payload.last_name)
+        formData.append('gender', payload.gender)
+        if (payload.fathers_name) formData.append('fathers_name', payload.fathers_name)
+        if (payload.mothers_name) formData.append('mothers_name', payload.mothers_name)
+        formData.append('location_id', String(payload.location_id))
+        formData.append('age_group_id', String(payload.age_group_id))
+        formData.append('date_of_birth', payload.date_of_birth)
+        formData.append('phone', payload.phone)
+        formData.append('member_status', payload.member_status)
+        formData.append('marital_status', payload.marital_status)
+        formData.append('fee_exemption', payload.fee_exemption)
+        formData.append('registration_date', payload.registration_date)
+
+        formData.append('photo', selectedPhotoFile.value)
+        formData.append('crop_x', String(cropX.value || 0))
+        formData.append('crop_y', String(cropY.value || 0))
+        formData.append('crop_width', String(cropWidth.value || 400))
+        formData.append('crop_height', String(cropHeight.value || 400))
+
+        requestBody = formData
+      }
+
       await fetchWithAuth('/api/members', {
         method: 'POST',
-        body: payload
+        body: requestBody
       })
       push.success(`Member "${firstName.value} ${lastName.value}" registered successfully!`)
     }
@@ -362,6 +448,39 @@ const handleSave = async () => {
     push.error(modalError.value)
   } finally {
     isSubmitting.value = false
+  }
+}
+
+const getMemberPhotoUrl = (pic?: string) => {
+  if (!pic) return ''
+  if (pic.startsWith('http') || pic.startsWith('data:')) return pic
+  return pic.startsWith('/') ? pic : `/${pic}`
+}
+
+const exportMemberProfilePdf = async (mId: number | string) => {
+  try {
+    await openPdfInNewTab(`/api/reports/profile/${mId}`)
+    push.success('Opened member profile PDF in new tab')
+  } catch (e) {
+    push.error('Failed to open profile PDF')
+  }
+}
+
+const exportMemberStatementPdf = async (mId: number | string) => {
+  try {
+    await openPdfInNewTab(`/api/reports/member-history/${mId}`)
+    push.success('Opened member statement PDF in new tab')
+  } catch (e) {
+    push.error('Failed to open statement PDF')
+  }
+}
+
+const exportMembersDirectoryPdf = async () => {
+  try {
+    await openPdfInNewTab('/api/reports/members')
+    push.success('Opened member directory PDF in new tab')
+  } catch (e) {
+    push.error('Failed to open directory PDF')
   }
 }
 
@@ -423,7 +542,7 @@ onMounted(() => {
           </span>
 
           <!-- Location Branch Filter Pill -->
-          <div style="min-width: 170px;">
+          <div style="min-width: 160px;">
             <select 
               v-model="selectedLocationFilter" 
               class="form-select form-select-sm rounded-pill text-xs fw-semibold border bg-body ps-3 pe-4 shadow-sm cursor-pointer filter-pill-select"
@@ -435,7 +554,7 @@ onMounted(() => {
           </div>
 
           <!-- Membership Status Filter Pill -->
-          <div style="min-width: 160px;">
+          <div style="min-width: 150px;">
             <select 
               v-model="selectedStatusFilter" 
               class="form-select form-select-sm rounded-pill text-xs fw-semibold border bg-body ps-3 pe-4 shadow-sm cursor-pointer filter-pill-select"
@@ -444,23 +563,52 @@ onMounted(() => {
               <option value="">All Statuses</option>
               <option value="active">Active Members</option>
               <option value="inactive">Inactive Members</option>
+              <option value="deceased">Deceased Members</option>
+            </select>
+          </div>
+
+          <!-- Gender Filter Pill -->
+          <div style="min-width: 130px;">
+            <select 
+              v-model="selectedGenderFilter" 
+              class="form-select form-select-sm rounded-pill text-xs fw-semibold border bg-body ps-3 pe-4 shadow-sm cursor-pointer filter-pill-select"
+              :class="selectedGenderFilter ? 'border-primary text-primary bg-primary bg-opacity-10' : 'text-body-secondary'"
+            >
+              <option value="">All Genders</option>
+              <option value="male">Male</option>
+              <option value="female">Female</option>
             </select>
           </div>
 
           <!-- Clear Filters Link -->
           <button 
-            v-if="selectedLocationFilter || selectedStatusFilter || searchQuery"
+            v-if="selectedLocationFilter || selectedStatusFilter || selectedGenderFilter || searchQuery"
             type="button" 
             class="btn btn-xs btn-link text-danger text-xs text-decoration-none px-2 fw-semibold ms-1"
-            @click="selectedLocationFilter = ''; selectedStatusFilter = ''; searchQuery = ''"
+            @click="selectedLocationFilter = ''; selectedStatusFilter = ''; selectedGenderFilter = ''; searchQuery = ''"
           >
             <i class="bi bi-x-lg me-1"></i> Clear Filters
           </button>
         </div>
 
-        <!-- Total Filtered Counter Badge -->
-        <div class="text-xs text-muted font-monospace">
-          Showing <span class="fw-bold text-primary">{{ filteredMembers.length }}</span> members
+        <div class="d-flex align-items-center gap-3">
+          <!-- Total Filtered Counter Badge -->
+          <div class="text-xs text-muted font-monospace d-none d-sm-block">
+            Showing <span class="fw-bold text-primary">{{ filteredMembers.length }}</span> members
+          </div>
+
+          <!-- Export Directory PDF Button -->
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-primary rounded-pill px-3 py-1.5 text-xs fw-semibold d-flex align-items-center gap-1.5 shadow-xs"
+            :disabled="isDownloadingPdf"
+            @click="exportMembersDirectoryPdf"
+            title="Download PDF Member Directory"
+          >
+            <span v-if="isDownloadingPdf" class="spinner-border spinner-border-sm" role="status"></span>
+            <i v-else class="bi bi-file-earmark-pdf-fill text-danger"></i>
+            <span>{{ isDownloadingPdf ? 'Exporting...' : 'Export Directory' }}</span>
+          </button>
         </div>
       </div>
 
@@ -485,15 +633,15 @@ onMounted(() => {
         <table class="table align-middle mb-0 custom-amms-table">
           <thead>
             <tr>
-              <th class="ps-4" style="width: 80px;"># ID</th>
-              <th>Full Name</th>
+              <th class="ps-4" style="width: 70px;"># ID</th>
+              <th>Full Name & Gender</th>
               <th>Phone Number</th>
               <th>Location Branch</th>
               <th>Age Group</th>
               <th>Registration Date</th>
               <th>Exemption</th>
               <th>Status</th>
-              <th class="text-end pe-4" style="width: 140px;">Actions</th>
+              <th class="text-end pe-4" style="width: 170px;">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -526,11 +674,17 @@ onMounted(() => {
               <td class="ps-4 font-monospace text-muted text-xs">#{{ m.id }}</td>
               <td class="fw-semibold text-primary">
                 <div class="d-flex align-items-center gap-2.5">
-                  <div class="avatar-badge rounded-circle d-flex align-items-center justify-content-center text-primary font-monospace fw-bold text-xs">
+                  <div v-if="m.picture" class="avatar-badge rounded-circle overflow-hidden d-flex align-items-center justify-content-center">
+                    <img :src="getMemberPhotoUrl(m.picture)" :alt="m.first_name" class="w-100 h-100 object-fit-cover" />
+                  </div>
+                  <div v-else class="avatar-badge rounded-circle d-flex align-items-center justify-content-center text-primary font-monospace fw-bold text-xs">
                     {{ m.first_name[0] }}{{ m.last_name[0] }}
                   </div>
                   <div>
                     <span class="d-block">{{ m.first_name }} {{ m.last_name }}</span>
+                    <small class="text-muted text-xs text-capitalize">
+                      <i :class="m.gender === 'female' ? 'bi bi-gender-female text-danger' : 'bi bi-gender-male text-primary'" class="me-1"></i>{{ m.gender || 'male' }}
+                    </small>
                   </div>
                 </div>
               </td>
@@ -557,10 +711,18 @@ onMounted(() => {
               <td>
                 <span 
                   class="badge px-2.5 py-1 rounded-pill text-xs fw-semibold"
-                  :class="m.member_status === 'active' ? 'bg-success bg-opacity-10 text-success border border-success border-opacity-20' : 'bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-20'"
+                  :class="{
+                    'bg-success bg-opacity-10 text-success border border-success border-opacity-20': m.member_status === 'active',
+                    'bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-20': m.member_status === 'inactive',
+                    'bg-dark bg-opacity-10 text-dark border border-dark border-opacity-20': m.member_status === 'deceased'
+                  }"
                 >
-                  <i :class="m.member_status === 'active' ? 'bi bi-check-circle-fill me-1' : 'bi bi-dash-circle-fill me-1'"></i>
-                  {{ m.member_status === 'active' ? 'Active' : 'Inactive' }}
+                  <i :class="{
+                    'bi bi-check-circle-fill me-1': m.member_status === 'active',
+                    'bi bi-dash-circle-fill me-1': m.member_status === 'inactive',
+                    'bi bi-slash-circle-fill me-1': m.member_status === 'deceased'
+                  }"></i>
+                  {{ m.member_status === 'deceased' ? 'Deceased' : (m.member_status === 'active' ? 'Active' : 'Inactive') }}
                 </span>
               </td>
               <td class="pe-4 text-end">
@@ -571,6 +733,13 @@ onMounted(() => {
                     title="View Member Profile"
                   >
                     <i class="bi bi-eye-fill text-primary"></i>
+                  </button>
+                  <button 
+                    class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
+                    @click="exportMemberProfilePdf(m.id)"
+                    title="Download Profile Dossier PDF"
+                  >
+                    <i class="bi bi-file-earmark-person text-danger"></i>
                   </button>
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
@@ -613,14 +782,28 @@ onMounted(() => {
       @close="closeViewModal"
     >
       <div class="p-3 bg-body-tertiary rounded-3 border mb-3">
+        
+        <!-- Member Photo Banner if available -->
+        <div v-if="viewingMember?.picture" class="d-flex align-items-center gap-3 mb-3 pb-3 border-bottom">
+          <div class="avatar-photo-frame rounded-circle overflow-hidden border border-2 border-primary shadow-xs" style="width: 64px; height: 64px;">
+            <img :src="getMemberPhotoUrl(viewingMember.picture)" :alt="viewingMember.first_name" class="w-100 h-100 object-fit-cover" />
+          </div>
+          <div>
+            <h6 class="fw-bold text-primary mb-0">{{ viewingMember.first_name }} {{ viewingMember.last_name }}</h6>
+            <small class="text-muted text-xs font-monospace">Member ID: #{{ viewingMember.id }}</small>
+          </div>
+        </div>
+
         <div class="row g-3">
           <div class="col-md-6">
             <span class="text-xs text-muted text-uppercase fw-semibold d-block">Full Member Name</span>
             <span class="fw-bold text-primary fs-6">{{ viewingMember?.first_name }} {{ viewingMember?.last_name }}</span>
           </div>
           <div class="col-md-6">
-            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Phone Number</span>
-            <span class="fw-bold font-monospace text-body">{{ viewingMember?.phone }}</span>
+            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Gender & Phone</span>
+            <span class="fw-bold text-body text-xs text-capitalize">
+              {{ viewingMember?.gender }} • <span class="font-monospace">{{ viewingMember?.phone }}</span>
+            </span>
           </div>
           <div class="col-md-6">
             <span class="text-xs text-muted text-uppercase fw-semibold d-block">Father's Name</span>
@@ -657,6 +840,28 @@ onMounted(() => {
             <span class="font-monospace text-xs text-body">{{ formatDateDisplay(viewingMember?.registration_date) }}</span>
           </div>
         </div>
+      </div>
+
+      <!-- Modal Footer Quick Action Export Buttons -->
+      <div class="d-flex justify-content-end gap-2 pt-2 border-top">
+        <button
+          v-if="viewingMember"
+          type="button"
+          class="btn btn-sm btn-outline-primary rounded-pill px-3 py-1.5 text-xs fw-semibold d-flex align-items-center gap-1.5 shadow-xs"
+          @click="exportMemberStatementPdf(viewingMember.id)"
+        >
+          <i class="bi bi-receipt text-success"></i>
+          <span>Financial Statement PDF</span>
+        </button>
+        <button
+          v-if="viewingMember"
+          type="button"
+          class="btn btn-sm btn-primary rounded-pill px-3 py-1.5 text-xs fw-semibold d-flex align-items-center gap-1.5 shadow-xs"
+          @click="exportMemberProfilePdf(viewingMember.id)"
+        >
+          <i class="bi bi-file-earmark-person-fill"></i>
+          <span>Profile Dossier PDF</span>
+        </button>
       </div>
     </ViewDetailModal>
 
@@ -740,6 +945,48 @@ onMounted(() => {
                 <i class="bi bi-exclamation-triangle-fill me-1"></i> {{ modalError }}
               </div>
 
+              <!-- Photo Upload & Cropping Section -->
+              <h6 class="fw-bold text-primary text-uppercase text-xs tracking-wider mb-2">
+                <i class="bi bi-camera me-1"></i> Member Photograph (Optional)
+              </h6>
+              <div class="d-flex align-items-center gap-3 p-3 bg-body-tertiary rounded-3 border mb-3">
+                <div class="position-relative" style="width: 64px; height: 64px;">
+                  <img 
+                    v-if="photoPreview" 
+                    :src="photoPreview" 
+                    class="w-100 h-100 rounded-circle object-fit-cover border border-2 border-primary" 
+                    alt="Photo Preview"
+                  />
+                  <div 
+                    v-else 
+                    class="w-100 h-100 rounded-circle bg-secondary bg-opacity-10 d-flex align-items-center justify-content-center text-muted"
+                  >
+                    <i class="bi bi-person fs-3"></i>
+                  </div>
+                </div>
+
+                <div class="flex-grow-1">
+                  <input
+                    ref="photoFileInput"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/jpg"
+                    class="form-control form-control-sm text-xs"
+                    @change="onPhotoSelected"
+                  />
+                  <div class="d-flex align-items-center justify-content-between mt-1">
+                    <small class="text-muted text-xs">JPG, PNG or WebP (Max 5MB). Processed into WebP by backend.</small>
+                    <button 
+                      v-if="photoPreview" 
+                      type="button" 
+                      class="btn btn-link btn-xs text-danger text-decoration-none p-0"
+                      @click="clearPhoto"
+                    >
+                      Remove Photo
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               <!-- Registration & Personal Identity -->
               <h6 class="fw-bold text-primary text-uppercase text-xs tracking-wider mb-2">Registration & Personal Identity</h6>
               <div class="row g-3 mb-3">
@@ -792,13 +1039,20 @@ onMounted(() => {
                   </ClientOnly>
                 </div>
 
-                <div class="col-md-6">
+                <div class="col-md-4">
                   <label for="firstName" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">First Name *</label>
                   <input id="firstName" v-model="firstName" type="text" class="form-control py-2 text-sm" placeholder="e.g. Alice" required />
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-4">
                   <label for="lastName" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Last Name *</label>
                   <input id="lastName" v-model="lastName" type="text" class="form-control py-2 text-sm" placeholder="e.g. Smith" required />
+                </div>
+                <div class="col-md-4">
+                  <label for="memberGender" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Gender *</label>
+                  <select id="memberGender" v-model="gender" class="form-select py-2 text-sm" required>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                  </select>
                 </div>
 
                 <div class="col-md-6">
@@ -837,10 +1091,19 @@ onMounted(() => {
                   </select>
                 </div>
                 <div class="col-md-6">
-                  <label for="ageGrpId" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Age Group *</label>
-                  <select id="ageGrpId" v-model="ageGroupId" class="form-select py-2 text-sm" required>
-                    <option v-for="grp in ageGroups" :key="grp.id" :value="grp.id">{{ grp.name }}</option>
-                  </select>
+                  <label class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">
+                    Age Group
+                    <span class="text-primary text-lowercase fw-normal">(auto-computed)</span>
+                  </label>
+                  <div class="form-control py-2 text-sm bg-body-tertiary d-flex align-items-center justify-content-between border shadow-xs" style="height: 38px;">
+                    <span class="fw-semibold text-primary d-flex align-items-center gap-1.5">
+                      <i class="bi bi-people-fill amms-accent"></i>
+                      <span>{{ currentMatchedAgeGroupName }}</span>
+                    </span>
+                    <span v-if="calculatedAge !== null" class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-20 rounded-pill text-xs font-monospace">
+                      {{ calculatedAge }} yrs
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -854,14 +1117,41 @@ onMounted(() => {
                   <select id="memStatus" v-model="memberStatus" class="form-select py-2 text-sm" required>
                     <option value="active">Active</option>
                     <option value="inactive">Inactive</option>
+                    <option value="deceased">Deceased</option>
                   </select>
                 </div>
                 <div class="col-md-6">
-                  <label for="feeExempt" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Fee Exemption *</label>
-                  <select id="feeExempt" v-model="feeExemption" class="form-select py-2 text-sm" required>
-                    <option value="no">No (Standard Fees)</option>
-                    <option value="yes">Yes (Exempted from Fees)</option>
-                  </select>
+                  <label class="form-label text-xs fw-semibold text-secondary-amms text-uppercase d-block">
+                    Fee Exemption
+                  </label>
+                  <div class="p-2.5 bg-body-tertiary rounded-3 border d-flex align-items-center justify-content-between">
+                    <div class="d-flex align-items-center gap-2">
+                      <i 
+                        :class="feeExemption === 'yes' ? 'bi bi-shield-slash-fill text-warning' : 'bi bi-shield-check text-success'" 
+                        class="fs-5"
+                      ></i>
+                      <div>
+                        <span class="d-block fw-semibold text-xs text-body">
+                          {{ feeExemption === 'yes' ? 'Fee Exempted' : 'Standard Fees' }}
+                        </span>
+                        <small class="text-muted" style="font-size: 0.725rem;">
+                          {{ feeExemption === 'yes' ? 'Excluded from regular dues' : 'Applies standard fee schedule' }}
+                        </small>
+                      </div>
+                    </div>
+
+                    <div class="form-check form-switch m-0 ps-0 pe-1 d-flex align-items-center">
+                      <input 
+                        id="feeExemptionToggle" 
+                        class="form-check-input ms-0 cursor-pointer" 
+                        type="checkbox" 
+                        role="switch"
+                        style="width: 2.6em; height: 1.4em;"
+                        :checked="feeExemption === 'yes'"
+                        @change="feeExemption = ($event.target as HTMLInputElement).checked ? 'yes' : 'no'"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
 

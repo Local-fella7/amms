@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { z } from 'zod'
+import { useReportPdf } from '~/composables/useReportPdf'
 
 interface FeePayment {
   id: number
@@ -9,6 +10,9 @@ interface FeePayment {
   amount: number
   fee_id: number | string
   member_id: number | string
+  total_paid?: number
+  outstanding?: number
+  fee_amount?: number
   member?: {
     id: number
     first_name: string
@@ -35,6 +39,7 @@ interface MemberOption {
   first_name: string
   last_name: string
   phone?: string
+  fee_exemption?: string
 }
 
 interface FeeOption {
@@ -55,6 +60,7 @@ const { data: paymentsResponse, loading, error, execute: fetchPayments, fetchWit
 const { data: members, execute: fetchMembers } = useApi<MemberOption[]>()
 const { data: fees, execute: fetchFees } = useApi<FeeOption[]>()
 const { data: paymentModes, execute: fetchPaymentModes } = useApi<PaymentModeOption[]>()
+const { downloadPdf, openPdfInNewTab, isGenerating: isDownloadingPdf } = useReportPdf()
 
 const searchQuery = ref('')
 const selectedPaymentModeFilter = ref<string>('')
@@ -62,7 +68,6 @@ const selectedFeeYearFilter = ref<string>('')
 
 const isSubmitting = ref(false)
 const modalError = ref('')
-const editingPayment = ref<FeePayment | null>(null)
 const isModalOpen = ref(false)
 
 // Form Fields
@@ -103,9 +108,6 @@ const selectedFeeSchedule = computed(() => {
     const found = fees.value.find(f => Number(f.id) === Number(feeId.value))
     if (found) return found
   }
-  if (editingPayment.value && editingPayment.value.fee && Number(editingPayment.value.fee.id) === Number(feeId.value)) {
-    return editingPayment.value.fee
-  }
   return null
 })
 
@@ -114,19 +116,37 @@ const requiredAmount = computed(() => {
   return Number(selectedFeeSchedule.value.amount || 0)
 })
 
+const memberPriorPaymentsForFee = computed(() => {
+  if (!memberId.value || !feeId.value) return 0
+  const matching = rawPaymentsList.value.filter(
+    p => Number(p.member_id) === Number(memberId.value) && Number(p.fee_id) === Number(feeId.value)
+  )
+  return matching.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
+})
+
+const remainingSuggestedAmount = computed(() => {
+  if (!selectedFeeSchedule.value) return 0
+  const fullFee = Number(selectedFeeSchedule.value.amount || 0)
+  const priorPaid = memberPriorPaymentsForFee.value
+  return Math.max(0, fullFee - priorPaid)
+})
+
 const paymentBalance = computed(() => {
   const paid = Number(amount.value) || 0
-  const req = requiredAmount.value
-  return req - paid
+  const prior = memberPriorPaymentsForFee.value
+  const fullReq = requiredAmount.value
+  return Math.max(0, fullReq - (prior + paid))
 })
 
 const paymentStatusBadge = computed(() => {
   const paid = Number(amount.value) || 0
-  const req = requiredAmount.value
+  const prior = memberPriorPaymentsForFee.value
+  const fullReq = requiredAmount.value
+  const totalCovered = prior + paid
 
-  if (req <= 0) return { label: 'Custom Amount', class: 'bg-info bg-opacity-10 text-info border-info' }
-  if (paid >= req) return { label: 'Paid in Full', class: 'bg-success bg-opacity-10 text-success border-success' }
-  if (paid > 0 && paid < req) return { label: 'Partial Payment', class: 'bg-warning bg-opacity-15 text-warning border-warning' }
+  if (fullReq <= 0) return { label: 'Custom Amount', class: 'bg-info bg-opacity-10 text-info border-info' }
+  if (totalCovered >= fullReq) return { label: 'Paid in Full', class: 'bg-success bg-opacity-10 text-success border-success' }
+  if (totalCovered > 0 && totalCovered < fullReq) return { label: 'Partial Payment', class: 'bg-warning bg-opacity-15 text-warning border-warning' }
   return { label: 'Unpaid', class: 'bg-danger bg-opacity-10 text-danger border-danger' }
 })
 // View Modal State
@@ -178,13 +198,10 @@ const getMemberName = (mId: number | string) => {
   return found ? `${found.first_name} ${found.last_name}` : `Member #${mId}`
 }
 
-const getFeeYear = (f: FeeOption | FeePayment['fee'] | number | string) => {
-  if (typeof f === 'object' && f !== null) {
-    return f.year ?? f.fee_year ?? f.name ?? '—'
-  }
-  if (!fees.value) return `Year #${f}`
-  const found = fees.value.find(item => Number(item.id) === Number(f))
-  return found ? (found.year ?? found.fee_year ?? found.name ?? `Year #${f}`) : `Year #${f}`
+const getMemberPhone = (mId: number | string) => {
+  if (!members.value) return ''
+  const found = members.value.find(m => Number(m.id) === Number(mId))
+  return found?.phone || ''
 }
 
 const getPaymentModeName = (pmId: number | string) => {
@@ -193,23 +210,72 @@ const getPaymentModeName = (pmId: number | string) => {
   return found ? found.name : `Mode #${pmId}`
 }
 
-const formatCurrency = (val?: number) => {
-  if (val === undefined || val === null) return 'TZS 0'
-  return new Intl.NumberFormat('en-TZ', {
-    style: 'currency',
-    currency: 'TZS',
-    maximumFractionDigits: 0
-  }).format(val)
+const getFeeYear = (fItem: FeeOption | number | string) => {
+  if (typeof fItem === 'object' && fItem !== null) {
+    return fItem.year || fItem.fee_year || '—'
+  }
+  if (!fees.value) return `Fee #${fItem}`
+  const found = fees.value.find(f => Number(f.id) === Number(fItem))
+  return found ? (found.year || found.fee_year || '—') : `Fee #${fItem}`
 }
 
-// Auto-fill amount when fee schedule is selected
-watch(feeId, (newFeeId) => {
-  if (!newFeeId || editingPayment.value) return
-  if (fees.value) {
-    const selectedFee = fees.value.find(f => Number(f.id) === Number(newFeeId))
-    if (selectedFee && selectedFee.amount) {
-      amount.value = selectedFee.amount
+const formatCurrency = (val?: number) => {
+  if (val === undefined || val === null) return 'TZS 0'
+  return `TZS ${Number(val).toLocaleString('en-US')}`
+}
+
+const getMemberExemption = (mId: number | string) => {
+  if (!members.value) return 'no'
+  const found = members.value.find(m => Number(m.id) === Number(mId))
+  return found?.fee_exemption || 'no'
+}
+
+const getHistoricalRunningBalance = (p: any) => {
+  if (p.member?.fee_exemption === 'yes' || getMemberExemption(p.member_id) === 'yes') {
+    return 0
+  }
+
+  let feeAmt = Number(p.fee_amount || p.fee?.amount || 0)
+  if (!feeAmt && fees.value) {
+    const feeObj = fees.value.find(f => Number(f.id) === Number(p.fee_id))
+    if (feeObj && feeObj.amount) {
+      feeAmt = Number(feeObj.amount)
     }
+  }
+
+  if (feeAmt <= 0) return 0
+
+  // Filter all payments for the same member & fee year
+  const memberFeePayments = rawPaymentsList.value
+    .filter(item => Number(item.member_id) === Number(p.member_id) && Number(item.fee_id) === Number(p.fee_id))
+    .sort((a, b) => {
+      const dateA = new Date(a.date).getTime()
+      const dateB = new Date(b.date).getTime()
+      if (dateA !== dateB) return dateA - dateB
+      return Number(a.id) - Number(b.id)
+    })
+
+  // Cumulative sum of payments up to this transaction
+  let cumulativePaid = 0
+  for (const item of memberFeePayments) {
+    cumulativePaid += Number(item.amount) || 0
+    if (Number(item.id) === Number(p.id)) {
+      break
+    }
+  }
+
+  return Math.max(0, feeAmt - cumulativePaid)
+}
+
+const getPaymentBalance = (p: any) => {
+  return getHistoricalRunningBalance(p)
+}
+
+// Auto-fill suggested remaining amount when member or fee schedule is selected
+watch([feeId, memberId], ([newFeeId, newMemId]) => {
+  if (!newFeeId) return
+  if (selectedFeeSchedule.value) {
+    amount.value = remainingSuggestedAmount.value
   }
 })
 
@@ -249,8 +315,8 @@ watch([searchQuery, selectedPaymentModeFilter, selectedFeeYearFilter, itemsPerPa
 })
 
 const openAddModal = () => {
-  editingPayment.value = null
   memberId.value = members.value && members.value.length > 0 ? members.value[0].id : ''
+  memberSearchQuery.value = members.value && members.value.length > 0 ? `${members.value[0].first_name} ${members.value[0].last_name}` : ''
   feeId.value = fees.value && fees.value.length > 0 ? fees.value[0].id : ''
   paymentModeId.value = paymentModes.value && paymentModes.value.length > 0 ? paymentModes.value[0].id : ''
   
@@ -261,17 +327,6 @@ const openAddModal = () => {
   }
 
   date.value = new Date().toISOString().substring(0, 10)
-  modalError.value = ''
-  isModalOpen.value = true
-}
-
-const openEditModal = (p: FeePayment) => {
-  editingPayment.value = p
-  memberId.value = p.member_id
-  feeId.value = p.fee_id
-  paymentModeId.value = p.payment_mode_id
-  amount.value = Number(p.amount) || 0
-  date.value = p.date || new Date().toISOString().substring(0, 10)
   modalError.value = ''
   isModalOpen.value = true
 }
@@ -330,19 +385,11 @@ const handleSave = async () => {
 
   isSubmitting.value = true
   try {
-    if (editingPayment.value) {
-      await fetchWithAuth(`/api/fee-payments/${editingPayment.value.id}`, {
-        method: 'PUT',
-        body: payload
-      })
-      push.success('Fee payment record updated successfully!')
-    } else {
-      await fetchWithAuth('/api/fee-payments', {
-        method: 'POST',
-        body: payload
-      })
-      push.success('Fee payment transaction recorded successfully!')
-    }
+    await fetchWithAuth('/api/fee-payments', {
+      method: 'POST',
+      body: payload
+    })
+    push.success('Fee payment transaction recorded successfully!')
     
     closeModal()
     await loadData()
@@ -353,6 +400,29 @@ const handleSave = async () => {
     push.error(modalError.value)
   } finally {
     isSubmitting.value = false
+  }
+}
+
+const exportPdfReport = async () => {
+  const queryParams = new URLSearchParams()
+  if (selectedPaymentModeFilter.value) queryParams.set('payment_mode_id', selectedPaymentModeFilter.value)
+  if (selectedFeeYearFilter.value) queryParams.set('fee_id', selectedFeeYearFilter.value)
+  
+  const url = `/api/reports/fee-payments?${queryParams.toString()}`
+  try {
+    await openPdfInNewTab(url)
+    push.success('Opened fee payments PDF report in new tab')
+  } catch (e) {
+    push.error('Failed to open PDF report')
+  }
+}
+
+const downloadMemberStatement = async (mId: number | string) => {
+  try {
+    await openPdfInNewTab(`/api/reports/member-history/${mId}`)
+    push.success('Opened member financial statement in new tab')
+  } catch (e) {
+    push.error('Failed to open statement')
   }
 }
 
@@ -426,7 +496,7 @@ onMounted(() => {
           </div>
 
           <!-- Fee Year Filter Pill -->
-          <div style="min-width: 220px;">
+          <div style="min-width: 160px;">
             <select 
               v-model="selectedFeeYearFilter" 
               class="form-select form-select-sm rounded-pill text-xs fw-semibold border bg-body ps-3 pe-4 shadow-sm cursor-pointer filter-pill-select"
@@ -434,7 +504,7 @@ onMounted(() => {
             >
               <option value="">All Fee Years</option>
               <option v-for="f in fees" :key="f.id" :value="f.id">
-                Year: {{ getFeeYear(f) }} - {{ formatCurrency(f.amount) }}
+                Year {{ getFeeYear(f) }}
               </option>
             </select>
           </div>
@@ -450,9 +520,24 @@ onMounted(() => {
           </button>
         </div>
 
-        <!-- Total Filtered Counter Badge -->
-        <div class="text-xs text-muted font-monospace">
-          Showing <span class="fw-bold text-primary">{{ filteredPayments.length }}</span> payments
+        <div class="d-flex align-items-center gap-3">
+          <!-- Total Filtered Counter Badge -->
+          <div class="text-xs text-muted font-monospace d-none d-sm-block">
+            Showing <span class="fw-bold text-primary">{{ filteredPayments.length }}</span> payments
+          </div>
+
+          <!-- Export Report PDF Button -->
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-primary rounded-pill px-3 py-1.5 text-xs fw-semibold d-flex align-items-center gap-1.5 shadow-xs"
+            :disabled="isDownloadingReport"
+            @click="exportPdfReport"
+            title="Download PDF Financial Report"
+          >
+            <span v-if="isDownloadingReport" class="spinner-border spinner-border-sm" role="status"></span>
+            <i v-else class="bi bi-file-earmark-pdf-fill text-danger"></i>
+            <span>{{ isDownloadingReport ? 'Exporting...' : 'Export PDF' }}</span>
+          </button>
         </div>
       </div>
 
@@ -477,11 +562,12 @@ onMounted(() => {
         <table class="table align-middle mb-0 custom-amms-table">
           <thead>
             <tr>
-              <th class="ps-4" style="width: 80px;"># ID</th>
+              <th class="ps-4" style="width: 70px;"># ID</th>
               <th>Member Name</th>
               <th>Fee Year</th>
               <th>Payment Mode</th>
               <th>Amount Paid</th>
+              <th>Balance Due</th>
               <th>Payment Date</th>
               <th class="text-end pe-4" style="width: 140px;">Actions</th>
             </tr>
@@ -496,13 +582,14 @@ onMounted(() => {
                 <td><span class="placeholder col-6"></span></td>
                 <td><span class="placeholder col-6"></span></td>
                 <td><span class="placeholder col-6"></span></td>
+                <td><span class="placeholder col-6"></span></td>
                 <td class="pe-4 text-end"><span class="placeholder col-10"></span></td>
               </tr>
             </template>
 
             <!-- Empty State -->
             <tr v-else-if="filteredPayments.length === 0">
-              <td colspan="7" class="text-center py-5 text-muted">
+              <td colspan="8" class="text-center py-5 text-muted">
                 <i class="bi bi-receipt-cutoff fs-1 d-block mb-2 text-opacity-50"></i>
                 <p class="mb-0 fw-medium">No fee payment records found</p>
                 <small>Click "Record Fee Payment" above to enter a payment transaction.</small>
@@ -517,7 +604,10 @@ onMounted(() => {
                   <div class="pay-icon-badge rounded-circle d-flex align-items-center justify-content-center">
                     <i class="bi bi-person text-primary text-xs"></i>
                   </div>
-                  <span>{{ p.member ? `${p.member.first_name} ${p.member.last_name}` : getMemberName(p.member_id) }}</span>
+                  <div>
+                    <span>{{ p.member ? `${p.member.first_name} ${p.member.last_name}` : getMemberName(p.member_id) }}</span>
+                    <small v-if="getMemberPhone(p.member_id)" class="d-block text-muted font-monospace text-xs">{{ getMemberPhone(p.member_id) }}</small>
+                  </div>
                 </div>
               </td>
               <td>
@@ -532,10 +622,27 @@ onMounted(() => {
                 </span>
               </td>
               <td class="fw-bold text-success font-monospace text-sm">
-                <div>{{ formatCurrency(p.amount) }}</div>
-                <small v-if="p.fee && p.fee.amount && p.amount < p.fee.amount" class="text-warning text-xs font-monospace d-block">
-                  <i class="bi bi-exclamation-triangle me-1"></i>Bal: {{ formatCurrency(p.fee.amount - p.amount) }}
-                </small>
+                {{ formatCurrency(p.amount) }}
+              </td>
+              <td class="font-monospace text-xs">
+                <span 
+                  v-if="p.member?.fee_exemption === 'yes' || getMemberExemption(p.member_id) === 'yes'" 
+                  class="badge bg-warning bg-opacity-15 text-warning border border-warning border-opacity-25 px-2 py-0.5 rounded-pill"
+                >
+                  Exempted
+                </span>
+                <span 
+                  v-else-if="getPaymentBalance(p) > 0" 
+                  class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-20 px-2 py-0.5 rounded-pill fw-bold"
+                >
+                  <i class="bi bi-exclamation-circle me-1"></i>{{ formatCurrency(getPaymentBalance(p)) }}
+                </span>
+                <span 
+                  v-else 
+                  class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-20 px-2 py-0.5 rounded-pill"
+                >
+                  <i class="bi bi-check2 me-1"></i>0.00 (Paid)
+                </span>
               </td>
               <td class="font-monospace text-xs text-body">
                 {{ formatDateDisplay(p.date) }}
@@ -551,15 +658,15 @@ onMounted(() => {
                   </button>
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
-                    @click="openEditModal(p)"
-                    title="Edit Fee Payment"
+                    @click="downloadMemberStatement(p.member_id)"
+                    title="Download Member Statement PDF"
                   >
-                    <i class="bi bi-pencil-fill text-muted"></i>
+                    <i class="bi bi-file-earmark-pdf text-danger"></i>
                   </button>
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn hover-danger" 
                     @click="promptDelete(p)"
-                    title="Delete Fee Payment"
+                    title="Delete / Void Transaction"
                   >
                     <i class="bi bi-trash-fill text-danger"></i>
                   </button>
@@ -602,8 +709,8 @@ onMounted(() => {
             <span class="fw-bold text-success font-monospace fs-5">{{ viewingPayment ? formatCurrency(viewingPayment.amount) : 'TZS 0' }}</span>
           </div>
           <div class="col-md-4">
-            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Fee Year</span>
-            <span class="fw-semibold font-monospace text-body text-xs">{{ viewingPayment ? (viewingPayment.fee ? getFeeYear(viewingPayment.fee) : getFeeYear(viewingPayment.fee_id)) : '—' }}</span>
+            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Fee Schedule</span>
+            <span class="fw-semibold font-monospace text-body text-xs">{{ viewingPayment ? (viewingPayment.fee?.name || `Year ${getFeeYear(viewingPayment.fee_id)}`) : '—' }}</span>
           </div>
           <div class="col-md-4">
             <span class="text-xs text-muted text-uppercase fw-semibold d-block">Payment Mode</span>
@@ -613,15 +720,29 @@ onMounted(() => {
             <span class="text-xs text-muted text-uppercase fw-semibold d-block">Payment Date</span>
             <span class="font-monospace text-xs text-body">{{ formatDateDisplay(viewingPayment?.date) }}</span>
           </div>
+          <div class="col-md-6" v-if="viewingPayment">
+            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Balance After This Receipt</span>
+            <span class="text-xs fw-bold font-monospace" :class="getHistoricalRunningBalance(viewingPayment) > 0 ? 'text-danger' : 'text-success'">
+              {{ getHistoricalRunningBalance(viewingPayment) > 0 ? `${formatCurrency(getHistoricalRunningBalance(viewingPayment))} Due` : '0.00 (Paid in Full)' }}
+            </span>
+          </div>
           <div class="col-md-6" v-if="viewingPayment?.created_at">
-            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Recorded At</span>
+            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Transaction Timestamp</span>
             <span class="text-xs text-secondary-amms font-monospace">{{ viewingPayment.created_at }}</span>
           </div>
-          <div class="col-md-6" v-if="viewingPayment?.updated_at">
-            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Last Updated</span>
-            <span class="text-xs text-secondary-amms font-monospace">{{ viewingPayment.updated_at }}</span>
-          </div>
         </div>
+      </div>
+
+      <div class="d-flex justify-content-end gap-2 pt-2 border-top">
+        <button
+          v-if="viewingPayment"
+          type="button"
+          class="btn btn-sm btn-outline-primary rounded-pill px-3.5 py-2 text-xs fw-semibold d-flex align-items-center gap-1.5 shadow-xs"
+          @click="downloadMemberStatement(viewingPayment.member_id)"
+        >
+          <i class="bi bi-file-earmark-pdf-fill text-danger"></i>
+          <span>Download Member Statement PDF</span>
+        </button>
       </div>
     </ViewDetailModal>
 
@@ -650,10 +771,11 @@ onMounted(() => {
             Payment for {{ itemToDelete ? getMemberName(itemToDelete.member_id) : '' }} ({{ itemToDelete ? formatCurrency(itemToDelete.amount) : '' }})
           </p>
 
-          <div class="d-flex align-items-center justify-content-center gap-2">
+          <div class="d-flex justify-content-center gap-2">
             <button 
               type="button" 
-              class="btn btn-sm btn-light border rounded-pill px-3.5 text-xs fw-semibold" 
+              class="btn btn-sm btn-light border rounded-pill px-3 text-xs fw-semibold"
+              :disabled="isDeleting"
               @click="cancelDelete"
             >
               Cancel
@@ -673,7 +795,7 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- Create / Edit Payment Vue Pure Modal -->
+    <!-- Create Payment Vue Pure Modal -->
     <div v-if="isModalOpen" class="modal-backdrop fade show"></div>
     
     <div 
@@ -689,7 +811,7 @@ onMounted(() => {
           <div class="modal-header border-bottom px-4 py-3 bg-body-tertiary position-relative justify-content-center">
             <h5 class="modal-title fw-bold text-primary text-sm mb-0 text-center">
               <i class="bi bi-receipt me-1.5 amms-accent"></i>
-              <span>{{ editingPayment ? 'Edit Fee Payment' : 'Record Fee Payment' }}</span>
+              <span>Record Fee Payment</span>
             </h5>
             <button 
               type="button" 
@@ -763,6 +885,49 @@ onMounted(() => {
                 </select>
               </div>
 
+              <!-- Prior Payments Breakdown Notice -->
+              <div v-if="memberId && feeId && selectedFeeSchedule" class="mb-3">
+                <div v-if="memberPriorPaymentsForFee > 0" class="p-2.5 bg-body-tertiary rounded-3 border text-xs">
+                  <div class="d-flex align-items-center justify-content-between mb-1">
+                    <span class="text-muted">Total Annual Fee:</span>
+                    <span class="fw-semibold text-body font-monospace">{{ formatCurrency(selectedFeeSchedule.amount) }}</span>
+                  </div>
+                  <div class="d-flex align-items-center justify-content-between mb-1">
+                    <span class="text-muted">Already Paid in Past Receipts:</span>
+                    <span class="fw-semibold text-success font-monospace">- {{ formatCurrency(memberPriorPaymentsForFee) }}</span>
+                  </div>
+                  <div class="d-flex align-items-center justify-content-between pt-1.5 border-top">
+                    <span class="fw-bold text-primary">Remaining Balance Needed:</span>
+                    <span class="fw-bold font-monospace fs-6" :class="remainingSuggestedAmount > 0 ? 'text-danger' : 'text-success'">
+                      {{ formatCurrency(remainingSuggestedAmount) }}
+                    </span>
+                  </div>
+
+                  <!-- Quick Fill Helper Buttons -->
+                  <div class="d-flex align-items-center gap-1.5 mt-2 pt-1 border-top border-secondary border-opacity-10">
+                    <button 
+                      type="button" 
+                      class="btn btn-xs btn-outline-danger rounded-pill px-2.5 py-0.5 text-xs fw-semibold"
+                      @click="amount = remainingSuggestedAmount"
+                    >
+                      Fill Balance ({{ formatCurrency(remainingSuggestedAmount) }})
+                    </button>
+                    <button 
+                      type="button" 
+                      class="btn btn-xs btn-light border rounded-pill px-2.5 py-0.5 text-xs text-muted"
+                      @click="amount = selectedFeeSchedule?.amount || 0"
+                    >
+                      Full Fee
+                    </button>
+                  </div>
+                </div>
+
+                <div v-else-if="memberPriorPaymentsForFee === 0" class="text-xs text-muted font-monospace d-flex align-items-center justify-content-between px-1">
+                  <span>Standard Annual Fee:</span>
+                  <span class="fw-semibold text-body">{{ formatCurrency(selectedFeeSchedule.amount) }}</span>
+                </div>
+              </div>
+
               <!-- Amount Paid -->
               <div class="mb-3">
                 <div class="d-flex align-items-center justify-content-between mb-1">
@@ -784,7 +949,7 @@ onMounted(() => {
                 <div class="d-flex align-items-center gap-2">
                   <i class="bi bi-exclamation-circle-fill text-warning fs-6"></i>
                   <div>
-                    <span class="fw-bold d-block text-warning">Partial Payment Alert</span>
+                    <span class="fw-bold d-block text-warning">Partial Payment Notice</span>
                     <span class="text-secondary-amms">Required: {{ formatCurrency(requiredAmount) }}</span>
                   </div>
                 </div>
