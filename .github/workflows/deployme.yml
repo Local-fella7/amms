@@ -1,0 +1,58 @@
+# Static SPA for cPanel (Apache + FTP, no Node). Production: https://bivio.tz SPA + API under /bk/ (same origin).
+# Build: `pnpm run build:cpanel-static` → upload `.output/public/`. Browser calls /bk/… by default (see config/index.ts).
+# Optional secret BACKEND_API_URL — PHP base (default https://bivio.tz/bk/). Override browser path with NUXT_PUBLIC_BROWSER_BACKEND_BASE.
+#
+# Secrets: FTP_SERVER, FTP_USERNAME, FTP_PASSWORD
+# Optional: BACKEND_API_URL for build-time path resolution (see config/index.ts).
+
+name: Deploy to cPanel (FTP)
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-cpanel-ftp
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build static site
+        run: pnpm run build:cpanel-static
+        env:
+          # Server-side proxy target (used by server/api/[...].ts in dev/preview only).
+          NUXT_API_BASE: ${{ secrets.NUXT_API_BASE }}
+          # Browser-side API base for the static build. There is no Node server in
+          # production, so the SPA must call the CodeIgniter backend directly on the
+          # same origin. mwakasege.co.tz/backend is the backend root.
+          NUXT_PUBLIC_API_BASE: /backend/api
+
+      - name: Upload to FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.6
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./.output/public/
+          server-dir: ${{ secrets.FTP_REMOTE_DIR }}
