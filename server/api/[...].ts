@@ -2,7 +2,7 @@ import { useAuthStore } from '~/stores/useAuthStore'
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig()
-  const apiBase = config.public.apiBase || 'http://192.168.100.100/amms/public/api'
+  const apiBase = config.apiBase || 'http://192.168.100.100/amms/public/api'
   
   // Extract route path following /api/
   const reqUrl = getRequestURL(event)

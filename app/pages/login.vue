@@ -2,12 +2,14 @@
 import { ref, onMounted } from 'vue'
 import { z } from 'zod'
 import { useAuthStore } from '~/stores/useAuthStore'
+import { apiUrl, useApiBase } from '~/composables/useApiBase'
 
 definePageMeta({
   layout: 'auth'
 })
 
 const authStore = useAuthStore()
+const apiBase = useApiBase()
 const email = ref('admin@amms.local')
 const password = ref('admin123')
 const rememberMe = ref(true)
@@ -55,9 +57,10 @@ const handleLogin = async () => {
 
   loading.value = true
   try {
-    console.log('Sending login request via proxy to: /api/auth/login')
+    const loginUrl = apiUrl('/api/auth/login', apiBase)
+    console.log('Sending login request to:', loginUrl)
     
-    const response: any = await $fetch('/api/auth/login', {
+    const response: any = await $fetch(loginUrl, {
       method: 'POST',
       body: {
         email: email.value,
@@ -112,7 +115,7 @@ const submitPasswordChange = async () => {
   isChangingPassword.value = true
   try {
     const token = authStore.token
-    await $fetch('/api/auth/change-password', {
+    await $fetch(apiUrl('/api/auth/change-password', apiBase), {
       method: 'POST',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: {

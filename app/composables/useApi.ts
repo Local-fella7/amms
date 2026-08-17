@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { useAuthStore } from '~/stores/useAuthStore'
+import { apiUrl, useApiBase } from '~/composables/useApiBase'
 
 export interface ApiState<T> {
   data: T | null
@@ -12,13 +13,15 @@ export function useApi<T>() {
   const loading = ref(false)
   const error = ref<string | null>(null)
   const authStore = useAuthStore()
+  const apiBase = useApiBase()
 
   const fetchWithAuth = (url: string, opts: any = {}) => {
+    const resolvedUrl = apiUrl(url, apiBase)
     const headers = { ...opts.headers }
     if (authStore.token) {
       headers['Authorization'] = `Bearer ${authStore.token}`
     }
-    return $fetch(url, { ...opts, headers })
+    return $fetch(resolvedUrl, { ...opts, headers })
   }
 
   const execute = async (

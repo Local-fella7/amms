@@ -1,17 +1,21 @@
 import { ref } from 'vue'
 import { useAuthStore } from '~/stores/useAuthStore'
+import { apiUrl, useApiBase } from '~/composables/useApiBase'
 
 export function useReportPdf() {
   const authStore = useAuthStore()
+  const apiBase = useApiBase()
   const isGenerating = ref(false)
   const reportError = ref<string | null>(null)
+
+  const resolveUrl = (url: string) => apiUrl(url, apiBase)
 
   const downloadPdf = async (url: string, defaultFilename = 'report.pdf') => {
     isGenerating.value = true
     reportError.value = null
     try {
       const token = authStore.token
-      const blob = await $fetch<Blob>(url, {
+      const blob = await $fetch<Blob>(resolveUrl(url), {
         method: 'GET',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         responseType: 'blob' as any
@@ -41,7 +45,7 @@ export function useReportPdf() {
     reportError.value = null
     try {
       const token = authStore.token
-      const blob = await $fetch<Blob>(url, {
+      const blob = await $fetch<Blob>(resolveUrl(url), {
         method: 'GET',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         responseType: 'blob' as any
@@ -63,7 +67,7 @@ export function useReportPdf() {
     try {
       const token = authStore.token
       // Remove download=1 from URL query if present, so backend sets inline Content-Disposition
-      const cleanUrl = url.replace(/([?&])download=1(&?)/, (match, p1, p2) => p2 ? p1 : '')
+      const cleanUrl = resolveUrl(url).replace(/([?&])download=1(&?)/, (match, p1, p2) => p2 ? p1 : '')
       const blob = await $fetch<Blob>(cleanUrl, {
         method: 'GET',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
