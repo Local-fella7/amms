@@ -327,7 +327,7 @@ const openEditModal = (m: Member) => {
   registrationDate.value = m.registration_date || new Date().toISOString().substring(0, 10)
   clearPhoto()
   if (m.picture) {
-    photoPreview.value = m.picture.startsWith('http') ? m.picture : `/${m.picture}`
+    photoPreview.value = getMemberPhotoUrl(m.picture)
   }
   modalError.value = ''
   isModalOpen.value = true
@@ -453,7 +453,20 @@ const handleSave = async () => {
 
 const getMemberPhotoUrl = (pic?: string) => {
   if (!pic) return ''
-  if (pic.startsWith('http') || pic.startsWith('data:')) return pic
+  if (pic.startsWith('data:') || pic.startsWith('blob:')) return pic
+
+  // The backend stores full URLs (e.g. https://asa.or.tz/uploads/members/x.webp).
+  // Since frontend and backend share the same origin, strip the domain so the
+  // image resolves against the current origin — localhost in dev, the real
+  // domain in production.
+  if (/^https?:\/\//i.test(pic)) {
+    try {
+      return new URL(pic).pathname
+    } catch {
+      return pic
+    }
+  }
+
   return pic.startsWith('/') ? pic : `/${pic}`
 }
 
