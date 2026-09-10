@@ -130,8 +130,10 @@ describe('[insertPlaceholder]', () => {
   it('handles multiple placeholders', () => {
     const after1 = insertPlaceholder('Hello', '{{first_name}}')
     const after2 = insertPlaceholder(after1, '{{fee_year}}')
-    expect(after2).toContain('{{first_name}}')
-    expect(after2).toContain('{{fee_year}}')
+    const after3 = insertPlaceholder(after2, '{{outstanding_balance}}')
+    expect(after3).toContain('{{first_name}}')
+    expect(after3).toContain('{{fee_year}}')
+    expect(after3).toContain('{{outstanding_balance}}')
   })
 })
 

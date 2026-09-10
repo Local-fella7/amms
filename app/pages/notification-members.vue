@@ -66,6 +66,7 @@ const { data: notifications, execute: fetchNotifications } = useApi<Notification
 const { data: templates, execute: fetchTemplates } = useApi<NotificationTemplateOption[]>()
 const { data: members, execute: fetchMembers } = useApi<MemberOption[]>()
 const { data: locations, execute: fetchLocations } = useApi<LocationOption[]>()
+const { data: payments, execute: fetchPayments } = useApi<any[]>()
 
 const searchQuery = ref('')
 const selectedNotificationFilter = ref<string>('')
@@ -83,7 +84,7 @@ const selectedMemberIds = ref<number[]>([])
 // Left Column Filters
 const memberFilterSearch = ref('')
 const memberFilterLocation = ref<string>('')
-const memberFilterStatus = ref<string>('active')
+const audienceFilter = ref<'all' | 'active' | 'inactive' | 'deceased' | 'outstanding'>('all')
 
 // View Modal State
 const viewingItem = ref<NotificationMemberItem | null>(null)
@@ -102,7 +103,8 @@ const availablePlaceholders = [
   { tag: '{{first_name}}', label: 'First Name' },
   { tag: '{{last_name}}', label: 'Last Name' },
   { tag: '{{fee_year}}', label: 'Fee Year' },
-  { tag: '{{phone}}', label: 'Phone' }
+  { tag: '{{phone}}', label: 'Phone' },
+  { tag: '{{outstanding_balance}}', label: 'Outstanding Balance' }
 ]
 
 const loadData = async () => {
@@ -112,7 +114,8 @@ const loadData = async () => {
       fetchNotifications((api) => api('/api/notifications')).catch(() => []),
       fetchTemplates((api) => api('/api/notification-templates')).catch(() => []),
       fetchMembers((api) => api('/api/members')).catch(() => []),
-      fetchLocations((api) => api('/api/locations')).catch(() => [])
+      fetchLocations((api) => api('/api/locations')).catch(() => []),
+      fetchPayments((api) => api('/api/fee-payments')).catch(() => [])
     ])
   } catch (err) {
     // Handled by composable
@@ -184,6 +187,23 @@ watch([searchQuery, selectedNotificationFilter, itemsPerPage], () => {
   currentPage.value = 1
 })
 
+const currentYear = new Date().getFullYear()
+
+const paidMemberIds = computed(() => {
+  const ids = new Set<number>()
+  const list = Array.isArray(payments.value) ? payments.value : (payments.value?.data || [])
+  list.forEach((p: any) => {
+    if ((p.date || p.created_at || '').startsWith(String(currentYear))) {
+      ids.add(Number(p.member_id))
+    }
+  })
+  return ids
+})
+
+const isMemberOutstanding = (m: MemberOption) => {
+  return (m.member_status || 'active') === 'active' && m.fee_exemption !== 'yes' && !paidMemberIds.value.has(Number(m.id))
+}
+
 // Left Column Filtering for Available Members
 const availableFilteredMembers = computed(() => {
   if (!members.value) return []
@@ -197,8 +217,14 @@ const availableFilteredMembers = computed(() => {
     if (memberFilterLocation.value && String(m.location_id) !== String(memberFilterLocation.value)) {
       return false
     }
-    if (memberFilterStatus.value && (m.member_status || 'active') !== memberFilterStatus.value) {
-      return false
+    if (audienceFilter.value === 'active') {
+      if ((m.member_status || 'active') !== 'active') return false
+    } else if (audienceFilter.value === 'inactive') {
+      if (m.member_status !== 'inactive') return false
+    } else if (audienceFilter.value === 'deceased') {
+      if (m.member_status !== 'deceased') return false
+    } else if (audienceFilter.value === 'outstanding') {
+      if (!isMemberOutstanding(m)) return false
     }
     return true
   })
@@ -250,12 +276,25 @@ const clearAllSelected = () => {
   selectedMemberIds.value = []
 }
 
-// Selected Members List for Right Column Preview
+// Selected Members List for Preview
 const selectedMembersObjects = computed(() => {
   if (!members.value) return []
   const idMap = new Map(members.value.map(m => [Number(m.id), m]))
   return selectedMemberIds.value.map(id => idMap.get(id)).filter(Boolean) as MemberOption[]
 })
+
+const previewSampleMessage = computed(() => {
+  if (!messageContent.value) return 'Type message or select a template to preview...'
+  return messageContent.value
+    .replace(/\{\{first_name\}\}/g, 'Halima')
+    .replace(/\{\{last_name\}\}/g, 'Said')
+    .replace(/\{\{fee_year\}\}/g, String(new Date().getFullYear()))
+    .replace(/\{\{phone\}\}/g, '+255 711 222 333')
+    .replace(/\{\{outstanding_balance\}\}/g, 'TZS 50,000')
+})
+
+const smsCharCount = computed(() => messageContent.value.length)
+const smsSegmentCount = computed(() => Math.ceil(messageContent.value.length / 160) || 1)
 
 // Auto-fill message content when broadcast or template is changed
 watch(notificationId, (newNotifId) => {
@@ -275,7 +314,7 @@ watch(selectedTemplateId, (newTmplId) => {
 })
 
 const insertPlaceholder = (tag: string) => {
-  messageContent.value += ` ${tag}`
+  messageContent.value = messageContent.value ? `${messageContent.value} ${tag} ` : `${tag} `
 }
 
 const openAddModal = () => {
@@ -285,7 +324,7 @@ const openAddModal = () => {
   selectedMemberIds.value = []
   memberFilterSearch.value = ''
   memberFilterLocation.value = ''
-  memberFilterStatus.value = 'active'
+  audienceFilter.value = 'all'
   modalError.value = ''
   
   if (notifications.value && notifications.value.length > 0) {
@@ -338,6 +377,21 @@ const handleSaveBatch = async () => {
 
   isSubmitting.value = true
   try {
+    // If message content was edited or selected from template, update broadcast content
+    if (notificationId.value && messageContent.value.trim()) {
+      const currentNotif = notifications.value?.find(n => Number(n.id) === Number(notificationId.value))
+      if (currentNotif && currentNotif.content !== messageContent.value.trim()) {
+        await fetchWithAuth(`/api/notifications/${notificationId.value}`, {
+          method: 'PUT',
+          body: {
+            name: currentNotif.name,
+            content: messageContent.value.trim(),
+            notification_template_id: selectedTemplateId.value || currentNotif.notification_template_id
+          }
+        }).catch(() => {})
+      }
+    }
+
     const toAssign = selectedMemberIds.value.filter(id => !assignedMemberIdsForCurrentBroadcast.value.has(id))
     
     if (toAssign.length === 0) {
@@ -624,124 +678,233 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- TWO-COLUMN BROADCAST RECIPIENT COMPOSER MODAL -->
+    <!-- BROADCAST DISPATCH STUDIO MODAL (SIDE-BY-SIDE) -->
     <div v-if="isModalOpen" class="modal-backdrop fade show" style="z-index: 1060;"></div>
     
     <div v-if="isModalOpen" class="modal fade show d-block" tabindex="-1" role="dialog" style="z-index: 1065;" @click.self="closeModal">
-      <div class="modal-dialog modal-dialog-centered modal-xl" style="max-width: 1140px;">
-        <div class="modal-content amms-surface border-0 shadow-lg rounded-4 overflow-hidden d-flex flex-column" style="max-height: 90vh;">
+      <div class="modal-dialog modal-dialog-centered modal-xl" style="max-width: 1200px;">
+        <div class="modal-content amms-surface border-0 shadow-lg rounded-4 overflow-hidden d-flex flex-column" style="max-height: 92vh;">
           
-          <!-- Modal Header -->
-          <div class="modal-header border-bottom px-4 py-3 bg-body-tertiary d-flex align-items-center justify-content-between">
-            <div class="d-flex align-items-center gap-2">
-              <div class="rounded-circle p-2 bg-primary bg-opacity-10 text-primary d-flex align-items-center justify-content-center" style="width: 36px; height: 36px;">
-                <i class="bi bi-send-check-fill fs-5"></i>
+          <!-- Modal Header Banner -->
+          <div class="modal-header border-0 px-4 py-3 bg-primary text-white d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center gap-3">
+              <div class="rounded-circle p-2 bg-white bg-opacity-15 text-white d-flex align-items-center justify-content-center flex-shrink-0" style="width: 40px; height: 40px;">
+                <i class="bi bi-broadcast fs-5 text-white"></i>
               </div>
               <div>
-                <h5 class="modal-title fw-bold text-primary text-sm mb-0">Assign Broadcast Recipients</h5>
-                <small class="text-muted text-xs">Select target members and preview message template dispatch</small>
+                <h5 class="modal-title fw-bold text-white text-base mb-0">Broadcast Dispatch Studio</h5>
+                <small class="text-white-50 text-xs">Configure message content & select target member recipients</small>
               </div>
             </div>
-            <button type="button" class="btn-close" @click="closeModal" aria-label="Close"></button>
+            <div class="d-flex align-items-center gap-2">
+              <span class="badge bg-white text-primary fw-semibold px-3 py-1.5 rounded-pill text-xs shadow-xs">
+                <i class="bi bi-check2-circle me-1"></i>{{ selectedMemberIds.length }} Selected
+              </span>
+              <button type="button" class="btn-close btn-close-white" @click="closeModal" aria-label="Close"></button>
+            </div>
           </div>
 
-          <!-- Two-Column Modal Body -->
-          <div class="modal-body p-0 overflow-hidden d-flex flex-column flex-grow-1">
-            <div v-if="modalError" class="alert alert-danger py-2 px-4 mb-0 rounded-0 small border-bottom d-flex align-items-center gap-2">
-              <i class="bi bi-exclamation-triangle-fill"></i>
-              <span>{{ modalError }}</span>
-            </div>
+          <!-- Error Alert Banner -->
+          <div v-if="modalError" class="alert alert-danger py-2 px-4 mb-0 rounded-0 text-xs d-flex align-items-center gap-2 border-bottom">
+            <i class="bi bi-exclamation-triangle-fill text-danger fs-6"></i>
+            <span>{{ modalError }}</span>
+          </div>
 
-            <div class="row g-0 flex-grow-1" style="min-height: 480px; max-height: calc(85vh - 140px);">
+          <!-- Studio Body: Two Balanced Columns -->
+          <div class="modal-body p-0 overflow-hidden d-flex flex-column flex-grow-1">
+            <div class="row g-0 flex-grow-1" style="min-height: 520px; max-height: calc(90vh - 145px);">
               
-              <!-- LEFT COLUMN: MEMBER SELECTION DIRECTORY -->
-              <div class="col-lg-6 border-end d-flex flex-column bg-body-tertiary bg-opacity-50 p-3 p-md-4 overflow-hidden">
-                <div class="d-flex align-items-center justify-content-between mb-2.5">
-                  <span class="text-xs fw-bold text-primary text-uppercase font-monospace">
-                    <i class="bi bi-people-fill me-1"></i> Member Directory ({{ availableFilteredMembers.length }})
-                  </span>
+              <!-- LEFT COLUMN (42%): TARGET RECIPIENTS DIRECTORY -->
+              <div class="col-lg-5 border-end d-flex flex-column bg-body-tertiary bg-opacity-40 p-3 p-md-4 overflow-hidden">
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                  <div class="d-flex align-items-center gap-2">
+                    <span class="badge rounded-circle bg-primary text-white p-0 d-flex align-items-center justify-content-center" style="width: 22px; height: 22px; font-size: 0.75rem;">1</span>
+                    <h6 class="fw-bold text-primary text-uppercase text-xs tracking-wider mb-0">
+                      Target Audience ({{ availableFilteredMembers.length }})
+                    </h6>
+                  </div>
                   <div class="d-flex align-items-center gap-1.5">
-                    <button 
-                      type="button" 
-                      class="btn btn-xs btn-outline-primary rounded-pill px-2.5 py-0.5 text-xs fw-semibold"
+                    <button
+                      type="button"
+                      class="btn btn-xs btn-outline-primary rounded-pill px-2.5 py-1 text-xs fw-semibold"
                       @click="selectAllFiltered"
                     >
-                      Select All
+                      <i class="bi bi-check-all me-1"></i>Select All
                     </button>
-                    <button 
-                      type="button" 
-                      class="btn btn-xs btn-light border rounded-pill px-2.5 py-0.5 text-xs text-muted"
-                      @click="deselectAllFiltered"
+                    <button
+                      type="button"
+                      class="btn btn-xs btn-outline-secondary rounded-pill px-2.5 py-1 text-xs"
+                      @click="clearAllSelected"
+                      :disabled="selectedMemberIds.length === 0"
                     >
                       Clear
                     </button>
                   </div>
                 </div>
 
-                <!-- Member Search & Filters -->
-                <div class="d-flex flex-column gap-2 mb-3">
-                  <div class="input-group input-group-sm rounded-3 border bg-body overflow-hidden">
-                    <span class="input-group-text bg-transparent border-0 text-muted ps-2.5">
-                      <i class="bi bi-search"></i>
+                <!-- Full-Width Executive Search Bar -->
+                <div class="position-relative mb-2.5">
+                  <span class="position-absolute top-50 start-0 translate-middle-y ms-3 text-muted pointer-events-none d-flex align-items-center">
+                    <i class="bi bi-search text-primary opacity-75"></i>
+                  </span>
+                  <input
+                    type="text"
+                    v-model="memberFilterSearch"
+                    class="form-control form-control-sm ps-5 pe-5 py-2 text-xs rounded-pill border bg-body shadow-2xs transition-all"
+                    placeholder="Search member name or phone..."
+                  />
+                  <button
+                    v-if="memberFilterSearch"
+                    type="button"
+                    class="btn btn-link p-0 position-absolute top-50 end-0 translate-middle-y me-3 text-muted text-decoration-none border-0 d-flex align-items-center"
+                    @click="memberFilterSearch = ''"
+                    title="Clear search"
+                  >
+                    <i class="bi bi-x-circle-fill text-muted"></i>
+                  </button>
+                </div>
+
+                <!-- Single Unified Filter Line: Branch Dropdown + Icon-Only Status Buttons -->
+                <div class="d-flex align-items-center justify-content-between gap-2 mb-3">
+                  <!-- Branch Dropdown -->
+                  <div class="input-group input-group-sm flex-grow-1" style="max-width: 210px;">
+                    <span class="input-group-text bg-body border-end-0 text-muted ps-2.5 py-1 rounded-start-pill text-xs">
+                      <i class="bi bi-geo-alt-fill text-primary opacity-75"></i>
                     </span>
-                    <input 
-                      type="search" 
-                      v-model="memberFilterSearch" 
-                      class="form-control border-0 bg-transparent ps-1 text-xs shadow-none" 
-                      placeholder="Search member by name or phone..."
-                    />
+                    <select
+                      v-model="memberFilterLocation"
+                      class="form-select form-select-sm border-start-0 ps-1 py-1 text-xs rounded-end-pill bg-body shadow-2xs"
+                      aria-label="Filter by branch"
+                    >
+                      <option value="">All Branches</option>
+                      <option v-for="loc in locations" :key="loc.id" :value="String(loc.id)">
+                        {{ loc.name }}
+                      </option>
+                    </select>
                   </div>
 
-                  <div class="row g-2">
-                    <div class="col-6">
-                      <select v-model="memberFilterLocation" class="form-select form-select-sm rounded-3 text-xs bg-body shadow-none">
-                        <option value="">All Branches / Regions</option>
-                        <option v-for="loc in locations" :key="loc.id" :value="String(loc.id)">
-                          {{ loc.name }}
-                        </option>
-                      </select>
-                    </div>
-                    <div class="col-6">
-                      <select v-model="memberFilterStatus" class="form-select form-select-sm rounded-3 text-xs bg-body shadow-none">
-                        <option value="">All Member Statuses</option>
-                        <option value="active">Active Only</option>
-                        <option value="inactive">Inactive Only</option>
-                        <option value="deceased">Deceased Only</option>
-                      </select>
-                    </div>
+                  <!-- Icon-Only Status Filter Buttons Group -->
+                  <div class="d-flex align-items-center gap-1 bg-body p-1 border rounded-pill shadow-2xs flex-shrink-0">
+                    <!-- All Members -->
+                    <button
+                      type="button"
+                      class="btn btn-sm rounded-circle p-0 d-flex align-items-center justify-content-center transition-all"
+                      style="width: 28px; height: 28px;"
+                      :class="audienceFilter === 'all' ? 'btn-primary text-white shadow-xs' : 'btn-light text-muted border-0'"
+                      @click="audienceFilter = 'all'"
+                      title="All Members"
+                      aria-label="All Members"
+                    >
+                      <i class="bi bi-people-fill text-xs"></i>
+                    </button>
+
+                    <!-- Active -->
+                    <button
+                      type="button"
+                      class="btn btn-sm rounded-circle p-0 d-flex align-items-center justify-content-center transition-all"
+                      style="width: 28px; height: 28px;"
+                      :class="audienceFilter === 'active' ? 'btn-primary text-white shadow-xs' : 'btn-light text-success border-0'"
+                      @click="audienceFilter = 'active'"
+                      title="Active Members"
+                      aria-label="Active Members"
+                    >
+                      <i class="bi bi-check-circle-fill text-xs"></i>
+                    </button>
+
+                    <!-- Inactive -->
+                    <button
+                      type="button"
+                      class="btn btn-sm rounded-circle p-0 d-flex align-items-center justify-content-center transition-all"
+                      style="width: 28px; height: 28px;"
+                      :class="audienceFilter === 'inactive' ? 'btn-primary text-white shadow-xs' : 'btn-light text-muted border-0'"
+                      @click="audienceFilter = 'inactive'"
+                      title="Inactive Members"
+                      aria-label="Inactive Members"
+                    >
+                      <i class="bi bi-pause-circle-fill text-xs"></i>
+                    </button>
+
+                    <!-- Deceased -->
+                    <button
+                      type="button"
+                      class="btn btn-sm rounded-circle p-0 d-flex align-items-center justify-content-center transition-all"
+                      style="width: 28px; height: 28px;"
+                      :class="audienceFilter === 'deceased' ? 'btn-primary text-white shadow-xs' : 'btn-light text-danger border-0'"
+                      @click="audienceFilter = 'deceased'"
+                      title="Deceased Members"
+                      aria-label="Deceased Members"
+                    >
+                      <i class="bi bi-slash-circle-fill text-xs"></i>
+                    </button>
+
+                    <!-- Outstanding Fees -->
+                    <button
+                      type="button"
+                      class="btn btn-sm rounded-circle p-0 d-flex align-items-center justify-content-center transition-all"
+                      style="width: 28px; height: 28px;"
+                      :class="audienceFilter === 'outstanding' ? 'btn-warning text-dark shadow-xs' : 'btn-light text-warning border-0'"
+                      @click="audienceFilter = 'outstanding'"
+                      title="Members with Unpaid Fees"
+                      aria-label="Members with Unpaid Fees"
+                    >
+                      <i class="bi bi-clock-history text-xs"></i>
+                    </button>
+
+                    <!-- Reset Filters Button -->
+                    <button
+                      v-if="audienceFilter !== 'all' || memberFilterLocation || memberFilterSearch"
+                      type="button"
+                      class="btn btn-sm rounded-circle p-0 d-flex align-items-center justify-content-center text-danger border-0 ms-0.5"
+                      style="width: 28px; height: 28px;"
+                      @click="audienceFilter = 'all'; memberFilterLocation = ''; memberFilterSearch = ''"
+                      title="Reset all filters"
+                      aria-label="Reset all filters"
+                    >
+                      <i class="bi bi-arrow-counterclockwise text-xs"></i>
+                    </button>
                   </div>
                 </div>
 
-                <!-- Scrollable Member List Checkbox Tray -->
-                <div class="member-list-scroll flex-grow-1 overflow-y-auto rounded-3 border bg-body p-2 d-flex flex-column gap-1.5">
-                  <div 
-                    v-if="availableFilteredMembers.length === 0" 
+                <!-- Member Directory Header -->
+                <div class="d-flex align-items-center justify-content-between px-1 mb-2 text-2xs text-muted">
+                  <span class="fw-semibold text-uppercase tracking-wider">
+                    Directory ({{ availableFilteredMembers.length }})
+                  </span>
+                  <span class="badge bg-light text-secondary border text-2xs text-capitalize">
+                    {{ audienceFilter }}
+                  </span>
+                </div>
+
+                <!-- Member Cards Scrollable Directory -->
+                <div class="member-list-scroll flex-grow-1 overflow-y-auto rounded-3 border bg-body p-2 d-flex flex-column gap-2">
+                  <div
+                    v-if="availableFilteredMembers.length === 0"
                     class="text-center py-5 text-muted text-xs"
                   >
-                    <i class="bi bi-search fs-3 d-block mb-1 text-opacity-50"></i>
-                    No members match your filter criteria.
+                    <i class="bi bi-people fs-2 d-block mb-1 text-opacity-40"></i>
+                    No members match the current filter criteria.
                   </div>
 
-                  <div 
-                    v-for="m in availableFilteredMembers" 
+                  <div
+                    v-for="m in availableFilteredMembers"
                     :key="m.id"
                     class="member-picker-row d-flex align-items-center justify-content-between p-2 rounded-3 transition-all cursor-pointer border"
                     :class="{
                       'bg-primary bg-opacity-10 border-primary': selectedMemberIds.includes(Number(m.id)),
                       'border-light bg-body': !selectedMemberIds.includes(Number(m.id)),
-                      'opacity-50 pe-none bg-light': isMemberAlreadyAssigned(Number(m.id))
+                      'opacity-50 pe-none bg-body-tertiary': isMemberAlreadyAssigned(Number(m.id))
                     }"
                     @click="!isMemberAlreadyAssigned(Number(m.id)) && toggleMemberSelection(Number(m.id))"
                   >
                     <div class="d-flex align-items-center gap-2.5 min-w-0">
-                      <input 
-                        type="checkbox" 
+                      <input
+                        type="checkbox"
                         class="form-check-input mt-0 flex-shrink-0 cursor-pointer"
                         :checked="selectedMemberIds.includes(Number(m.id)) || isMemberAlreadyAssigned(Number(m.id))"
                         :disabled="isMemberAlreadyAssigned(Number(m.id))"
                         @click.stop="!isMemberAlreadyAssigned(Number(m.id)) && toggleMemberSelection(Number(m.id))"
                       />
-                      <div class="avatar-sm-circle rounded-circle bg-primary bg-opacity-15 text-primary fw-bold text-xs d-flex align-items-center justify-content-center flex-shrink-0">
+                      <div class="rounded-circle bg-primary text-white fw-bold text-xs d-flex align-items-center justify-content-center flex-shrink-0" style="width: 32px; height: 32px;">
                         {{ m.first_name[0] }}{{ m.last_name[0] }}
                       </div>
                       <div class="text-truncate">
@@ -754,134 +917,165 @@ onMounted(() => {
                       </div>
                     </div>
 
-                    <div class="flex-shrink-0 ms-2 text-end">
-                      <span v-if="isMemberAlreadyAssigned(Number(m.id))" class="badge bg-secondary bg-opacity-15 text-secondary px-2 py-0.5 rounded-pill text-xs">
-                        <i class="bi bi-check-circle me-1"></i>Assigned
+                    <div class="flex-shrink-0 ms-2 text-end d-flex flex-column align-items-end gap-1">
+                      <span v-if="isMemberAlreadyAssigned(Number(m.id))" class="badge bg-secondary-subtle text-secondary px-2 py-0.5 rounded-pill text-2xs border">
+                        <i class="bi bi-check-circle me-0.5"></i>Assigned
                       </span>
-                      <span v-else-if="selectedMemberIds.includes(Number(m.id))" class="badge bg-primary px-2 py-0.5 rounded-pill text-xs text-white">
+                      <span v-else-if="selectedMemberIds.includes(Number(m.id))" class="badge bg-primary text-white px-2 py-0.5 rounded-pill text-2xs">
                         Selected
                       </span>
+                      <span v-if="isMemberOutstanding(m)" class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-1.5 py-0.5 rounded-pill text-2xs">
+                        <i class="bi bi-clock-history me-0.5"></i>Unpaid
+                      </span>
+                      <span v-else-if="m.member_status === 'deceased'" class="badge bg-danger-subtle text-danger border border-danger-subtle px-1.5 py-0.5 rounded-pill text-2xs">
+                        Deceased
+                      </span>
+                      <span v-else-if="m.member_status === 'inactive'" class="badge bg-secondary-subtle text-secondary border px-1.5 py-0.5 rounded-pill text-2xs">
+                        Inactive
+                      </span>
                     </div>
                   </div>
                 </div>
+
+                <!-- Queued Selection Info Bar -->
+                <div class="pt-2 px-1 d-flex align-items-center justify-content-between text-xs text-muted">
+                  <span>
+                    Queued: <strong class="text-primary">{{ selectedMemberIds.length }}</strong> member(s)
+                  </span>
+                  <span v-if="selectedMemberIds.length > 0" class="text-2xs text-muted font-monospace">
+                    Est. {{ selectedMemberIds.length * smsSegmentCount }} SMS dispatches
+                  </span>
+                </div>
+
               </div>
 
-              <!-- RIGHT COLUMN: TEMPLATE SELECTION, MESSAGE CONTENT & STAGED RECIPIENTS PREVIEW -->
-              <div class="col-lg-6 d-flex flex-column bg-body p-3 p-md-4 overflow-y-auto">
-                
-                <!-- Target Campaign Selection -->
-                <div class="mb-3">
-                  <label for="composeNotifId" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase font-monospace mb-1">
-                    1. Target Broadcast Campaign *
-                  </label>
-                  <select id="composeNotifId" v-model="notificationId" class="form-select form-select-sm py-2 text-xs rounded-3 shadow-none border" required>
-                    <option v-for="n in notifications" :key="n.id" :value="n.id">
-                      {{ n.name }}
-                    </option>
-                  </select>
+              <!-- RIGHT COLUMN (58%): MESSAGE COMPOSER & LIVE PREVIEW -->
+              <div class="col-lg-7 d-flex flex-column bg-body p-3 p-md-4 overflow-y-auto">
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                  <div class="d-flex align-items-center gap-2">
+                    <span class="badge rounded-circle bg-primary text-white p-0 d-flex align-items-center justify-content-center" style="width: 22px; height: 22px; font-size: 0.75rem;">2</span>
+                    <h6 class="fw-bold text-primary text-uppercase text-xs tracking-wider mb-0">
+                      Message Composer
+                    </h6>
+                  </div>
+                  <span class="badge bg-body-secondary text-secondary border text-2xs px-2 py-0.5 rounded-pill font-monospace">
+                    {{ smsCharCount }} chars • {{ smsSegmentCount }} SMS
+                  </span>
                 </div>
 
-                <!-- Template Selector -->
-                <div class="mb-3">
-                  <label for="composeTmplId" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase font-monospace mb-1">
-                    2. Load Message Template (Optional)
-                  </label>
-                  <select id="composeTmplId" v-model="selectedTemplateId" class="form-select form-select-sm py-2 text-xs rounded-3 shadow-none border">
-                    <option value="">Select template to load content...</option>
-                    <option v-for="t in templates" :key="t.id" :value="t.id">
-                      {{ t.name }}
-                    </option>
-                  </select>
-                </div>
-
-                <!-- Message Content Box & Dynamic Tags -->
-                <div class="mb-3">
-                  <div class="d-flex align-items-center justify-content-between mb-1">
-                    <label class="form-label text-xs fw-semibold text-secondary-amms text-uppercase font-monospace mb-0">
-                      3. Message Content Preview
+                <!-- Campaign & Template Selector Row -->
+                <div class="row g-2 mb-3">
+                  <div class="col-md-6">
+                    <label for="composeNotifId" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase mb-1">
+                      Target Campaign *
                     </label>
-                    <small class="text-muted text-xs font-monospace">
-                      {{ messageContent.length }} characters • {{ Math.ceil(messageContent.length / 160) || 1 }} SMS part(s)
-                    </small>
+                    <div class="input-group input-group-sm">
+                      <span class="input-group-text bg-transparent border-end-0 text-muted">
+                        <i class="bi bi-megaphone"></i>
+                      </span>
+                      <select
+                        id="composeNotifId"
+                        v-model="notificationId"
+                        class="form-select border-start-0 ps-1 py-2 text-xs"
+                        required
+                      >
+                        <option v-for="n in notifications" :key="n.id" :value="n.id">
+                          {{ n.name }}
+                        </option>
+                      </select>
+                    </div>
                   </div>
 
-                  <textarea 
-                    v-model="messageContent" 
-                    rows="3" 
-                    class="form-control text-xs rounded-3 shadow-none bg-body-tertiary border"
-                    placeholder="Message text to be delivered to assigned members..."
-                  ></textarea>
+                  <div class="col-md-6">
+                    <div class="d-flex align-items-center justify-content-between mb-1">
+                      <label for="composeTmplId" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase mb-0">
+                        Load Template
+                      </label>
+                      <small class="text-muted text-2xs">Auto-populates</small>
+                    </div>
+                    <div class="input-group input-group-sm">
+                      <span class="input-group-text bg-transparent border-end-0 text-muted">
+                        <i class="bi bi-file-earmark-text"></i>
+                      </span>
+                      <select
+                        id="composeTmplId"
+                        v-model="selectedTemplateId"
+                        class="form-select border-start-0 ps-1 py-2 text-xs"
+                      >
+                        <option value="">Choose a template...</option>
+                        <option v-for="t in templates" :key="t.id" :value="t.id">
+                          {{ t.name }}
+                        </option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
 
-                  <!-- Dynamic Tags Quick Insert -->
-                  <div class="d-flex align-items-center gap-1.5 mt-1.5 flex-wrap">
-                    <small class="text-muted text-xs me-1">Insert tag:</small>
-                    <button 
-                      v-for="ph in availablePlaceholders" 
+                <!-- Message Content & Placeholder Chips -->
+                <div class="mb-3">
+                  <label for="composeMsg" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase mb-1">
+                    Message Content *
+                  </label>
+                  
+                  <!-- Tag Chips -->
+                  <div class="d-flex flex-wrap gap-1 mb-2">
+                    <button
+                      v-for="ph in availablePlaceholders"
                       :key="ph.tag"
-                      type="button" 
-                      class="badge bg-body-tertiary text-primary border rounded-pill px-2 py-0.5 cursor-pointer text-xs"
+                      type="button"
+                      class="btn btn-xs btn-outline-primary rounded-pill px-2.5 py-0.5 text-2xs fw-semibold d-flex align-items-center gap-1 shadow-2xs"
                       @click="insertPlaceholder(ph.tag)"
+                      :title="ph.tag"
                     >
-                      + {{ ph.label }}
-                    </button>
-                  </div>
-                </div>
-
-                <!-- Staged Recipients Preview Tray -->
-                <div class="flex-grow-1 d-flex flex-column rounded-3 border bg-body-tertiary p-3">
-                  <div class="d-flex align-items-center justify-content-between mb-2">
-                    <span class="text-xs fw-bold text-primary text-uppercase font-monospace">
-                      <i class="bi bi-send-check me-1"></i> Queued Recipients ({{ selectedMemberIds.length }})
-                    </span>
-                    <button 
-                      v-if="selectedMemberIds.length > 0"
-                      type="button" 
-                      class="btn btn-xs btn-link text-danger text-decoration-none text-xs p-0"
-                      @click="clearAllSelected"
-                    >
-                      Clear Selection
+                      <i class="bi bi-plus-circle"></i>
+                      <span>{{ ph.tag }}</span>
                     </button>
                   </div>
 
-                  <!-- Chips / Badges Container -->
-                  <div class="selected-recipients-tray flex-grow-1 overflow-y-auto d-flex flex-wrap gap-1.5 align-content-start" style="max-height: 150px;">
-                    <div 
-                      v-if="selectedMemberIds.length === 0" 
-                      class="text-muted text-xs py-3 text-center w-100"
-                    >
-                      <i class="bi bi-person-plus fs-4 d-block mb-1 text-opacity-50"></i>
-                      No recipients selected yet. Check members in the left directory to queue them.
-                    </div>
+                  <textarea
+                    id="composeMsg"
+                    v-model="messageContent"
+                    rows="4"
+                    class="form-control text-xs font-monospace py-2"
+                    placeholder="Type broadcast announcement message..."
+                    required
+                  ></textarea>
+                </div>
 
-                    <div 
-                      v-for="sm in selectedMembersObjects" 
-                      :key="sm.id"
-                      class="badge bg-body text-body border rounded-pill px-2.5 py-1 text-xs d-flex align-items-center gap-1.5 shadow-2xs"
-                    >
-                      <span class="fw-semibold text-primary">{{ sm.first_name }} {{ sm.last_name }}</span>
-                      <small class="text-muted font-monospace">({{ sm.phone || 'No phone' }})</small>
-                      <i 
-                        class="bi bi-x-circle-fill text-muted hover-danger cursor-pointer ms-1 text-xs"
-                        @click="removeSelectedMember(Number(sm.id))"
-                        title="Remove member"
-                      ></i>
+                <!-- Live SMS Phone Bubble Preview -->
+                <div class="mt-auto pt-3 border-top">
+                  <div class="d-flex align-items-center gap-1.5 mb-2 text-xs text-muted fw-semibold">
+                    <i class="bi bi-phone text-primary"></i>
+                    <span>Live Recipient Preview</span>
+                  </div>
+                  <div class="p-3 rounded-3 bg-body-tertiary border position-relative">
+                    <div class="d-flex align-items-center gap-2 mb-1.5">
+                      <span class="badge bg-success-subtle text-success border border-success-subtle text-2xs rounded-pill">
+                        SMS Bubble
+                      </span>
+                      <small class="text-muted text-2xs">Sample: Halima Said</small>
+                    </div>
+                    <div class="p-2.5 rounded-3 bg-white border shadow-2xs text-xs text-body font-monospace" style="white-space: pre-wrap; word-break: break-word; line-height: 1.45;">
+                      {{ previewSampleMessage }}
                     </div>
                   </div>
                 </div>
-
               </div>
+
             </div>
           </div>
 
           <!-- Modal Action Footer -->
           <div class="modal-footer border-top px-4 py-3 bg-body-tertiary d-flex align-items-center justify-content-between">
-            <div class="text-xs text-muted font-monospace">
-              Ready to assign <span class="fw-bold text-primary">{{ selectedMemberIds.length }}</span> member(s)
+            <div class="text-xs text-muted">
+              Campaign: <strong class="text-primary">{{ getNotificationTitle(notificationId) }}</strong> • Ready to assign <strong class="text-primary">{{ selectedMemberIds.length }}</strong> recipient(s)
             </div>
             <div class="d-flex align-items-center gap-2">
-              <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3 text-xs" @click="closeModal">Cancel</button>
-              <button 
-                type="button" 
+              <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3.5 text-xs" @click="closeModal">
+                Cancel
+              </button>
+              <button
+                type="button"
                 class="btn btn-sm btn-primary rounded-pill px-4 text-xs fw-semibold d-flex align-items-center gap-2 shadow-sm"
                 :disabled="isSubmitting || selectedMemberIds.length === 0 || !notificationId"
                 @click="handleSaveBatch"
@@ -965,4 +1159,7 @@ onMounted(() => {
 .hover-danger:hover {
   color: #dc3545 !important;
 }
+
+.text-2xs { font-size: 0.7rem; }
+.shadow-2xs { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); }
 </style>

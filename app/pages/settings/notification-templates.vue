@@ -475,6 +475,24 @@ onMounted(() => {
                       <i class="bi bi-tag-fill text-primary opacity-75"></i>
                       <span class="fw-semibold text-primary">&#123;&#123;fee_year&#125;&#125;</span>
                     </button>
+                    <button 
+                      type="button" 
+                      class="placeholder-chip border-0 rounded-pill font-monospace text-xs px-3 py-1.5 d-inline-flex align-items-center gap-1.5 cursor-pointer transition-all" 
+                      @click="insertTag('{{phone}}')"
+                      title="Click to insert phone number placeholder"
+                    >
+                      <i class="bi bi-tag-fill text-primary opacity-75"></i>
+                      <span class="fw-semibold text-primary">&#123;&#123;phone&#125;&#125;</span>
+                    </button>
+                    <button 
+                      type="button" 
+                      class="placeholder-chip border-0 rounded-pill font-monospace text-xs px-3 py-1.5 d-inline-flex align-items-center gap-1.5 cursor-pointer transition-all" 
+                      @click="insertTag('{{outstanding_balance}}')"
+                      title="Click to insert outstanding fee balance placeholder"
+                    >
+                      <i class="bi bi-tag-fill text-primary opacity-75"></i>
+                      <span class="fw-semibold text-primary">&#123;&#123;outstanding_balance&#125;&#125;</span>
+                    </button>
                   </div>
                 </div>
 

@@ -21,28 +21,8 @@ interface NotificationTemplateOption {
   content: string
 }
 
-interface NotificationMemberItem {
-  id: number
-  notification_id: number | string
-  member_id: number | string
-  member?: {
-    id: number
-    first_name: string
-    last_name: string
-    phone?: string
-  }
-}
-
-interface MemberOption {
-  id: number
-  first_name: string
-  last_name: string
-  phone?: string
-}
-
 const { data: notificationsResponse, loading, error, execute: fetchNotifications, fetchWithAuth } = useApi<any>()
 const { data: templates, execute: fetchTemplates } = useApi<NotificationTemplateOption[]>()
-const { data: allMembers, execute: fetchAllMembers } = useApi<MemberOption[]>()
 
 const searchQuery = ref('')
 const isSubmitting = ref(false)
@@ -54,14 +34,6 @@ const isModalOpen = ref(false)
 const name = ref('')
 const notificationTemplateId = ref<number | string>('')
 const content = ref('')
-
-// Recipient Members Drawer State
-const selectedBroadcastForRecipients = ref<NotificationItem | null>(null)
-const isRecipientsDrawerOpen = ref(false)
-const recipientsList = ref<NotificationMemberItem[]>([])
-const loadingRecipients = ref(false)
-const addingMemberId = ref<number | string>('')
-const isAddingRecipient = ref(false)
 
 // View Modal State
 const viewingNotification = ref<NotificationItem | null>(null)
@@ -80,7 +52,8 @@ const availablePlaceholders = [
   { tag: '{{first_name}}', label: 'First Name', tooltip: 'Replaced with recipient member\'s first name' },
   { tag: '{{last_name}}', label: 'Last Name', tooltip: 'Replaced with recipient member\'s last name' },
   { tag: '{{fee_year}}', label: 'Fee Year', tooltip: 'Replaced with current fee schedule year' },
-  { tag: '{{phone}}', label: 'Phone Number', tooltip: 'Replaced with recipient member\'s phone number' }
+  { tag: '{{phone}}', label: 'Phone Number', tooltip: 'Replaced with recipient member\'s phone number' },
+  { tag: '{{outstanding_balance}}', label: 'Outstanding Balance', tooltip: 'Replaced with recipient member\'s outstanding balance' }
 ]
 
 const schema = z.object({
@@ -92,72 +65,10 @@ const loadData = async () => {
   try {
     await Promise.all([
       fetchNotifications((api) => api('/api/notifications')),
-      fetchTemplates((api) => api('/api/notification-templates')).catch(() => []),
-      fetchAllMembers((api) => api('/api/members')).catch(() => [])
+      fetchTemplates((api) => api('/api/notification-templates')).catch(() => [])
     ])
   } catch (err) {
     // Handled by composable
-  }
-}
-
-const openRecipientsDrawer = async (n: NotificationItem) => {
-  selectedBroadcastForRecipients.value = n
-  isRecipientsDrawerOpen.value = true
-  loadingRecipients.value = true
-  recipientsList.value = []
-  
-  try {
-    const res: any = await fetchWithAuth('/api/notification-members')
-    const list = Array.isArray(res) ? res : (res?.data?.data || res?.data || [])
-    recipientsList.value = list.filter((item: any) => Number(item.notification_id) === Number(n.id))
-  } catch (err) {
-    console.error('Fetch notification members error:', err)
-  } finally {
-    loadingRecipients.value = false
-  }
-
-  if (allMembers.value && allMembers.value.length > 0) {
-    addingMemberId.value = allMembers.value[0].id
-  }
-}
-
-const closeRecipientsDrawer = () => {
-  selectedBroadcastForRecipients.value = null
-  isRecipientsDrawerOpen.value = false
-  recipientsList.value = []
-}
-
-const addRecipientMember = async () => {
-  if (!selectedBroadcastForRecipients.value || !addingMemberId.value) return
-  
-  isAddingRecipient.value = true
-  try {
-    await fetchWithAuth('/api/notification-members', {
-      method: 'POST',
-      body: {
-        notification_id: Number(selectedBroadcastForRecipients.value.id),
-        member_id: Number(addingMemberId.value)
-      }
-    })
-    push.success('Member assigned to broadcast successfully!')
-    await openRecipientsDrawer(selectedBroadcastForRecipients.value)
-  } catch (err: any) {
-    const msg = err?.data?.message || 'Failed to add member to broadcast'
-    push.error(msg)
-  } finally {
-    isAddingRecipient.value = false
-  }
-}
-
-const removeRecipientMember = async (nmId: number) => {
-  try {
-    await fetchWithAuth(`/api/notification-members/${nmId}`, { method: 'DELETE' })
-    push.success('Member removed from broadcast!')
-    if (selectedBroadcastForRecipients.value) {
-      await openRecipientsDrawer(selectedBroadcastForRecipients.value)
-    }
-  } catch (err: any) {
-    push.error('Failed to remove recipient member')
   }
 }
 
@@ -444,13 +355,6 @@ onMounted(() => {
                 <div class="d-flex align-items-center justify-content-end gap-1">
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
-                    @click="openRecipientsDrawer(n)"
-                    title="Manage Recipient Members"
-                  >
-                    <i class="bi bi-people-fill text-primary"></i>
-                  </button>
-                  <button 
-                    class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
                     @click="openViewModal(n)"
                     title="View Broadcast Log Details"
                   >
@@ -486,123 +390,6 @@ onMounted(() => {
         :totalItems="filteredNotifications.length"
       />
 
-    </div>
-
-    <!-- Manage Recipient Members Drawer Modal -->
-    <div v-if="isRecipientsDrawerOpen" class="modal-backdrop fade show" style="z-index: 1060;"></div>
-    
-    <div 
-      v-if="isRecipientsDrawerOpen" 
-      class="modal fade show d-block" 
-      tabindex="-1" 
-      role="dialog"
-      style="z-index: 1065;"
-      @click.self="closeRecipientsDrawer"
-    >
-      <div class="modal-dialog modal-dialog-centered modal-lg">
-        <div class="modal-content amms-surface border-0 shadow-lg rounded-4 overflow-hidden">
-          
-          <div class="modal-header border-bottom px-4 py-3 bg-body-tertiary position-relative justify-content-between">
-            <div class="d-flex align-items-center gap-2">
-              <i class="bi bi-people-fill text-primary fs-5"></i>
-              <div>
-                <h5 class="modal-title fw-bold text-primary text-sm mb-0">
-                  Recipient Members List
-                </h5>
-                <small class="text-muted text-xs">Broadcast: {{ selectedBroadcastForRecipients?.name }}</small>
-              </div>
-            </div>
-            <button 
-              type="button" 
-              class="btn-close" 
-              @click="closeRecipientsDrawer"
-              aria-label="Close"
-            ></button>
-          </div>
-
-          <div class="modal-body p-4">
-            <!-- Add Recipient Form Input Group -->
-            <div class="card p-3 bg-body-tertiary border rounded-3 mb-4">
-              <label class="form-label text-xs fw-semibold text-secondary-amms text-uppercase mb-2">
-                Assign Recipient Member
-              </label>
-              <div class="d-flex align-items-center gap-2">
-                <select v-model="addingMemberId" class="form-select form-select-sm py-2 text-xs" :disabled="isAddingRecipient">
-                  <option v-for="m in allMembers" :key="m.id" :value="m.id">
-                    {{ m.first_name }} {{ m.last_name }} ({{ m.phone || 'No phone' }})
-                  </option>
-                </select>
-                <button 
-                  type="button" 
-                  class="btn btn-sm btn-primary rounded-pill px-3 fw-semibold text-xs text-nowrap d-flex align-items-center gap-1.5"
-                  :disabled="isAddingRecipient || !addingMemberId"
-                  @click="addRecipientMember"
-                >
-                  <span v-if="isAddingRecipient" class="spinner-border spinner-border-sm" role="status"></span>
-                  <i v-else class="bi bi-plus-lg"></i>
-                  <span>Assign</span>
-                </button>
-              </div>
-            </div>
-
-            <!-- Assigned Recipients Table -->
-            <h6 class="fw-bold text-primary text-xs text-uppercase tracking-wider mb-2">
-              Assigned Recipients ({{ recipientsList.length }})
-            </h6>
-
-            <div v-if="loadingRecipients" class="text-center py-4 text-muted">
-              <div class="spinner-border spinner-border-sm text-primary me-2"></div>
-              <span class="text-xs">Loading recipient members...</span>
-            </div>
-
-            <div v-else-if="recipientsList.length === 0" class="text-center py-4 text-muted border rounded-3 bg-body">
-              <i class="bi bi-person-x fs-3 d-block mb-1 text-opacity-50"></i>
-              <span class="text-xs">No recipient members assigned to this broadcast yet.</span>
-            </div>
-
-            <div v-else class="table-responsive border rounded-3 overflow-hidden" style="max-height: 250px;">
-              <table class="table align-middle mb-0 text-xs">
-                <thead class="bg-light border-bottom">
-                  <tr>
-                    <th class="ps-3 py-2"># ID</th>
-                    <th class="py-2">Member Name</th>
-                    <th class="py-2">Phone Number</th>
-                    <th class="pe-3 text-end py-2">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="nm in recipientsList" :key="nm.id">
-                    <td class="ps-3 font-monospace text-muted">#{{ nm.id }}</td>
-                    <td class="fw-semibold text-primary">
-                      {{ nm.member ? `${nm.member.first_name} ${nm.member.last_name}` : `Member #${nm.member_id}` }}
-                    </td>
-                    <td class="font-monospace text-muted">
-                      {{ nm.member?.phone || '—' }}
-                    </td>
-                    <td class="pe-3 text-end">
-                      <button 
-                        class="btn btn-xs btn-outline-danger rounded-circle p-1"
-                        @click="removeRecipientMember(nm.id)"
-                        title="Remove Member"
-                      >
-                        <i class="bi bi-x-lg text-xs"></i>
-                      </button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-          </div>
-
-          <div class="modal-footer border-top px-4 py-2.5 bg-body-tertiary">
-            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-4" @click="closeRecipientsDrawer">
-              Close
-            </button>
-          </div>
-
-        </div>
-      </div>
     </div>
 
     <!-- View Broadcast Details Modal -->
