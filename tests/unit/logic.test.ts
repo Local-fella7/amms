@@ -670,14 +670,23 @@ describe('[feePaymentSchema] Zod validation', () => {
 const memberSchema = z.object({
   first_name: z.string().min(2, 'First name is required'),
   last_name: z.string().min(2, 'Last name is required'),
-  gender: z.enum(['male', 'female']),
+  gender: z.enum(['male', 'female'], {
+    errorMap: () => ({ message: 'Gender is required' })
+  }),
   location_id: z.union([z.number(), z.string().min(1, 'Location branch is required')]),
   age_group_id: z.union([z.number(), z.string().min(1, 'Age group is required')]),
   date_of_birth: z.string().min(4, 'Date of birth is required'),
   phone: z.string().length(12).regex(/^255[0-9]{9}$/),
-  member_status: z.enum(['active', 'inactive', 'deceased']),
-  marital_status: z.enum(['single', 'married', 'divorced', 'widowed']),
-  fee_exemption: z.enum(['yes', 'no']),
+  email: z.string().min(1, 'Email address is required').email('Please enter a valid email address'),
+  member_status: z.enum(['active', 'inactive', 'deceased'], {
+    errorMap: () => ({ message: 'Membership status is required' })
+  }),
+  marital_status: z.enum(['single', 'married', 'divorced', 'widowed'], {
+    errorMap: () => ({ message: 'Marital status is required' })
+  }),
+  fee_exemption: z.enum(['yes', 'no'], {
+    errorMap: () => ({ message: 'Fee exemption is required' })
+  }),
   registration_date: z.string().min(4, 'Registration date is required')
 })
 
@@ -685,16 +694,25 @@ describe('[memberSchema] Zod validation', () => {
   const valid = {
     first_name: 'Aisha', last_name: 'Mohammed', gender: 'female',
     location_id: 1, age_group_id: 2, date_of_birth: '1990-05-20',
-    phone: '255712345678', member_status: 'active', marital_status: 'married',
+    phone: '255712345678', email: 'aisha@example.com', member_status: 'active', marital_status: 'married',
     fee_exemption: 'no', registration_date: '2026-08-17'
   }
   it('accepts a valid member payload', () => expect(memberSchema.safeParse(valid).success).toBe(true))
   it('rejects first_name shorter than 2 chars', () => expect(memberSchema.safeParse({ ...valid, first_name: 'A' }).success).toBe(false))
+  it('rejects null/missing first_name', () => expect(memberSchema.safeParse({ ...valid, first_name: undefined }).success).toBe(false))
+  it('rejects null/missing last_name', () => expect(memberSchema.safeParse({ ...valid, last_name: undefined }).success).toBe(false))
   it('rejects invalid gender', () => expect(memberSchema.safeParse({ ...valid, gender: 'other' }).success).toBe(false))
+  it('rejects null/missing date_of_birth', () => expect(memberSchema.safeParse({ ...valid, date_of_birth: '' }).success).toBe(false))
   it('rejects invalid member_status', () => expect(memberSchema.safeParse({ ...valid, member_status: 'pending' }).success).toBe(false))
   it('rejects invalid marital_status', () => expect(memberSchema.safeParse({ ...valid, marital_status: 'unknown' }).success).toBe(false))
   it('rejects invalid fee_exemption', () => expect(memberSchema.safeParse({ ...valid, fee_exemption: 'maybe' }).success).toBe(false))
+  it('rejects null/missing age_group_id', () => expect(memberSchema.safeParse({ ...valid, age_group_id: '' }).success).toBe(false))
+  it('rejects null/missing registration_date', () => expect(memberSchema.safeParse({ ...valid, registration_date: '' }).success).toBe(false))
   it('rejects invalid phone', () => expect(memberSchema.safeParse({ ...valid, phone: '0712345678' }).success).toBe(false))
+  it('rejects missing email', () => expect(memberSchema.safeParse({ ...valid, email: undefined }).success).toBe(false))
+  it('rejects empty email', () => expect(memberSchema.safeParse({ ...valid, email: '' }).success).toBe(false))
+  it('rejects invalid email format', () => expect(memberSchema.safeParse({ ...valid, email: 'not-an-email' }).success).toBe(false))
+  it('accepts valid email address', () => expect(memberSchema.safeParse({ ...valid, email: 'member.test@asa.or.tz' }).success).toBe(true))
   it('accepts deceased member_status', () => expect(memberSchema.safeParse({ ...valid, member_status: 'deceased' }).success).toBe(true))
   it('accepts divorced marital_status', () => expect(memberSchema.safeParse({ ...valid, marital_status: 'divorced' }).success).toBe(true))
 })

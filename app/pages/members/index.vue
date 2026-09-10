@@ -12,6 +12,10 @@ interface Member {
   mothers_name?: string
   location_id: number | string
   picture?: string
+  photo?: string
+  photo_url?: string
+  avatar?: string
+  email?: string
   date_of_birth: string
   member_status: 'active' | 'inactive' | 'deceased' | string
   marital_status: 'single' | 'married' | 'divorced' | 'widowed' | string
@@ -41,6 +45,21 @@ const { data: membersResponse, loading, error, execute: fetchMembers, fetchWithA
 const { data: locations, execute: fetchLocations } = useApi<LocationItem[]>()
 const { data: ageGroups, execute: fetchAgeGroups } = useApi<AgeGroupItem[]>()
 const { downloadPdf, openPdfInNewTab, isGenerating: isDownloadingPdf } = useReportPdf()
+const config = useRuntimeConfig()
+const backendBase = computed(() => {
+  const api = (config.public?.apiBase as string) || ''
+  return api.replace(/\/api\/?$/, '')
+})
+
+const failedImageMemberIds = ref<Set<number>>(new Set())
+const onMemberPhotoError = (memberId: number) => {
+  failedImageMemberIds.value.add(memberId)
+}
+const hasValidMemberPhoto = (m?: Member | null): boolean => {
+  if (!m || !getMemberPhotoPath(m)) return false
+  return !failedImageMemberIds.value.has(m.id)
+}
+const viewingPhotoError = ref(false)
 
 const searchQuery = ref('')
 const selectedLocationFilter = ref<string>('')
@@ -62,6 +81,7 @@ const locationId = ref<string | number>('')
 const ageGroupId = ref<string | number>('')
 const dateOfBirth = ref('')
 const phone = ref('')
+const email = ref('')
 const memberStatus = ref<'active' | 'inactive' | 'deceased'>('active')
 const maritalStatus = ref<'single' | 'married' | 'divorced' | 'widowed'>('single')
 const feeExemption = ref<'yes' | 'no'>('no')
@@ -93,7 +113,9 @@ const itemsPerPage = ref(10)
 const schema = z.object({
   first_name: z.string().min(2, 'First name is required'),
   last_name: z.string().min(2, 'Last name is required'),
-  gender: z.enum(['male', 'female']),
+  gender: z.enum(['male', 'female'], {
+    errorMap: () => ({ message: 'Gender is required' })
+  }),
   fathers_name: z.string().optional(),
   mothers_name: z.string().optional(),
   location_id: z.union([z.number(), z.string().min(1, 'Location branch is required')]),
@@ -102,9 +124,18 @@ const schema = z.object({
   phone: z.string()
     .length(12, 'Phone number must be exactly 12 digits (e.g. 255755555555)')
     .regex(/^255[0-9]{9}$/, 'Phone number must start with 255 followed by 9 digits'),
-  member_status: z.enum(['active', 'inactive', 'deceased']),
-  marital_status: z.enum(['single', 'married', 'divorced', 'widowed']),
-  fee_exemption: z.enum(['yes', 'no']),
+  email: z.string()
+    .min(1, 'Email address is required')
+    .email('Please enter a valid email address'),
+  member_status: z.enum(['active', 'inactive', 'deceased'], {
+    errorMap: () => ({ message: 'Membership status is required' })
+  }),
+  marital_status: z.enum(['single', 'married', 'divorced', 'widowed'], {
+    errorMap: () => ({ message: 'Marital status is required' })
+  }),
+  fee_exemption: z.enum(['yes', 'no'], {
+    errorMap: () => ({ message: 'Fee exemption is required' })
+  }),
   registration_date: z.string().min(4, 'Registration date is required')
 })
 
@@ -155,6 +186,7 @@ const filteredMembers = computed(() => {
       m.first_name.toLowerCase().includes(q) ||
       m.last_name.toLowerCase().includes(q) ||
       (m.phone && m.phone.includes(q)) ||
+      (m.email && m.email.toLowerCase().includes(q)) ||
       (m.fathers_name && m.fathers_name.toLowerCase().includes(q))
     )
   }
@@ -290,6 +322,19 @@ const clearPhoto = () => {
   }
 }
 
+const getMemberPhotoPath = (m?: Member | null): string => {
+  if (!m) return ''
+  return m.photo || m.picture || (m as any).photo_url || (m as any).avatar || (m as any).image || ''
+}
+
+const getMemberPhotoUrl = (pic?: string) => {
+  if (!pic) return ''
+  if (pic.startsWith('http') || pic.startsWith('data:') || pic.startsWith('blob:')) return pic
+  const cleanPath = pic.replace(/^\/+/, '')
+  const base = backendBase.value ? backendBase.value.replace(/\/+$/, '') : ''
+  return base ? `${base}/${cleanPath}` : `/${cleanPath}`
+}
+
 const openAddModal = () => {
   editingMember.value = null
   firstName.value = ''
@@ -301,6 +346,7 @@ const openAddModal = () => {
   ageGroupId.value = ageGroups.value && ageGroups.value.length > 0 ? ageGroups.value[0].id : ''
   dateOfBirth.value = '1990-01-01'
   phone.value = '255'
+  email.value = ''
   memberStatus.value = 'active'
   maritalStatus.value = 'single'
   feeExemption.value = 'no'
@@ -321,13 +367,15 @@ const openEditModal = (m: Member) => {
   ageGroupId.value = m.age_group_id
   dateOfBirth.value = m.date_of_birth
   phone.value = m.phone
+  email.value = m.email || ''
   memberStatus.value = (m.member_status as any) || 'active'
   maritalStatus.value = (m.marital_status as any) || 'single'
   feeExemption.value = (m.fee_exemption as any) || 'no'
   registrationDate.value = m.registration_date || new Date().toISOString().substring(0, 10)
   clearPhoto()
-  if (m.picture) {
-    photoPreview.value = m.picture.startsWith('http') ? m.picture : `/${m.picture}`
+  const existingPhoto = getMemberPhotoPath(m)
+  if (existingPhoto) {
+    photoPreview.value = getMemberPhotoUrl(existingPhoto)
   }
   modalError.value = ''
   isModalOpen.value = true
@@ -335,6 +383,7 @@ const openEditModal = (m: Member) => {
 
 const openViewModal = (m: Member) => {
   viewingMember.value = m
+  viewingPhotoError.value = false
   isViewModalOpen.value = true
 }
 
@@ -383,6 +432,7 @@ const handleSave = async () => {
     age_group_id: Number(ageGroupId.value),
     date_of_birth: formatDateToYMD(dateOfBirth.value),
     phone: phone.value.trim(),
+    email: email.value.trim().toLowerCase(),
     member_status: memberStatus.value,
     marital_status: maritalStatus.value,
     fee_exemption: feeExemption.value,
@@ -403,6 +453,23 @@ const handleSave = async () => {
         method: 'PUT',
         body: payload
       })
+
+      if (selectedPhotoFile.value) {
+        const photoFormData = new FormData()
+        photoFormData.append('photo', selectedPhotoFile.value)
+        photoFormData.append('crop_x', String(cropX.value || 0))
+        photoFormData.append('crop_y', String(cropY.value || 0))
+        photoFormData.append('crop_width', String(cropWidth.value || 400))
+        photoFormData.append('crop_height', String(cropHeight.value || 400))
+
+        await fetchWithAuth(`/api/members/${editingMember.value.id}`, {
+          method: 'POST',
+          body: photoFormData
+        }).catch(err => {
+          console.warn('Failed to upload updated member photo via POST /members/{id}:', err)
+        })
+      }
+
       push.success(`Member "${firstName.value} ${lastName.value}" updated successfully!`)
     } else {
       let requestBody: any = payload
@@ -418,6 +485,7 @@ const handleSave = async () => {
         formData.append('age_group_id', String(payload.age_group_id))
         formData.append('date_of_birth', payload.date_of_birth)
         formData.append('phone', payload.phone)
+        formData.append('email', payload.email)
         formData.append('member_status', payload.member_status)
         formData.append('marital_status', payload.marital_status)
         formData.append('fee_exemption', payload.fee_exemption)
@@ -449,12 +517,6 @@ const handleSave = async () => {
   } finally {
     isSubmitting.value = false
   }
-}
-
-const getMemberPhotoUrl = (pic?: string) => {
-  if (!pic) return ''
-  if (pic.startsWith('http') || pic.startsWith('data:')) return pic
-  return pic.startsWith('/') ? pic : `/${pic}`
 }
 
 const exportMemberProfilePdf = async (mId: number | string) => {
@@ -635,7 +697,7 @@ onMounted(() => {
             <tr>
               <th class="ps-4" style="width: 70px;"># ID</th>
               <th>Full Name & Gender</th>
-              <th>Phone Number</th>
+              <th>Contact Info</th>
               <th>Location Branch</th>
               <th>Age Group</th>
               <th>Registration Date</th>
@@ -674,8 +736,13 @@ onMounted(() => {
               <td class="ps-4 font-monospace text-muted text-xs">#{{ m.id }}</td>
               <td class="fw-semibold text-primary">
                 <div class="d-flex align-items-center gap-2.5">
-                  <div v-if="m.picture" class="avatar-badge rounded-circle overflow-hidden d-flex align-items-center justify-content-center">
-                    <img :src="getMemberPhotoUrl(m.picture)" :alt="m.first_name" class="w-100 h-100 object-fit-cover" />
+                  <div v-if="hasValidMemberPhoto(m)" class="avatar-badge rounded-circle overflow-hidden d-flex align-items-center justify-content-center">
+                    <img 
+                      :src="getMemberPhotoUrl(getMemberPhotoPath(m))" 
+                      :alt="m.first_name" 
+                      class="w-100 h-100 object-fit-cover" 
+                      @error="onMemberPhotoError(m.id)"
+                    />
                   </div>
                   <div v-else class="avatar-badge rounded-circle d-flex align-items-center justify-content-center text-primary font-monospace fw-bold text-xs">
                     {{ m.first_name[0] }}{{ m.last_name[0] }}
@@ -688,8 +755,13 @@ onMounted(() => {
                   </div>
                 </div>
               </td>
-              <td class="font-monospace text-xs text-body">
-                <i class="bi bi-telephone text-muted me-1"></i> {{ m.phone }}
+              <td class="text-xs text-body">
+                <div class="font-monospace">
+                  <i class="bi bi-telephone text-muted me-1"></i>{{ m.phone }}
+                </div>
+                <div v-if="m.email" class="text-muted text-xs text-truncate font-monospace" style="max-width: 170px;" :title="m.email">
+                  <i class="bi bi-envelope text-primary me-1"></i>{{ m.email }}
+                </div>
               </td>
               <td class="text-xs fw-medium text-body">
                 <i class="bi bi-geo-alt text-muted me-1"></i> {{ m.location?.name || getLocationName(m.location_id) }}
@@ -726,7 +798,7 @@ onMounted(() => {
                 </span>
               </td>
               <td class="pe-4 text-end">
-                <div class="d-flex align-items-center justify-content-end gap-1">
+                <div class="d-flex align-items-center justify-content-end gap-2">
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
                     @click="openViewModal(m)"
@@ -784,25 +856,36 @@ onMounted(() => {
       <div class="p-3 bg-body-tertiary rounded-3 border mb-3">
         
         <!-- Member Photo Banner if available -->
-        <div v-if="viewingMember?.picture" class="d-flex align-items-center gap-3 mb-3 pb-3 border-bottom">
+        <div v-if="getMemberPhotoPath(viewingMember) && !viewingPhotoError" class="d-flex align-items-center gap-3 mb-3 pb-3 border-bottom">
           <div class="avatar-photo-frame rounded-circle overflow-hidden border border-2 border-primary shadow-xs" style="width: 64px; height: 64px;">
-            <img :src="getMemberPhotoUrl(viewingMember.picture)" :alt="viewingMember.first_name" class="w-100 h-100 object-fit-cover" />
+            <img 
+              :src="getMemberPhotoUrl(getMemberPhotoPath(viewingMember))" 
+              :alt="viewingMember?.first_name" 
+              class="w-100 h-100 object-fit-cover" 
+              @error="viewingPhotoError = true"
+            />
           </div>
           <div>
-            <h6 class="fw-bold text-primary mb-0">{{ viewingMember.first_name }} {{ viewingMember.last_name }}</h6>
-            <small class="text-muted text-xs font-monospace">Member ID: #{{ viewingMember.id }}</small>
+            <h6 class="fw-bold text-primary mb-0">{{ viewingMember?.first_name }} {{ viewingMember?.last_name }}</h6>
+            <small class="text-muted text-xs font-monospace">Member ID: #{{ viewingMember?.id }}</small>
           </div>
         </div>
 
         <div class="row g-3">
-          <div class="col-md-6">
+          <div class="col-md-4">
             <span class="text-xs text-muted text-uppercase fw-semibold d-block">Full Member Name</span>
             <span class="fw-bold text-primary fs-6">{{ viewingMember?.first_name }} {{ viewingMember?.last_name }}</span>
           </div>
-          <div class="col-md-6">
+          <div class="col-md-4">
             <span class="text-xs text-muted text-uppercase fw-semibold d-block">Gender & Phone</span>
             <span class="fw-bold text-body text-xs text-capitalize">
               {{ viewingMember?.gender }} • <span class="font-monospace">{{ viewingMember?.phone }}</span>
+            </span>
+          </div>
+          <div class="col-md-4">
+            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Email Address</span>
+            <span class="fw-bold text-primary text-xs font-monospace">
+              {{ viewingMember?.email || '—' }}
             </span>
           </div>
           <div class="col-md-6">
@@ -956,6 +1039,7 @@ onMounted(() => {
                     :src="photoPreview" 
                     class="w-100 h-100 rounded-circle object-fit-cover border border-2 border-primary" 
                     alt="Photo Preview"
+                    @error="photoPreview = null"
                   />
                   <div 
                     v-else 
@@ -1048,11 +1132,50 @@ onMounted(() => {
                   <input id="lastName" v-model="lastName" type="text" class="form-control py-2 text-sm" placeholder="e.g. Smith" required />
                 </div>
                 <div class="col-md-4">
-                  <label for="memberGender" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Gender *</label>
-                  <select id="memberGender" v-model="gender" class="form-select py-2 text-sm" required>
-                    <option value="male">Male</option>
-                    <option value="female">Female</option>
-                  </select>
+                  <label class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Gender *</label>
+                  <div class="d-flex align-items-stretch" style="gap: 12px; height: 38px;">
+                    <!-- Male Card -->
+                    <label 
+                      class="flex-fill d-flex align-items-center justify-content-center gap-2 px-2 rounded-3 border cursor-pointer mb-0 transition-all select-none"
+                      :class="gender === 'male' 
+                        ? 'border-primary bg-primary bg-opacity-10 text-primary fw-bold shadow-xs' 
+                        : 'bg-body border-secondary border-opacity-25 text-muted fw-medium'"
+                      style="height: 100%;"
+                    >
+                      <input 
+                        v-model="gender" 
+                        class="form-check-input m-0 cursor-pointer" 
+                        type="radio" 
+                        name="memberGender" 
+                        value="male" 
+                        style="width: 1.15em; height: 1.15em;"
+                        required 
+                      />
+                      <i class="bi bi-gender-male fs-6"></i>
+                      <span class="text-sm">Male</span>
+                    </label>
+
+                    <!-- Female Card -->
+                    <label 
+                      class="flex-fill d-flex align-items-center justify-content-center gap-2 px-2 rounded-3 border cursor-pointer mb-0 transition-all select-none"
+                      :class="gender === 'female' 
+                        ? 'border-danger bg-danger bg-opacity-10 text-danger fw-bold shadow-xs' 
+                        : 'bg-body border-secondary border-opacity-25 text-muted fw-medium'"
+                      style="height: 100%;"
+                    >
+                      <input 
+                        v-model="gender" 
+                        class="form-check-input m-0 cursor-pointer" 
+                        type="radio" 
+                        name="memberGender" 
+                        value="female" 
+                        style="width: 1.15em; height: 1.15em;"
+                        required 
+                      />
+                      <i class="bi bi-gender-female fs-6"></i>
+                      <span class="text-sm">Female</span>
+                    </label>
+                  </div>
                 </div>
 
                 <div class="col-md-6">
@@ -1075,6 +1198,16 @@ onMounted(() => {
                   <input id="phone" v-model="phone" type="tel" maxlength="12" class="form-control py-2 text-sm font-monospace" placeholder="255755555555" required />
                 </div>
                 <div class="col-md-6">
+                  <label for="memberEmail" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Email Address *</label>
+                  <div class="input-group">
+                    <span class="input-group-text bg-transparent border-end-0 text-muted">
+                      <i class="bi bi-envelope text-primary"></i>
+                    </span>
+                    <input id="memberEmail" v-model="email" type="email" class="form-control border-start-0 ps-1 py-2 text-sm font-monospace" placeholder="member@example.com" required />
+                  </div>
+                </div>
+
+                <div class="col-md-4">
                   <label for="maritalStatus" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Marital Status *</label>
                   <select id="maritalStatus" v-model="maritalStatus" class="form-select py-2 text-sm" required>
                     <option value="single">Single</option>
@@ -1084,19 +1217,19 @@ onMounted(() => {
                   </select>
                 </div>
 
-                <div class="col-md-6">
+                <div class="col-md-4">
                   <label for="locId" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Location Branch *</label>
                   <select id="locId" v-model="locationId" class="form-select py-2 text-sm" required>
                     <option v-for="loc in locations" :key="loc.id" :value="loc.id">{{ loc.name }}</option>
                   </select>
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-4">
                   <label class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">
                     Age Group
                     <span class="text-primary text-lowercase fw-normal">(auto-computed)</span>
                   </label>
                   <div class="form-control py-2 text-sm bg-body-tertiary d-flex align-items-center justify-content-between border shadow-xs" style="height: 38px;">
-                    <span class="fw-semibold text-primary d-flex align-items-center gap-1.5">
+                    <span class="fw-semibold text-primary d-flex align-items-center gap-1.5 text-truncate">
                       <i class="bi bi-people-fill amms-accent"></i>
                       <span>{{ currentMatchedAgeGroupName }}</span>
                     </span>
@@ -1113,44 +1246,116 @@ onMounted(() => {
               <h6 class="fw-bold text-primary text-uppercase text-xs tracking-wider mb-2">Membership Status & Exemptions</h6>
               <div class="row g-3">
                 <div class="col-md-6">
-                  <label for="memStatus" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Membership Status *</label>
-                  <select id="memStatus" v-model="memberStatus" class="form-select py-2 text-sm" required>
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                    <option value="deceased">Deceased</option>
-                  </select>
+                  <label class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Membership Status *</label>
+                  <div class="d-flex align-items-stretch" style="gap: 10px; height: 38px;">
+                    <!-- Active -->
+                    <label 
+                      class="flex-fill d-flex align-items-center justify-content-center gap-1.5 px-2 rounded-3 border cursor-pointer mb-0 transition-all select-none text-nowrap"
+                      :class="memberStatus === 'active' 
+                        ? 'border-primary bg-primary bg-opacity-10 text-primary fw-bold shadow-xs' 
+                        : 'bg-body border-secondary border-opacity-25 text-muted fw-medium'"
+                      style="height: 100%;"
+                    >
+                      <input 
+                        v-model="memberStatus" 
+                        class="form-check-input m-0 cursor-pointer" 
+                        type="radio" 
+                        name="memberStatusOption" 
+                        value="active" 
+                        style="width: 1.1em; height: 1.1em;"
+                        required 
+                      />
+                      <i class="bi bi-check-circle-fill fs-6 text-success"></i>
+                      <span class="text-xs">Active</span>
+                    </label>
+
+                    <!-- Inactive -->
+                    <label 
+                      class="flex-fill d-flex align-items-center justify-content-center gap-1.5 px-2 rounded-3 border cursor-pointer mb-0 transition-all select-none text-nowrap"
+                      :class="memberStatus === 'inactive' 
+                        ? 'border-secondary bg-secondary bg-opacity-10 text-secondary fw-bold shadow-xs' 
+                        : 'bg-body border-secondary border-opacity-25 text-muted fw-medium'"
+                      style="height: 100%;"
+                    >
+                      <input 
+                        v-model="memberStatus" 
+                        class="form-check-input m-0 cursor-pointer" 
+                        type="radio" 
+                        name="memberStatusOption" 
+                        value="inactive" 
+                        style="width: 1.1em; height: 1.1em;"
+                        required 
+                      />
+                      <i class="bi bi-dash-circle-fill fs-6"></i>
+                      <span class="text-xs">Inactive</span>
+                    </label>
+
+                    <!-- Deceased -->
+                    <label 
+                      class="flex-fill d-flex align-items-center justify-content-center gap-1.5 px-2 rounded-3 border cursor-pointer mb-0 transition-all select-none text-nowrap"
+                      :class="memberStatus === 'deceased' 
+                        ? 'border-dark bg-dark bg-opacity-10 text-dark fw-bold shadow-xs' 
+                        : 'bg-body border-secondary border-opacity-25 text-muted fw-medium'"
+                      style="height: 100%;"
+                    >
+                      <input 
+                        v-model="memberStatus" 
+                        class="form-check-input m-0 cursor-pointer" 
+                        type="radio" 
+                        name="memberStatusOption" 
+                        value="deceased" 
+                        style="width: 1.1em; height: 1.1em;"
+                        required 
+                      />
+                      <i class="bi bi-slash-circle-fill fs-6"></i>
+                      <span class="text-xs">Deceased</span>
+                    </label>
+                  </div>
                 </div>
                 <div class="col-md-6">
-                  <label class="form-label text-xs fw-semibold text-secondary-amms text-uppercase d-block">
-                    Fee Exemption
-                  </label>
-                  <div class="p-2.5 bg-body-tertiary rounded-3 border d-flex align-items-center justify-content-between">
-                    <div class="d-flex align-items-center gap-2">
-                      <i 
-                        :class="feeExemption === 'yes' ? 'bi bi-shield-slash-fill text-warning' : 'bi bi-shield-check text-success'" 
-                        class="fs-5"
-                      ></i>
-                      <div>
-                        <span class="d-block fw-semibold text-xs text-body">
-                          {{ feeExemption === 'yes' ? 'Fee Exempted' : 'Standard Fees' }}
-                        </span>
-                        <small class="text-muted" style="font-size: 0.725rem;">
-                          {{ feeExemption === 'yes' ? 'Excluded from regular dues' : 'Applies standard fee schedule' }}
-                        </small>
-                      </div>
-                    </div>
-
-                    <div class="form-check form-switch m-0 ps-0 pe-1 d-flex align-items-center">
+                  <label class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Fee Exemption *</label>
+                  <div class="d-flex align-items-stretch" style="gap: 12px; height: 38px;">
+                    <!-- Standard (No) Option -->
+                    <label 
+                      class="flex-fill d-flex align-items-center justify-content-center gap-2 px-2 rounded-3 border cursor-pointer mb-0 transition-all select-none"
+                      :class="feeExemption === 'no' 
+                        ? 'border-primary bg-primary bg-opacity-10 text-primary fw-bold shadow-xs' 
+                        : 'bg-body border-secondary border-opacity-25 text-muted fw-medium'"
+                      style="height: 100%;"
+                    >
                       <input 
-                        id="feeExemptionToggle" 
-                        class="form-check-input ms-0 cursor-pointer" 
-                        type="checkbox" 
-                        role="switch"
-                        style="width: 2.6em; height: 1.4em;"
-                        :checked="feeExemption === 'yes'"
-                        @change="feeExemption = ($event.target as HTMLInputElement).checked ? 'yes' : 'no'"
+                        v-model="feeExemption" 
+                        class="form-check-input m-0 cursor-pointer" 
+                        type="radio" 
+                        name="memberFeeExemption" 
+                        value="no" 
+                        style="width: 1.15em; height: 1.15em;"
+                        required 
                       />
-                    </div>
+                      <i class="bi bi-shield-check fs-6"></i>
+                      <span class="text-sm">Standard (No)</span>
+                    </label>
+
+                    <!-- Exempted (Yes) Option -->
+                    <label 
+                      class="flex-fill d-flex align-items-center justify-content-center gap-2 px-2 rounded-3 border cursor-pointer mb-0 transition-all select-none"
+                      :class="feeExemption === 'yes' 
+                        ? 'border-warning bg-warning bg-opacity-10 text-warning-emphasis fw-bold shadow-xs' 
+                        : 'bg-body border-secondary border-opacity-25 text-muted fw-medium'"
+                      style="height: 100%;"
+                    >
+                      <input 
+                        v-model="feeExemption" 
+                        class="form-check-input m-0 cursor-pointer" 
+                        type="radio" 
+                        name="memberFeeExemption" 
+                        value="yes" 
+                        style="width: 1.15em; height: 1.15em;"
+                        required 
+                      />
+                      <i class="bi bi-shield-slash fs-6"></i>
+                      <span class="text-sm">Exempted (Yes)</span>
+                    </label>
                   </div>
                 </div>
               </div>
