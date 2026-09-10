@@ -15,6 +15,11 @@ interface Feature {
   features_group_id?: number
 }
 
+interface FeatureGroup {
+  id: number
+  name: string
+}
+
 interface RoleFeature {
   id: number
   role_id: number
@@ -23,6 +28,7 @@ interface RoleFeature {
 
 const { data: roles, loading: loadingRoles, error: rolesError, execute: fetchRoles, fetchWithAuth } = useApi<Role[]>()
 const { data: features, execute: fetchFeatures } = useApi<Feature[]>()
+const { data: featureGroups, execute: fetchFeatureGroups } = useApi<FeatureGroup[]>()
 const { data: roleFeatures, execute: fetchRoleFeatures } = useApi<RoleFeature[]>()
 
 const searchQuery = ref('')
@@ -37,6 +43,8 @@ const selectedRoleForPerms = ref<Role | null>(null)
 const isPermsDrawerOpen = ref(false)
 const selectedFeatureIds = ref<number[]>([])
 const isSavingPerms = ref(false)
+const isLoadingRolePerms = ref(false)
+const permsSearchQuery = ref('')
 
 // Pagination State
 const currentPage = ref(1)
@@ -56,6 +64,7 @@ const loadData = async () => {
     await Promise.all([
       fetchRoles((api) => api('/api/roles')),
       fetchFeatures((api) => api('/api/features')).catch(() => []),
+      fetchFeatureGroups((api) => api('/api/feature-groups')).catch(() => []),
       fetchRoleFeatures((api) => api('/api/role-features')).catch(() => [])
     ])
   } catch (err) {
@@ -86,12 +95,142 @@ watch([searchQuery, itemsPerPage], () => {
   currentPage.value = 1
 })
 
+const totalFeaturesCount = computed(() => features.value?.length || 0)
+const grantedCount = computed(() => selectedFeatureIds.value.length)
+const grantedPercentage = computed(() => {
+  if (!totalFeaturesCount.value) return 0
+  return Math.round((grantedCount.value / totalFeaturesCount.value) * 100)
+})
+
+const getGroupIcon = (name: string) => {
+  const n = (name || '').toLowerCase()
+  if (n.includes('member')) return 'bi-people-fill'
+  if (n.includes('finan') || n.includes('pay') || n.includes('fee')) return 'bi-wallet2'
+  if (n.includes('notif') || n.includes('comm') || n.includes('broadcast')) return 'bi-megaphone-fill'
+  if (n.includes('role') || n.includes('user') || n.includes('audit') || n.includes('secur') || n.includes('system') || n.includes('admin')) return 'bi-shield-lock-fill'
+  return 'bi-folder2-open'
+}
+
+const getGroupIconStyle = (name: string) => {
+  const n = (name || '').toLowerCase()
+  if (n.includes('member')) return { background: 'rgba(67, 118, 108, 0.15)', color: '#43766C' }
+  if (n.includes('finan') || n.includes('pay') || n.includes('fee')) return { background: 'rgba(177, 148, 112, 0.22)', color: '#8c6d48' }
+  if (n.includes('notif') || n.includes('comm') || n.includes('broadcast')) return { background: 'rgba(13, 162, 192, 0.16)', color: '#0aa2c0' }
+  if (n.includes('role') || n.includes('user') || n.includes('audit') || n.includes('secur') || n.includes('system') || n.includes('admin')) return { background: 'rgba(118, 69, 59, 0.16)', color: '#76453B' }
+  return { background: 'rgba(67, 118, 108, 0.15)', color: '#43766C' }
+}
+
 const getAssignedCount = (roleId: number) => {
   if (!roleFeatures.value) return 0
   const records = Array.isArray(roleFeatures.value) 
     ? roleFeatures.value 
     : ((roleFeatures.value as any)?.data || [])
   return records.filter((rf: any) => Number(rf.role_id || rf.roleId) === Number(roleId)).length
+}
+
+// Grouped features calculation
+const groupedFeatures = computed(() => {
+  if (!features.value) return []
+  const groups = featureGroups.value || []
+  const map = new Map<number, Feature[]>()
+  const ungrouped: Feature[] = []
+
+  for (const f of features.value) {
+    const gId = Number(f.features_group_id || (f as any).feature_group_id || (f as any).featuresGroupId)
+    if (gId) {
+      if (!map.has(gId)) map.set(gId, [])
+      map.get(gId)!.push(f)
+    } else {
+      ungrouped.push(f)
+    }
+  }
+
+  const list: Array<{ id: number; name: string; features: Feature[] }> = []
+  for (const g of groups) {
+    const feats = map.get(Number(g.id)) || []
+    if (feats.length > 0) {
+      list.push({
+        id: g.id,
+        name: g.name,
+        features: feats
+      })
+    }
+  }
+
+  if (ungrouped.length > 0) {
+    list.push({
+      id: 0,
+      name: 'General & Core Capabilities',
+      features: ungrouped
+    })
+  }
+
+  if (list.length === 0 && features.value.length > 0) {
+    list.push({
+      id: 1,
+      name: 'All Capabilities',
+      features: features.value
+    })
+  }
+
+  return list
+})
+
+const filteredGroupedFeatures = computed(() => {
+  const groups = groupedFeatures.value
+  if (!permsSearchQuery.value.trim()) return groups
+
+  const q = permsSearchQuery.value.toLowerCase()
+  return groups
+    .map(grp => {
+      const matched = grp.features.filter(f => f.name.toLowerCase().includes(q) || String(f.id).includes(q))
+      return { ...grp, features: matched }
+    })
+    .filter(grp => grp.features.length > 0)
+})
+
+const selectedGroupId = ref<number | 'all'>('all')
+
+const getGroupGrantedCount = (grp: { features: Feature[] }) => {
+  if (!grp || !grp.features) return 0
+  return grp.features.filter(f => selectedFeatureIds.value.includes(Number(f.id))).length
+}
+
+const activeGroupsToDisplay = computed(() => {
+  if (permsSearchQuery.value.trim() || selectedGroupId.value === 'all') {
+    return filteredGroupedFeatures.value
+  }
+  return filteredGroupedFeatures.value.filter(g => Number(g.id) === Number(selectedGroupId.value))
+})
+
+const isGroupAllSelected = (grp: { features: Feature[] }) => {
+  if (!grp.features.length) return false
+  return grp.features.every(f => selectedFeatureIds.value.includes(Number(f.id)))
+}
+
+const isGroupPartiallySelected = (grp: { features: Feature[] }) => {
+  if (!grp.features.length) return false
+  const count = grp.features.filter(f => selectedFeatureIds.value.includes(Number(f.id))).length
+  return count > 0 && count < grp.features.length
+}
+
+const toggleGroupSelection = (grp: { features: Feature[] }) => {
+  const allSelected = isGroupAllSelected(grp)
+  const grpIds = grp.features.map(f => Number(f.id))
+  if (allSelected) {
+    selectedFeatureIds.value = selectedFeatureIds.value.filter(id => !grpIds.includes(id))
+  } else {
+    selectedFeatureIds.value = Array.from(new Set([...selectedFeatureIds.value, ...grpIds]))
+  }
+}
+
+const selectAllFeatures = () => {
+  if (!features.value) return
+  selectedFeatureIds.value = features.value.map(f => Number(f.id))
+}
+
+const deselectAllFeatures = () => {
+  selectedFeatureIds.value = []
 }
 
 const openAddRoleModal = () => {
@@ -153,39 +292,43 @@ const handleSaveRole = async () => {
 
 const openPermsDrawer = async (role: Role) => {
   selectedRoleForPerms.value = role
+  permsSearchQuery.value = ''
+  selectedGroupId.value = 'all'
+  selectedFeatureIds.value = []
+  isLoadingRolePerms.value = true
   isPermsDrawerOpen.value = true
   
   try {
-    const res: any = await fetchWithAuth('/api/role-features')
-    console.log('GET /api/role-features response:', res)
+    // 1. Direct role features endpoint: GET /api/roles/{id}/features
+    const res: any = await fetchWithAuth(`/api/roles/${role.id}/features`).catch(() => null)
     
-    let records = []
+    let ids: number[] = []
     if (Array.isArray(res)) {
-      records = res
+      ids = res.map((x: any) => typeof x === 'number' ? x : Number(x.id || x.feature_id))
     } else if (Array.isArray(res?.data)) {
-      records = res.data
-    } else if (Array.isArray(res?.data?.data)) {
-      records = res.data.data
-    } else if (res?.data && typeof res.data === 'object') {
-      records = Object.values(res.data)
+      ids = res.data.map((x: any) => typeof x === 'number' ? x : Number(x.id || x.feature_id))
+    } else if (Array.isArray(res?.data?.feature_ids)) {
+      ids = res.data.feature_ids.map(Number)
+    } else {
+      // Fallback: global roleFeatures filter
+      const allRf = Array.isArray(roleFeatures.value) ? roleFeatures.value : ((roleFeatures.value as any)?.data || [])
+      ids = allRf
+        .filter((rf: any) => Number(rf.role_id || rf.roleId) === Number(role.id))
+        .map((rf: any) => Number(rf.feature_id || rf.featureId || rf.id))
     }
 
-    console.log('Parsed role-feature records:', records)
-
-    selectedFeatureIds.value = records
-      .filter((rf: any) => Number(rf.role_id ?? rf.roleId ?? rf.role_id) === Number(role.id))
-      .map((rf: any) => Number(rf.feature_id ?? rf.featureId ?? rf.id))
-
-    console.log('Selected feature IDs for role', role.id, ':', selectedFeatureIds.value)
+    selectedFeatureIds.value = ids.filter(id => Boolean(id) && !isNaN(id))
   } catch (err) {
-    console.error('Error fetching role-features:', err)
-    selectedFeatureIds.value = []
+    console.error('Error fetching role features:', err)
+  } finally {
+    isLoadingRolePerms.value = false
   }
 }
 
 const closePermsDrawer = () => {
   isPermsDrawerOpen.value = false
   selectedRoleForPerms.value = null
+  permsSearchQuery.value = ''
 }
 
 const isFeatureSelected = (featureId: number | string) => {
@@ -207,39 +350,23 @@ const handleSavePermissions = async () => {
 
   isSavingPerms.value = true
   try {
-    const roleId = selectedRoleForPerms.value.id
+    const roleId = Number(selectedRoleForPerms.value.id)
     
-    // 1. Fetch current existing records for this role
-    const currentRfList = await fetchWithAuth('/api/role-features').catch(() => [])
-    const allRecords = Array.isArray(currentRfList) ? currentRfList : (currentRfList?.data || [])
-    const existingRoleRecords = allRecords.filter((rf: any) => Number(rf.role_id) === Number(roleId))
-
-    const existingFeatureIds = existingRoleRecords.map((rf: any) => Number(rf.feature_id))
-
-    // 2. Add newly selected features
-    for (const fId of selectedFeatureIds.value) {
-      if (!existingFeatureIds.includes(fId)) {
-        await fetchWithAuth('/api/role-features', {
-          method: 'POST',
-          body: { role_id: roleId, feature_id: fId }
-        }).catch(() => {})
+    // Single atomic batch call: POST /api/role-features
+    await fetchWithAuth('/api/role-features', {
+      method: 'POST',
+      body: {
+        role_id: roleId,
+        feature_ids: selectedFeatureIds.value.map(Number)
       }
-    }
+    })
 
-    // 3. Delete unselected features
-    for (const record of existingRoleRecords) {
-      if (!selectedFeatureIds.value.includes(Number(record.feature_id))) {
-        await fetchWithAuth(`/api/role-features/${record.id}`, {
-          method: 'DELETE'
-        }).catch(() => {})
-      }
-    }
-
-    push.success(`Permissions for role "${selectedRoleForPerms.value.name}" saved!`)
+    push.success(`Permissions for role "${selectedRoleForPerms.value.name}" saved successfully!`)
     closePermsDrawer()
     await loadData()
   } catch (err: any) {
-    push.error('Failed to update permissions matrix')
+    const msg = err?.data?.message || err?.message || 'Failed to update permissions matrix'
+    push.error(msg)
   } finally {
     isSavingPerms.value = false
   }
@@ -355,8 +482,8 @@ onMounted(() => {
               </td>
               <td>
                 <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-20 px-2.5 py-1 rounded-pill text-xs fw-semibold">
-                  <i class="bi bi-key me-1"></i>
-                  {{ getAssignedCount(role.id) }} Features Enabled
+                  <i class="bi bi-shield-check me-1"></i>
+                  {{ getAssignedCount(role.id) }} / {{ totalFeaturesCount }} Features
                 </span>
               </td>
               <td class="pe-4 text-end">
@@ -525,77 +652,299 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- Permissions Matrix Modal Overlay -->
-    <div v-if="isPermsDrawerOpen" class="modal-backdrop fade show"></div>
-    
+    <!-- Centered Permissions Matrix Modal Backdrop -->
+    <div 
+      v-if="isPermsDrawerOpen" 
+      class="modal-backdrop fade show"
+      style="z-index: 1060;"
+      @click="closePermsDrawer"
+    ></div>
+
+    <!-- Centered Permissions Matrix Modal Dialog -->
     <div 
       v-if="isPermsDrawerOpen" 
       class="modal fade show d-block" 
       tabindex="-1" 
       role="dialog"
+      style="z-index: 1065;"
       @click.self="closePermsDrawer"
     >
-      <div class="modal-dialog modal-dialog-centered modal-lg">
-        <div class="modal-content amms-surface border-0 shadow-lg rounded-4 overflow-hidden">
-          
-          <div class="modal-header border-bottom px-4 py-3 bg-body-tertiary position-relative justify-content-center">
-            <h5 class="modal-title fw-bold text-primary text-sm mb-0 text-center">
-              <i class="bi bi-sliders me-1.5 amms-accent"></i>
-              <span>Permissions Matrix: {{ selectedRoleForPerms?.name }}</span>
-            </h5>
-            <button 
-              type="button" 
-              class="btn-close position-absolute end-0 me-3" 
-              @click="closePermsDrawer"
-              aria-label="Close"
-            ></button>
-          </div>
+      <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
+        <div class="modal-content amms-surface border-0 shadow-lg rounded-4 overflow-hidden" style="max-height: 90vh;">
 
-          <div class="modal-body p-4">
-            <p class="text-secondary-amms text-xs mb-3">
-              Select feature capabilities to grant permissions for role <strong class="text-primary">{{ selectedRoleForPerms?.name }}</strong>:
-            </p>
+          <!-- Executive Modal Header -->
+          <div class="modal-header border-bottom px-4 pt-3.5 pb-3 bg-body-tertiary flex-column align-items-stretch flex-shrink-0">
+            <div class="d-flex align-items-center justify-content-between mb-2.5">
+              <div class="d-flex align-items-center gap-3">
+                <div class="role-icon-badge rounded-3 d-flex align-items-center justify-content-center flex-shrink-0 shadow-2xs" style="width: 44px; height: 44px; background-color: var(--amms-primary); color: #FFFFFF;">
+                  <i class="bi bi-shield-lock-fill fs-4"></i>
+                </div>
+                <div>
+                  <div class="d-flex align-items-center gap-2 mb-0.5">
+                    <span class="badge rounded-pill text-uppercase px-2.5 py-1 text-xs fw-bold tracking-wider shadow-2xs" style="background-color: var(--amms-primary); color: #fff;">
+                      {{ selectedRoleForPerms?.name }}
+                    </span>
+                    <span class="text-xs text-muted font-monospace">ID #{{ selectedRoleForPerms?.id }}</span>
+                  </div>
+                  <h4 class="fw-bold mb-0 text-primary fs-5">
+                    Role Permissions &mdash; {{ selectedRoleForPerms?.name }}
+                  </h4>
+                </div>
+              </div>
 
-            <div v-if="!features || features.length === 0" class="alert alert-info text-xs py-3 px-3 rounded-3 mb-0">
-              <i class="bi bi-info-circle me-1"></i> No feature permissions configured yet in the system.
+              <button 
+                type="button" 
+                class="btn-close" 
+                @click="closePermsDrawer" 
+                aria-label="Close"
+              ></button>
             </div>
 
-            <div v-else class="row g-3">
-              <div v-for="feat in features" :key="feat.id" class="col-md-6">
-                <div 
-                  class="p-3 rounded-3 border d-flex align-items-center justify-content-between cursor-pointer transition-all"
-                  :class="{ 'border-primary bg-primary bg-opacity-10': isFeatureSelected(feat.id) }"
-                  @click="toggleFeaturePerm(feat.id)"
-                >
-                  <div class="d-flex align-items-center gap-2.5">
-                    <i :class="isFeatureSelected(feat.id) ? 'bi bi-check-circle-fill text-primary fs-5' : 'bi bi-circle text-muted fs-5'"></i>
-                    <span class="fw-semibold text-sm text-body">{{ feat.name }}</span>
-                  </div>
-                  <span class="badge rounded-pill text-xs" :class="isFeatureSelected(feat.id) ? 'bg-primary text-white' : 'bg-body-tertiary text-muted'">
-                    {{ isFeatureSelected(feat.id) ? 'Enabled' : 'Disabled' }}
-                  </span>
-                </div>
+            <!-- Coverage Progress Bar & Metric -->
+            <div class="coverage-bar-container bg-body rounded-3 p-2.5 border shadow-2xs">
+              <div class="d-flex align-items-center justify-content-between mb-1.5">
+                <span class="text-xs fw-semibold text-body">
+                  <i class="bi bi-shield-check text-primary me-1"></i>
+                  System Capability Coverage: 
+                  <strong class="text-primary">{{ grantedCount }}</strong> of {{ totalFeaturesCount }} Granted
+                </span>
+                <span class="badge rounded-pill fw-bold text-xs" :class="grantedPercentage > 0 ? 'bg-primary text-white' : 'bg-body-secondary text-muted'">
+                  {{ grantedPercentage }}% Active
+                </span>
+              </div>
+              <div class="progress-bar-track">
+                <div class="progress-bar-fill" :style="{ width: `${grantedPercentage}%` }"></div>
               </div>
             </div>
           </div>
 
-          <div class="modal-footer border-top px-4 py-3 bg-body-tertiary">
-            <button 
-              type="button" 
-              class="btn btn-sm btn-outline-secondary rounded-pill px-3" 
-              @click="closePermsDrawer"
-            >
-              Cancel
-            </button>
-            <button 
-              type="button" 
-              class="btn btn-sm btn-primary rounded-pill px-4 fw-semibold d-flex align-items-center gap-2 shadow-sm"
-              :disabled="isSavingPerms"
-              @click="handleSavePermissions"
-            >
-              <span v-if="isSavingPerms" class="spinner-border spinner-border-sm" role="status"></span>
-              <span>{{ isSavingPerms ? 'Saving Matrix...' : 'Save Permissions' }}</span>
-            </button>
+          <!-- Modal Body: Two-Sided Master-Detail Split Layout -->
+          <div class="modal-body p-0 d-flex flex-row overflow-hidden" style="height: 65vh; min-height: 520px;">
+            
+            <!-- Left Side: Modules & Categories Sidebar -->
+            <div class="category-sidebar d-flex flex-column border-end bg-body-tertiary flex-shrink-0" style="width: 310px;">
+              <!-- Search Box -->
+              <div class="p-3 border-bottom bg-body">
+                <div class="input-group input-group-sm rounded-pill border overflow-hidden bg-body shadow-2xs">
+                  <span class="input-group-text bg-transparent border-0 text-muted ps-2.5">
+                    <i class="bi bi-search"></i>
+                  </span>
+                  <input 
+                    v-model="permsSearchQuery" 
+                    type="search" 
+                    class="form-control border-0 bg-transparent ps-1 text-xs shadow-none" 
+                    placeholder="Filter capabilities..." 
+                  />
+                  <button 
+                    v-if="permsSearchQuery" 
+                    class="btn bg-transparent border-0 text-muted text-xs pe-2.5" 
+                    @click="permsSearchQuery = ''"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              <!-- Categories Navigation List -->
+              <div class="category-list overflow-y-auto flex-grow-1 p-2">
+                <!-- All Categories Option -->
+                <button
+                  type="button"
+                  class="category-nav-item w-100 text-start border-0 rounded-3 px-3 py-2.5 mb-1.5 d-flex align-items-center justify-content-between transition-all"
+                  :class="{ 'active-category': selectedGroupId === 'all' }"
+                  @click="selectedGroupId = 'all'"
+                >
+                  <div class="d-flex align-items-center gap-2.5 overflow-hidden">
+                    <div class="category-icon-box" style="background-color: rgba(67, 118, 108, 0.12); color: #43766C;">
+                      <i class="bi bi-grid-fill fs-6"></i>
+                    </div>
+                    <div class="text-truncate">
+                      <div class="fw-bold text-xs">All Categories</div>
+                      <div class="text-xs opacity-75">{{ totalFeaturesCount }} capabilities</div>
+                    </div>
+                  </div>
+                  <span 
+                    class="badge rounded-pill font-monospace text-xs" 
+                    :class="selectedGroupId === 'all' ? 'bg-white text-primary fw-bold' : 'bg-body border text-muted'"
+                  >
+                    {{ grantedCount }}/{{ totalFeaturesCount }}
+                  </span>
+                </button>
+
+                <div class="px-2 my-2 text-uppercase text-xs fw-bold tracking-wider text-muted opacity-75" style="font-size: 0.68rem;">
+                  Feature Modules
+                </div>
+
+                <!-- Individual Module Categories -->
+                <button
+                  v-for="grp in filteredGroupedFeatures"
+                  :key="grp.id"
+                  type="button"
+                  class="category-nav-item w-100 text-start border-0 rounded-3 px-3 py-2.5 mb-1.5 d-flex align-items-center justify-content-between transition-all"
+                  :class="{ 'active-category': selectedGroupId === grp.id }"
+                  @click="selectedGroupId = grp.id"
+                >
+                  <div class="d-flex align-items-center gap-2.5 overflow-hidden pe-1">
+                    <div class="category-icon-box" :style="getGroupIconStyle(grp.name)">
+                      <i :class="`bi ${getGroupIcon(grp.name)} fs-6`"></i>
+                    </div>
+                    <div class="text-truncate">
+                      <div class="fw-bold text-xs text-truncate">{{ grp.name }}</div>
+                      <div class="text-xs opacity-75">{{ grp.features.length }} capabilities</div>
+                    </div>
+                  </div>
+                  <span 
+                    class="badge rounded-pill font-monospace text-xs flex-shrink-0"
+                    :class="selectedGroupId === grp.id ? 'bg-white text-primary fw-bold' : (getGroupGrantedCount(grp) > 0 ? 'bg-primary-subtle text-primary fw-semibold' : 'bg-body border text-muted')"
+                  >
+                    {{ getGroupGrantedCount(grp) }}/{{ grp.features.length }}
+                  </span>
+                </button>
+              </div>
+
+              <!-- Quick Bulk Actions in Sidebar -->
+              <div class="p-2.5 border-top bg-body d-flex align-items-center gap-2">
+                <button 
+                  type="button" 
+                  class="btn btn-xs btn-outline-primary rounded-pill flex-fill py-1 text-xs fw-semibold shadow-2xs"
+                  @click="selectAllFeatures"
+                >
+                  <i class="bi bi-check2-all me-1"></i> Grant All
+                </button>
+                <button 
+                  type="button" 
+                  class="btn btn-xs btn-outline-secondary rounded-pill flex-fill py-1 text-xs fw-semibold"
+                  @click="deselectAllFeatures"
+                >
+                  <i class="bi bi-x-circle me-1"></i> Clear All
+                </button>
+              </div>
+            </div>
+
+            <!-- Right Side: Capabilities Detail Panel -->
+            <div class="capabilities-detail flex-grow-1 bg-body overflow-y-auto p-4 p-md-4">
+              
+              <!-- Loading State -->
+              <div v-if="isLoadingRolePerms" class="text-center py-5">
+                <div class="spinner-border text-primary" role="status" style="width: 2.5rem; height: 2.5rem;">
+                  <span class="visually-hidden">Loading role permissions...</span>
+                </div>
+                <p class="text-xs fw-semibold text-primary mt-2.5 mb-0">Fetching role permissions matrix...</p>
+              </div>
+
+              <!-- Empty State -->
+              <div v-else-if="activeGroupsToDisplay.length === 0" class="text-center py-5 text-muted">
+                <i class="bi bi-filter-circle fs-1 d-block mb-2 text-opacity-50"></i>
+                <p class="mb-0 fw-medium">No matching capabilities found</p>
+                <small v-if="permsSearchQuery">Try adjusting your search filter.</small>
+                <small v-else>No features found in this category.</small>
+              </div>
+
+              <!-- Active Categories & Capabilities -->
+              <div v-else class="d-flex flex-column gap-4">
+                <div 
+                  v-for="grp in activeGroupsToDisplay" 
+                  :key="grp.id"
+                  class="category-detail-section bg-body rounded-4 border p-3.5 shadow-2xs"
+                >
+                  <!-- Section Header with Group Info & Master Switch -->
+                  <div class="d-flex align-items-center justify-content-between pb-3 mb-3 border-bottom">
+                    <div class="d-flex align-items-center gap-3">
+                      <div class="category-icon-box" :style="getGroupIconStyle(grp.name)">
+                        <i :class="`bi ${getGroupIcon(grp.name)} fs-5`"></i>
+                      </div>
+                      <div>
+                        <h5 class="fw-bold fs-6 mb-0 text-primary">{{ grp.name }}</h5>
+                        <span class="text-xs text-secondary-amms font-monospace">
+                          {{ getGroupGrantedCount(grp) }} of {{ grp.features.length }} capabilities granted
+                        </span>
+                      </div>
+                    </div>
+
+                    <!-- Master Category Toggle -->
+                    <div class="form-check form-switch mb-0 d-flex align-items-center gap-2">
+                      <input 
+                        class="form-check-input cursor-pointer" 
+                        type="checkbox" 
+                        :id="`group-switch-${grp.id}`"
+                        :checked="isGroupAllSelected(grp)"
+                        @change="toggleGroupSelection(grp)"
+                      />
+                      <label 
+                        :for="`group-switch-${grp.id}`" 
+                        class="form-check-label text-xs fw-semibold text-secondary-amms cursor-pointer user-select-none"
+                      >
+                        {{ isGroupAllSelected(grp) ? 'All Enabled' : (isGroupPartiallySelected(grp) ? 'Partial' : 'Enable All') }}
+                      </label>
+                    </div>
+                  </div>
+
+                  <!-- Spacious 2-Column Capability Grid -->
+                  <div class="row g-3">
+                    <div 
+                      v-for="feat in grp.features" 
+                      :key="feat.id"
+                      class="col-12 col-xl-6"
+                    >
+                      <div 
+                        class="capability-tile p-3 rounded-3 border d-flex align-items-center justify-content-between cursor-pointer transition-all"
+                        :class="{ 'active-tile': isFeatureSelected(feat.id) }"
+                        @click="toggleFeaturePerm(feat.id)"
+                      >
+                        <div class="d-flex align-items-center gap-3 overflow-hidden pe-2">
+                          <i 
+                            :class="isFeatureSelected(feat.id) ? 'bi bi-check-circle-fill text-primary fs-5' : 'bi bi-circle text-muted fs-5 opacity-75'"
+                          ></i>
+                          <div class="overflow-hidden">
+                            <span class="fw-semibold text-xs text-body text-truncate d-block" :title="feat.name">
+                              {{ feat.name }}
+                            </span>
+                          </div>
+                        </div>
+                        <span 
+                          class="badge rounded-pill font-monospace text-xs flex-shrink-0"
+                          :class="isFeatureSelected(feat.id) ? 'bg-primary text-white' : 'bg-body-secondary text-muted'"
+                        >
+                          #{{ feat.id }}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+
+          <!-- Sticky Modal Footer -->
+          <div class="modal-footer border-top px-4 py-3 bg-body-tertiary d-flex align-items-center justify-content-between flex-shrink-0">
+            <div class="text-xs text-secondary-amms">
+              <i class="bi bi-info-circle text-primary me-1"></i>
+              Changes take effect immediately upon saving.
+            </div>
+
+            <div class="d-flex align-items-center gap-2">
+              <button 
+                type="button" 
+                class="btn btn-sm btn-outline-secondary rounded-pill px-3.5" 
+                @click="closePermsDrawer"
+                :disabled="isSavingPerms"
+              >
+                Cancel
+              </button>
+              <button 
+                type="button" 
+                class="btn btn-sm btn-primary rounded-pill px-4 fw-semibold d-flex align-items-center gap-2 shadow-sm"
+                :disabled="isSavingPerms"
+                @click="handleSavePermissions"
+              >
+                <span v-if="isSavingPerms" class="spinner-border spinner-border-sm" role="status"></span>
+                <i v-else class="bi bi-shield-check"></i>
+                <span>{{ isSavingPerms ? 'Saving Permissions...' : 'Save Permissions' }}</span>
+              </button>
+            </div>
           </div>
 
         </div>
@@ -632,7 +981,7 @@ onMounted(() => {
 .role-icon-badge {
   width: 28px;
   height: 28px;
-  background-color: rgba(27, 42, 74, 0.08);
+  background-color: rgba(67, 118, 108, 0.1);
 }
 
 .action-btn {
@@ -650,5 +999,93 @@ onMounted(() => {
 
 .cursor-pointer {
   cursor: pointer;
+}
+
+/* Progress Bar Track */
+.progress-bar-track {
+  height: 6px;
+  border-radius: 999px;
+  background-color: rgba(67, 118, 108, 0.12);
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #43766C, #5fa396);
+  border-radius: 999px;
+  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.group-icon-box,
+.category-icon-box {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.category-nav-item {
+  background: transparent;
+  color: var(--bs-body-color);
+  transition: all 0.15s ease-in-out;
+}
+
+.category-nav-item:hover {
+  background-color: rgba(67, 118, 108, 0.08);
+}
+
+.category-nav-item.active-category {
+  background-color: var(--amms-primary, #43766C) !important;
+  color: #FFFFFF !important;
+  box-shadow: 0 4px 12px rgba(67, 118, 108, 0.25);
+}
+
+.category-nav-item.active-category .category-icon-box {
+  background-color: rgba(255, 255, 255, 0.2) !important;
+  color: #FFFFFF !important;
+}
+
+.category-detail-section {
+  border-color: rgba(67, 118, 108, 0.14) !important;
+}
+
+.group-perm-card {
+  border-color: rgba(67, 118, 108, 0.16) !important;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.group-perm-card:hover {
+  border-color: rgba(67, 118, 108, 0.32) !important;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.05) !important;
+}
+
+.capability-tile {
+  background-color: var(--bs-body-bg);
+  border: 1px solid rgba(0, 0, 0, 0.09) !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+}
+
+.capability-tile:hover {
+  border-color: var(--amms-primary, #43766C) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(67, 118, 108, 0.1);
+}
+
+.capability-tile.active-tile {
+  background: linear-gradient(135deg, rgba(67, 118, 108, 0.08) 0%, rgba(67, 118, 108, 0.16) 100%) !important;
+  border-color: var(--amms-primary, #43766C) !important;
+  box-shadow: 0 2px 8px rgba(67, 118, 108, 0.14);
+}
+
+.shadow-2xs {
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.shadow-2xl {
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
 }
 </style>

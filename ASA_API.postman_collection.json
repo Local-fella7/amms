@@ -1,0 +1,1977 @@
+{
+  "info": {
+    "name": "ASA - Arusha Somali Association API",
+    "description": "ASA - Arusha Somali Association API. Updated 10 September 2026.\n\n1. Set collection variables base_url, login_email and login_password. The local base URL is http://127.0.0.1:8080/api.\n2. Send Auth > Login; the response script saves jwt_token automatically. Complete Auth > Change Password if data.requires_password_change is true.\n3. Set member_id, association_id and role_id to the records you want to use. All protected requests inherit Bearer authentication.\n4. For email, open Email Broadcast and send steps 1, 2 and 3 individually. Step 1 saves notification_id; step 2 links member_id; step 3 sends through the configured SendGrid SMTP transport.\n\nSelect requests individually: this collection includes real create, update, delete and message-send operations. File uploads use form-data with an automatically generated Content-Type boundary.\n\nSee docs/API.md and docs/postman/README.md for the complete guide. Credentials and tokens are intentionally blank in this export.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:8080/api",
+      "type": "string",
+      "description": "API URL including /api, without a trailing slash. For LAN access replace 127.0.0.1 with the server LAN address."
+    },
+    {
+      "key": "login_email",
+      "value": "",
+      "type": "string",
+      "description": "Your existing ASA account email."
+    },
+    {
+      "key": "login_password",
+      "value": "",
+      "type": "string",
+      "description": "Your current password; enter locally in Postman."
+    },
+    {
+      "key": "new_password",
+      "value": "",
+      "type": "string",
+      "description": "A different password of at least 6 characters, for Change Password."
+    },
+    {
+      "key": "new_user_password",
+      "value": "",
+      "type": "string",
+      "description": "Password of at least 6 characters for Create User."
+    },
+    {
+      "key": "jwt_token",
+      "value": "",
+      "type": "string",
+      "description": "Automatically saved by a successful Login."
+    },
+    {
+      "key": "member_id",
+      "value": "1",
+      "type": "string",
+      "description": "Existing member to view, update, link to a notification or include in a report."
+    },
+    {
+      "key": "association_id",
+      "value": "1",
+      "type": "string",
+      "description": "Existing association ID; only one association record is allowed."
+    },
+    {
+      "key": "role_id",
+      "value": "3",
+      "type": "string",
+      "description": "Existing role to read or edit; choose the intended role before saving permissions."
+    },
+    {
+      "key": "notification_id",
+      "value": "",
+      "type": "string",
+      "description": "Saved by Create Notification; alternatively enter an existing notification ID."
+    },
+    {
+      "key": "fee_id",
+      "value": "1",
+      "type": "string",
+      "description": "Existing fee used by optional outstanding/report filters."
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{jwt_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.unset('jwt_token');",
+                  "if (pm.response.code === 200) {",
+                  "    const data = pm.response.json().data;",
+                  "    pm.collectionVariables.set('jwt_token', data.token);",
+                  "    pm.test('Token saved', function () { pm.expect(data.token).to.be.a('string'); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{login_email}}\",\n  \"password\": \"{{login_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/auth/login",
+            "description": "Set login_email and login_password to your existing account credentials. A successful response saves jwt_token. If data.requires_password_change is true, send Change Password before opening other resources."
+          }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/auth/change-password",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"current_password\": \"{{login_password}}\",\n  \"new_password\": \"{{new_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Requires the saved Bearer token. Set new_password to a different password of at least 6 characters. After success, update login_password locally to the new value for future logins. The existing token can continue to be used."
+          }
+        },
+        {
+          "name": "Get Me",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/auth/me"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Email Broadcast",
+      "description": "Requires Manage Notifications (8). After login, send steps 1, 2 and 3 individually in order. name is the email subject; content is the message; member_id identifies the recipient whose stored email is used. For several recipients repeat step 2 with each member_id before step 3. ASA placeholders such as {{first_name}} and {{outstanding_balance}} should not be defined as Postman variables. See docs/postman/README.md.",
+      "item": [
+        {
+          "name": "1 - Create Email Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"ASA Membership Reminder\",\n  \"content\": \"Dear {{first_name}}, your outstanding balance is TZS {{outstanding_balance}}.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/notifications",
+            "description": "Creates the message and saves notification_id. name becomes the email subject; content becomes the message. An optional notification_template_id links a template but does not copy its content. ASA placeholders are resolved for each member when sending."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.unset('notification_id');",
+                  "if (pm.response.code === 201) {",
+                  "    pm.collectionVariables.set('notification_id', String(pm.response.json().data.id));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2 - Add Recipient Member",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/notification-members",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notification_id\": {{notification_id}},\n  \"member_id\": {{member_id}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Set member_id to the intended existing member, with an email address saved on their member record. Send once per recipient member. notification_id is saved by step 1. Linking does not send a message."
+          }
+        },
+        {
+          "name": "3 - Send Email",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/notifications/{{notification_id}}/broadcast",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channel\": \"email\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Sends now through the configured SendGrid SMTP transport to ALL members linked to this notification. It does not accept a to/email field. Optional fee_id limits the outstanding balance placeholder. Inspect data.success, data.sent, data.failed and data.results: HTTP 200 alone does not mean every delivery succeeded. Sending again resends to every linked recipient."
+          }
+        }
+      ]
+    },
+    {
+      "name": "SMS Broadcast",
+      "description": "Requires Manage Notifications (8). First create a notification and link its recipients using the same steps as Email Broadcast. Select ONE dispatch channel: each dispatch sends again. SMS uses the configured Beem service.",
+      "item": [
+        {
+          "name": "Send SMS",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/notifications/{{notification_id}}/broadcast",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channel\": \"sms\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Sends to every linked member using their saved phone. Optional fee_id limits the outstanding balance placeholder."
+          }
+        },
+        {
+          "name": "Send Email and SMS",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/notifications/{{notification_id}}/broadcast",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channel\": \"both\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Sends on both channels. A recipient counts as sent when either channel succeeds; inspect the per-recipient result messages."
+          }
+        },
+        {
+          "name": "Check SMS Balance",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/notifications/sms-balance",
+            "description": "Queries the configured Beem account balance. Upstream failure returns 502."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Roles",
+      "item": [
+        {
+          "name": "List Roles",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/roles"
+          }
+        },
+        {
+          "name": "Get Role",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/roles/1"
+          }
+        },
+        {
+          "name": "Create Role",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"New Role\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/roles"
+          }
+        },
+        {
+          "name": "Update Role",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Role\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/roles/1"
+          }
+        },
+        {
+          "name": "Delete Role",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/roles/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Feature Groups",
+      "item": [
+        {
+          "name": "List Feature Groups",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/feature-groups"
+          }
+        },
+        {
+          "name": "Get Feature Group",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/feature-groups/1"
+          }
+        }
+      ],
+      "description": "Read-only endpoints. Feature definitions come from the JSON catalog; audit records are written by the backend."
+    },
+    {
+      "name": "Features",
+      "item": [
+        {
+          "name": "Feature Catalog",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/feature-catalog"
+          }
+        },
+        {
+          "name": "List Features",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/features"
+          }
+        },
+        {
+          "name": "Get Feature",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/features/1"
+          }
+        }
+      ],
+      "description": "Read-only endpoints. Feature definitions come from the JSON catalog; audit records are written by the backend."
+    },
+    {
+      "name": "Role Features",
+      "item": [
+        {
+          "name": "Get Role Feature Selection",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/roles/{{role_id}}/features"
+          }
+        },
+        {
+          "name": "Save Role Feature Selection",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role_id\": {{role_id}},\n  \"feature_ids\": [6, 7, 10]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/role-features",
+            "description": "Replaces the role’s full selection. IDs must be unique integers from the catalog. Manage Roles permission is required."
+          }
+        },
+        {
+          "name": "List Role Features",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/role-features"
+          }
+        },
+        {
+          "name": "Get Role Feature",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/role-features/1"
+          }
+        },
+        {
+          "name": "Create Role Feature",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role_id\": 1,\n  \"feature_id\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/role-features"
+          }
+        },
+        {
+          "name": "Update Role Feature",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role_id\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/role-features/1"
+          }
+        },
+        {
+          "name": "Delete Role Feature",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/role-features/1"
+          }
+        }
+      ],
+      "description": "Requires Manage Roles (2). Save Role Feature Selection replaces the entire selection for role_id; an empty feature_ids list clears it. Feature and group definitions are read-only JSON."
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/users"
+          }
+        },
+        {
+          "name": "Get User",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/users/1"
+          }
+        },
+        {
+          "name": "Create User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Jane\",\n  \"last_name\": \"Doe\",\n  \"email\": \"jane@example.com\",\n  \"phone\": \"255700000002\",\n  \"password\": \"{{new_user_password}}\",\n  \"role_id\": 1,\n  \"status\": \"active\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/users"
+          }
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Janet\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/users/1"
+          }
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/users/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Association",
+      "item": [
+        {
+          "name": "List Association",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/association"
+          }
+        },
+        {
+          "name": "Get Association",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/association/{{association_id}}"
+          }
+        },
+        {
+          "name": "Create Association",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "name",
+                  "value": "Arusha Somali Association",
+                  "type": "text"
+                },
+                {
+                  "key": "address",
+                  "value": "Arusha, Tanzania",
+                  "type": "text"
+                },
+                {
+                  "key": "chairman_phone",
+                  "value": "255711111111",
+                  "type": "text"
+                },
+                {
+                  "key": "secretary_phone",
+                  "value": "255722222222",
+                  "type": "text"
+                },
+                {
+                  "key": "treasurer_phone",
+                  "value": "255733333333",
+                  "type": "text"
+                },
+                {
+                  "key": "registrar_phone",
+                  "value": "255744444444",
+                  "type": "text"
+                },
+                {
+                  "key": "logo",
+                  "type": "file",
+                  "src": [],
+                  "disabled": true
+                }
+              ]
+            },
+            "url": "{{base_url}}/association",
+            "description": "Select and enable the optional logo file to upload it with these fields. Let Postman generate the multipart Content-Type header automatically."
+          }
+        },
+        {
+          "name": "Update Association",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "name",
+                  "value": "Arusha Somali Association",
+                  "type": "text"
+                },
+                {
+                  "key": "registrar_phone",
+                  "value": "255747000000",
+                  "type": "text"
+                },
+                {
+                  "key": "logo",
+                  "type": "file",
+                  "src": [],
+                  "disabled": true
+                }
+              ]
+            },
+            "url": "{{base_url}}/association/{{association_id}}",
+            "description": "Select and enable the optional logo file to upload it with these fields. Let Postman generate the multipart Content-Type header automatically."
+          }
+        },
+        {
+          "name": "Delete Association",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/association/{{association_id}}"
+          }
+        },
+        {
+          "name": "Update Association (PUT JSON)",
+          "request": {
+            "method": "PUT",
+            "url": "{{base_url}}/association/{{association_id}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"registrar_phone\": \"255747000000\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Updates text fields. For a logo use POST form-data."
+          }
+        },
+        {
+          "name": "Upload Association Logo",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/association/{{association_id}}/logo",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "logo",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "description": "Choose the logo file. Saves uploads/logos/logo.jpg, which appears on PDF reports. Keep automatic multipart Content-Type enabled."
+          }
+        }
+      ],
+      "description": "Requires Manage Association (11). Only one record is allowed; a second create returns 409. Update the existing association_id. Logos are converted to JPEG and saved as uploads/logos/logo.jpg."
+    },
+    {
+      "name": "Age Groups",
+      "item": [
+        {
+          "name": "List Age Groups",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/age-groups"
+          }
+        },
+        {
+          "name": "Get Age Group",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/age-groups/1"
+          }
+        },
+        {
+          "name": "Create Age Group",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Infant\",\n  \"from_age\": 0,\n  \"to_age\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/age-groups"
+          }
+        },
+        {
+          "name": "Update Age Group",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Age Group\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/age-groups/1"
+          }
+        },
+        {
+          "name": "Delete Age Group",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/age-groups/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notification Templates",
+      "item": [
+        {
+          "name": "List Templates",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/notification-templates"
+          }
+        },
+        {
+          "name": "Get Template",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/notification-templates/1"
+          }
+        },
+        {
+          "name": "Create Template",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Fee Reminder\",\n  \"content\": \"Dear {{first_name}}, please pay your annual fee.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/notification-templates"
+          }
+        },
+        {
+          "name": "Update Template",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Template\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/notification-templates/1"
+          }
+        },
+        {
+          "name": "Delete Template",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/notification-templates/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Locations",
+      "item": [
+        {
+          "name": "List Locations",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/locations"
+          }
+        },
+        {
+          "name": "Get Location",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/locations/1"
+          }
+        },
+        {
+          "name": "Create Location",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Moshi\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/locations"
+          }
+        },
+        {
+          "name": "Update Location",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Location\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/locations/1"
+          }
+        },
+        {
+          "name": "Delete Location",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/locations/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Fees",
+      "item": [
+        {
+          "name": "List Fees",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/fees"
+          }
+        },
+        {
+          "name": "Get Fee",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/fees/1"
+          }
+        },
+        {
+          "name": "Create Fee",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Annual Subscription 2027\",\n  \"amount\": 60000.00,\n  \"year\": 2027\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/fees"
+          }
+        },
+        {
+          "name": "Update Fee",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 55000.00\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/fees/1"
+          }
+        },
+        {
+          "name": "Delete Fee",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/fees/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payment Modes",
+      "item": [
+        {
+          "name": "List Payment Modes",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/payment-modes"
+          }
+        },
+        {
+          "name": "Get Payment Mode",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/payment-modes/1"
+          }
+        },
+        {
+          "name": "Create Payment Mode",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Cheque\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/payment-modes"
+          }
+        },
+        {
+          "name": "Update Payment Mode",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Mode\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/payment-modes/1"
+          }
+        },
+        {
+          "name": "Delete Payment Mode",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/payment-modes/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Members",
+      "item": [
+        {
+          "name": "List Members",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/members"
+          }
+        },
+        {
+          "name": "Get Member",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/members/{{member_id}}"
+          }
+        },
+        {
+          "name": "Create Member",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Alice\",\n  \"last_name\": \"Smith\",\n  \"fathers_name\": \"Bob Smith\",\n  \"mothers_name\": \"Carol Smith\",\n  \"location_id\": 1,\n  \"date_of_birth\": \"1985-03-20\",\n  \"member_status\": \"active\",\n  \"marital_status\": \"single\",\n  \"phone\": \"255755555555\",\n  \"fee_exemption\": \"no\",\n  \"age_group_id\": 2,\n  \"gender\": \"female\",\n  \"email\": \"alice@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/members",
+            "description": "Requires first_name, last_name and gender. registration_date is assigned today by the server. Use Create Member with Photo to include an image."
+          }
+        },
+        {
+          "name": "Create Member with Photo",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/members",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "first_name",
+                  "value": "Alice",
+                  "type": "text"
+                },
+                {
+                  "key": "last_name",
+                  "value": "Smith",
+                  "type": "text"
+                },
+                {
+                  "key": "fathers_name",
+                  "value": "Bob Smith",
+                  "type": "text"
+                },
+                {
+                  "key": "mothers_name",
+                  "value": "Carol Smith",
+                  "type": "text"
+                },
+                {
+                  "key": "location_id",
+                  "value": "1",
+                  "type": "text"
+                },
+                {
+                  "key": "date_of_birth",
+                  "value": "1985-03-20",
+                  "type": "text"
+                },
+                {
+                  "key": "member_status",
+                  "value": "active",
+                  "type": "text"
+                },
+                {
+                  "key": "marital_status",
+                  "value": "single",
+                  "type": "text"
+                },
+                {
+                  "key": "phone",
+                  "value": "255755555555",
+                  "type": "text"
+                },
+                {
+                  "key": "fee_exemption",
+                  "value": "no",
+                  "type": "text"
+                },
+                {
+                  "key": "age_group_id",
+                  "value": "2",
+                  "type": "text"
+                },
+                {
+                  "key": "gender",
+                  "value": "female",
+                  "type": "text"
+                },
+                {
+                  "key": "email",
+                  "value": "alice@example.com",
+                  "type": "text"
+                },
+                {
+                  "key": "photo",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "description": "Choose the photo file in Body > form-data. Creates the member and saves the photo using the new member ID. Let Postman generate the multipart Content-Type header and boundary."
+          }
+        },
+        {
+          "name": "Update Member",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"member_status\": \"inactive\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/members/{{member_id}}",
+            "description": "Updates text fields using POST JSON. registration_date is ignored. Use Upload Member Photo for photo-only updates."
+          }
+        },
+        {
+          "name": "Delete Member",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/members/{{member_id}}"
+          }
+        },
+        {
+          "name": "Update Member (PUT JSON)",
+          "request": {
+            "method": "PUT",
+            "url": "{{base_url}}/members/{{member_id}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"255747000000\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "JSON update alternative. Use POST form-data for photo uploads."
+          }
+        },
+        {
+          "name": "Upload Member Photo",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/members/{{member_id}}",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "photo",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "description": "Choose the photo file. You may add member text fields to this same form. The image replaces uploads/members/{member_id}.webp. Keep automatic multipart Content-Type enabled; do not add an application/json header or _method."
+          }
+        }
+      ],
+      "description": "Requires Manage Members (3). Phones are optional strings of exactly 12 digits starting with 255. registration_date is automatic on create and ignored on update. Photos are saved as uploads/members/{id}.webp."
+    },
+    {
+      "name": "Fee Payments",
+      "item": [
+        {
+          "name": "List Fee Payments",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/fee-payments"
+          }
+        },
+        {
+          "name": "Get Fee Payment",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/fee-payments/1"
+          }
+        },
+        {
+          "name": "Create Fee Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date\": \"2026-08-03\",\n  \"payment_mode_id\": 1,\n  \"amount\": 50000.00,\n  \"fee_id\": 1,\n  \"member_id\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/fee-payments"
+          }
+        },
+        {
+          "name": "Delete Fee Payment",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/fee-payments/1"
+          }
+        },
+        {
+          "name": "Outstanding Balances",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/fee-payments/outstanding",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "fee-payments",
+                "outstanding"
+              ],
+              "query": [
+                {
+                  "key": "fee_id",
+                  "value": "{{fee_id}}",
+                  "disabled": true,
+                  "description": "Limit results to this fee."
+                }
+              ]
+            },
+            "description": "Returns JSON outstanding balances. Optional query parameter: fee_id. Requires Manage Payments (7)."
+          }
+        },
+        {
+          "name": "Member Outstanding Balance",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/fee-payments/outstanding/{{member_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "fee-payments",
+                "outstanding",
+                "{{member_id}}"
+              ],
+              "query": [
+                {
+                  "key": "fee_id",
+                  "value": "{{fee_id}}",
+                  "disabled": true,
+                  "description": "Limit results to this fee."
+                }
+              ]
+            },
+            "description": "Returns JSON outstanding balances. Optional query parameter: fee_id. Requires Manage Payments (7)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "List Notifications",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/notifications"
+          }
+        },
+        {
+          "name": "Get Notification",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/notifications/{{notification_id}}"
+          }
+        },
+        {
+          "name": "Create Notification",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"ASA Membership Reminder\",\n  \"content\": \"Dear {{first_name}}, your outstanding balance is TZS {{outstanding_balance}}.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/notifications",
+            "description": "Creates the message and saves notification_id. name becomes the email subject; content becomes the message. An optional notification_template_id links a template but does not copy its content. ASA placeholders are resolved for each member when sending."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.unset('notification_id');",
+                  "if (pm.response.code === 201) {",
+                  "    pm.collectionVariables.set('notification_id', String(pm.response.json().data.id));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Notification",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Notification\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/notifications/{{notification_id}}"
+          }
+        },
+        {
+          "name": "Delete Notification",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/notifications/{{notification_id}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notification Members",
+      "item": [
+        {
+          "name": "List Notification Members",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/notification-members"
+          }
+        },
+        {
+          "name": "Get Notification Member",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/notification-members/1"
+          }
+        },
+        {
+          "name": "Create Notification Member",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notification_id\": {{notification_id}},\n  \"member_id\": {{member_id}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/notification-members"
+          }
+        },
+        {
+          "name": "Update Notification Member",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"member_id\": {{member_id}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/notification-members/1"
+          }
+        },
+        {
+          "name": "Delete Notification Member",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/notification-members/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Audit Logs",
+      "item": [
+        {
+          "name": "List Logs",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/logs"
+          }
+        },
+        {
+          "name": "Get Log",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/logs/1"
+          }
+        }
+      ],
+      "description": "Read-only endpoints. Feature definitions come from the JSON catalog; audit records are written by the backend."
+    },
+    {
+      "name": "Reports",
+      "description": "Requires Manage Reports (10). All responses are PDFs. Add download=1 to request a download. Reports show the saved association logo; the member profile includes chairman, secretary, treasurer and registrar phones.",
+      "item": [
+        {
+          "name": "Members Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/pdf"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/reports/members",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reports",
+                "members"
+              ],
+              "query": [
+                {
+                  "key": "download",
+                  "value": "1",
+                  "disabled": true,
+                  "description": "Request Content-Disposition: attachment."
+                }
+              ]
+            },
+            "description": "Lists all members."
+          }
+        },
+        {
+          "name": "Marital Status Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/pdf"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/reports/marital-status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reports",
+                "marital-status"
+              ],
+              "query": [
+                {
+                  "key": "download",
+                  "value": "1",
+                  "disabled": true,
+                  "description": "Request Content-Disposition: attachment."
+                }
+              ]
+            },
+            "description": "PDF listing members grouped as single, married, divorced, or widowed, with a count for each represented group."
+          }
+        },
+        {
+          "name": "Member Profile Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/pdf"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/reports/profile/{{member_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reports",
+                "profile",
+                "{{member_id}}"
+              ],
+              "query": [
+                {
+                  "key": "download",
+                  "value": "1",
+                  "disabled": true,
+                  "description": "Request Content-Disposition: attachment."
+                }
+              ]
+            },
+            "description": "Member dossier. Uses the member_id collection variable."
+          }
+        },
+        {
+          "name": "Outstanding Fees Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/pdf"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/reports/outstanding",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reports",
+                "outstanding"
+              ],
+              "query": [
+                {
+                  "key": "fee_id",
+                  "value": "{{fee_id}}",
+                  "disabled": true,
+                  "description": "Limit results to this fee."
+                },
+                {
+                  "key": "download",
+                  "value": "1",
+                  "disabled": true,
+                  "description": "Request Content-Disposition: attachment."
+                }
+              ]
+            },
+            "description": "Outstanding fees. Add the optional fee_id query parameter to restrict to one fee."
+          }
+        },
+        {
+          "name": "Age Groups Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/pdf"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/reports/age-groups",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reports",
+                "age-groups"
+              ],
+              "query": [
+                {
+                  "key": "download",
+                  "value": "1",
+                  "disabled": true,
+                  "description": "Request Content-Disposition: attachment."
+                }
+              ]
+            },
+            "description": "Members grouped by age group."
+          }
+        },
+        {
+          "name": "Locations Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/pdf"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/reports/locations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reports",
+                "locations"
+              ],
+              "query": [
+                {
+                  "key": "download",
+                  "value": "1",
+                  "disabled": true,
+                  "description": "Request Content-Disposition: attachment."
+                }
+              ]
+            },
+            "description": "Members grouped by location."
+          }
+        },
+        {
+          "name": "Gender Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/pdf"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/reports/gender",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reports",
+                "gender"
+              ],
+              "query": [
+                {
+                  "key": "download",
+                  "value": "1",
+                  "disabled": true,
+                  "description": "Request Content-Disposition: attachment."
+                }
+              ]
+            },
+            "description": "Members grouped by gender."
+          }
+        },
+        {
+          "name": "Deceased Members Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/pdf"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/reports/deceased",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reports",
+                "deceased"
+              ],
+              "query": [
+                {
+                  "key": "download",
+                  "value": "1",
+                  "disabled": true,
+                  "description": "Request Content-Disposition: attachment."
+                }
+              ]
+            },
+            "description": "Lists deceased members."
+          }
+        },
+        {
+          "name": "Fee Payments Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/pdf"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/reports/fee-payments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reports",
+                "fee-payments"
+              ],
+              "query": [
+                {
+                  "key": "member_id",
+                  "value": "{{member_id}}",
+                  "disabled": true,
+                  "description": "Limit to one member."
+                },
+                {
+                  "key": "fee_id",
+                  "value": "{{fee_id}}",
+                  "disabled": true,
+                  "description": "Limit results to this fee."
+                },
+                {
+                  "key": "from",
+                  "value": "2026-01-01",
+                  "disabled": true,
+                  "description": "Start date (YYYY-MM-DD)."
+                },
+                {
+                  "key": "to",
+                  "value": "2026-12-31",
+                  "disabled": true,
+                  "description": "End date (YYYY-MM-DD)."
+                },
+                {
+                  "key": "download",
+                  "value": "1",
+                  "disabled": true,
+                  "description": "Request Content-Disposition: attachment."
+                }
+              ]
+            },
+            "description": "Payment history. Optional query parameters: member_id, fee_id, from, to."
+          }
+        },
+        {
+          "name": "Member History Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/pdf"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/reports/member-history/{{member_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reports",
+                "member-history",
+                "{{member_id}}"
+              ],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "2026-01-01",
+                  "disabled": true,
+                  "description": "Start date (YYYY-MM-DD)."
+                },
+                {
+                  "key": "to",
+                  "value": "2026-12-31",
+                  "disabled": true,
+                  "description": "End date (YYYY-MM-DD)."
+                },
+                {
+                  "key": "download",
+                  "value": "1",
+                  "disabled": true,
+                  "description": "Request Content-Disposition: attachment."
+                }
+              ]
+            },
+            "description": "Member audit and payment history. Uses the member_id collection variable. Optional query parameters: from, to."
+          }
+        },
+        {
+          "name": "Member History Report (Query Parameter)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/reports/member-history?member_id={{member_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reports",
+                "member-history"
+              ],
+              "query": [
+                {
+                  "key": "member_id",
+                  "value": "{{member_id}}",
+                  "disabled": false,
+                  "description": "Required member ID."
+                },
+                {
+                  "key": "from",
+                  "value": "2026-01-01",
+                  "disabled": true,
+                  "description": "Start date (YYYY-MM-DD)."
+                },
+                {
+                  "key": "to",
+                  "value": "2026-12-31",
+                  "disabled": true,
+                  "description": "End date (YYYY-MM-DD)."
+                },
+                {
+                  "key": "download",
+                  "value": "1",
+                  "disabled": true,
+                  "description": "Request Content-Disposition: attachment."
+                }
+              ]
+            },
+            "description": "Alternative to /reports/member-history/{id}. member_id is required. Optional from and to dates (YYYY-MM-DD). Returns PDF.",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/pdf"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
