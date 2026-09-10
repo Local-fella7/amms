@@ -719,25 +719,25 @@ onMounted(() => {
           </div>
 
           <!-- Modal Body: Two-Sided Master-Detail Split Layout -->
-          <div class="modal-body p-0 d-flex flex-row overflow-hidden" style="height: 65vh; min-height: 520px;">
+          <div class="modal-body p-0 d-flex flex-row overflow-hidden" style="height: 70vh; min-height: 580px;">
             
             <!-- Left Side: Modules & Categories Sidebar -->
-            <div class="category-sidebar d-flex flex-column border-end bg-body-tertiary flex-shrink-0" style="width: 310px;">
+            <div class="category-sidebar d-flex flex-column border-end bg-body-tertiary flex-shrink-0" style="width: 330px;">
               <!-- Search Box -->
               <div class="p-3 border-bottom bg-body">
                 <div class="input-group input-group-sm rounded-pill border overflow-hidden bg-body shadow-2xs">
-                  <span class="input-group-text bg-transparent border-0 text-muted ps-2.5">
+                  <span class="input-group-text bg-transparent border-0 text-muted ps-3">
                     <i class="bi bi-search"></i>
                   </span>
                   <input 
                     v-model="permsSearchQuery" 
                     type="search" 
-                    class="form-control border-0 bg-transparent ps-1 text-xs shadow-none" 
+                    class="form-control border-0 bg-transparent ps-1 text-xs shadow-none py-1.5" 
                     placeholder="Filter capabilities..." 
                   />
                   <button 
                     v-if="permsSearchQuery" 
-                    class="btn bg-transparent border-0 text-muted text-xs pe-2.5" 
+                    class="btn bg-transparent border-0 text-muted text-xs pe-3" 
                     @click="permsSearchQuery = ''"
                   >
                     ✕
@@ -746,32 +746,32 @@ onMounted(() => {
               </div>
 
               <!-- Categories Navigation List -->
-              <div class="category-list overflow-y-auto flex-grow-1 p-2">
+              <div class="category-list overflow-y-auto flex-grow-1 p-3">
                 <!-- All Categories Option -->
                 <button
                   type="button"
-                  class="category-nav-item w-100 text-start border-0 rounded-3 px-3 py-2.5 mb-1.5 d-flex align-items-center justify-content-between transition-all"
+                  class="category-nav-item w-100 text-start border-0 rounded-3 px-3.5 py-3 mb-2 d-flex align-items-center justify-content-between transition-all"
                   :class="{ 'active-category': selectedGroupId === 'all' }"
                   @click="selectedGroupId = 'all'"
                 >
-                  <div class="d-flex align-items-center gap-2.5 overflow-hidden">
+                  <div class="d-flex align-items-center gap-3 overflow-hidden">
                     <div class="category-icon-box" style="background-color: rgba(67, 118, 108, 0.12); color: #43766C;">
                       <i class="bi bi-grid-fill fs-6"></i>
                     </div>
                     <div class="text-truncate">
-                      <div class="fw-bold text-xs">All Categories</div>
+                      <div class="fw-bold text-xs mb-0.5">All Categories</div>
                       <div class="text-xs opacity-75">{{ totalFeaturesCount }} capabilities</div>
                     </div>
                   </div>
                   <span 
-                    class="badge rounded-pill font-monospace text-xs" 
+                    class="badge rounded-pill font-monospace text-xs px-2.5 py-1" 
                     :class="selectedGroupId === 'all' ? 'bg-white text-primary fw-bold' : 'bg-body border text-muted'"
                   >
                     {{ grantedCount }}/{{ totalFeaturesCount }}
                   </span>
                 </button>
 
-                <div class="px-2 my-2 text-uppercase text-xs fw-bold tracking-wider text-muted opacity-75" style="font-size: 0.68rem;">
+                <div class="px-2 my-2.5 text-uppercase text-xs fw-bold tracking-wider text-muted opacity-75" style="font-size: 0.68rem;">
                   Feature Modules
                 </div>
 
@@ -780,21 +780,21 @@ onMounted(() => {
                   v-for="grp in filteredGroupedFeatures"
                   :key="grp.id"
                   type="button"
-                  class="category-nav-item w-100 text-start border-0 rounded-3 px-3 py-2.5 mb-1.5 d-flex align-items-center justify-content-between transition-all"
+                  class="category-nav-item w-100 text-start border-0 rounded-3 px-3.5 py-3 mb-2 d-flex align-items-center justify-content-between transition-all"
                   :class="{ 'active-category': selectedGroupId === grp.id }"
                   @click="selectedGroupId = grp.id"
                 >
-                  <div class="d-flex align-items-center gap-2.5 overflow-hidden pe-1">
+                  <div class="d-flex align-items-center gap-3 overflow-hidden pe-1">
                     <div class="category-icon-box" :style="getGroupIconStyle(grp.name)">
                       <i :class="`bi ${getGroupIcon(grp.name)} fs-6`"></i>
                     </div>
                     <div class="text-truncate">
-                      <div class="fw-bold text-xs text-truncate">{{ grp.name }}</div>
+                      <div class="fw-bold text-xs text-truncate mb-0.5">{{ grp.name }}</div>
                       <div class="text-xs opacity-75">{{ grp.features.length }} capabilities</div>
                     </div>
                   </div>
                   <span 
-                    class="badge rounded-pill font-monospace text-xs flex-shrink-0"
+                    class="badge rounded-pill font-monospace text-xs flex-shrink-0 px-2.5 py-1"
                     :class="selectedGroupId === grp.id ? 'bg-white text-primary fw-bold' : (getGroupGrantedCount(grp) > 0 ? 'bg-primary-subtle text-primary fw-semibold' : 'bg-body border text-muted')"
                   >
                     {{ getGroupGrantedCount(grp) }}/{{ grp.features.length }}
@@ -803,26 +803,26 @@ onMounted(() => {
               </div>
 
               <!-- Quick Bulk Actions in Sidebar -->
-              <div class="p-2.5 border-top bg-body d-flex align-items-center gap-2">
+              <div class="p-3 border-top bg-body d-flex align-items-center gap-2.5">
                 <button 
                   type="button" 
-                  class="btn btn-xs btn-outline-primary rounded-pill flex-fill py-1 text-xs fw-semibold shadow-2xs"
+                  class="btn btn-sm btn-outline-primary rounded-pill flex-fill py-1.5 text-xs fw-semibold shadow-2xs d-flex align-items-center justify-content-center gap-1.5"
                   @click="selectAllFeatures"
                 >
-                  <i class="bi bi-check2-all me-1"></i> Grant All
+                  <i class="bi bi-check2-all"></i> Grant All
                 </button>
                 <button 
                   type="button" 
-                  class="btn btn-xs btn-outline-secondary rounded-pill flex-fill py-1 text-xs fw-semibold"
+                  class="btn btn-sm btn-outline-secondary rounded-pill flex-fill py-1.5 text-xs fw-semibold d-flex align-items-center justify-content-center gap-1.5"
                   @click="deselectAllFeatures"
                 >
-                  <i class="bi bi-x-circle me-1"></i> Clear All
+                  <i class="bi bi-x-circle"></i> Clear All
                 </button>
               </div>
             </div>
 
             <!-- Right Side: Capabilities Detail Panel -->
-            <div class="capabilities-detail flex-grow-1 bg-body overflow-y-auto p-4 p-md-4">
+            <div class="capabilities-detail flex-grow-1 bg-body overflow-y-auto p-4 p-xl-5">
               
               <!-- Loading State -->
               <div v-if="isLoadingRolePerms" class="text-center py-5">
@@ -845,16 +845,16 @@ onMounted(() => {
                 <div 
                   v-for="grp in activeGroupsToDisplay" 
                   :key="grp.id"
-                  class="category-detail-section bg-body rounded-4 border p-3.5 shadow-2xs"
+                  class="category-detail-section bg-body rounded-4 border p-4 p-md-4.5 shadow-2xs mb-2"
                 >
                   <!-- Section Header with Group Info & Master Switch -->
-                  <div class="d-flex align-items-center justify-content-between pb-3 mb-3 border-bottom">
+                  <div class="d-flex align-items-center justify-content-between pb-3.5 mb-4 border-bottom">
                     <div class="d-flex align-items-center gap-3">
-                      <div class="category-icon-box" :style="getGroupIconStyle(grp.name)">
+                      <div class="category-icon-box" :style="getGroupIconStyle(grp.name)" style="width: 40px; height: 40px;">
                         <i :class="`bi ${getGroupIcon(grp.name)} fs-5`"></i>
                       </div>
                       <div>
-                        <h5 class="fw-bold fs-6 mb-0 text-primary">{{ grp.name }}</h5>
+                        <h5 class="fw-bold fs-6 mb-1 text-primary">{{ grp.name }}</h5>
                         <span class="text-xs text-secondary-amms font-monospace">
                           {{ getGroupGrantedCount(grp) }} of {{ grp.features.length }} capabilities granted
                         </span>
@@ -862,13 +862,14 @@ onMounted(() => {
                     </div>
 
                     <!-- Master Category Toggle -->
-                    <div class="form-check form-switch mb-0 d-flex align-items-center gap-2">
+                    <div class="form-check form-switch mb-0 d-flex align-items-center gap-2.5">
                       <input 
                         class="form-check-input cursor-pointer" 
                         type="checkbox" 
                         :id="`group-switch-${grp.id}`"
                         :checked="isGroupAllSelected(grp)"
                         @change="toggleGroupSelection(grp)"
+                        style="width: 2.25rem; height: 1.25rem;"
                       />
                       <label 
                         :for="`group-switch-${grp.id}`" 
@@ -880,30 +881,31 @@ onMounted(() => {
                   </div>
 
                   <!-- Spacious 2-Column Capability Grid -->
-                  <div class="row g-3">
+                  <div class="row g-3.5">
                     <div 
                       v-for="feat in grp.features" 
                       :key="feat.id"
                       class="col-12 col-xl-6"
                     >
                       <div 
-                        class="capability-tile p-3 rounded-3 border d-flex align-items-center justify-content-between cursor-pointer transition-all"
+                        class="capability-tile px-3.5 py-3 rounded-3 border d-flex align-items-center justify-content-between cursor-pointer transition-all"
                         :class="{ 'active-tile': isFeatureSelected(feat.id) }"
                         @click="toggleFeaturePerm(feat.id)"
+                        style="min-height: 64px;"
                       >
                         <div class="d-flex align-items-center gap-3 overflow-hidden pe-2">
                           <i 
-                            :class="isFeatureSelected(feat.id) ? 'bi bi-check-circle-fill text-primary fs-5' : 'bi bi-circle text-muted fs-5 opacity-75'"
+                            :class="isFeatureSelected(feat.id) ? 'bi bi-check-circle-fill text-primary fs-4' : 'bi bi-circle text-muted fs-4 opacity-50'"
                           ></i>
                           <div class="overflow-hidden">
-                            <span class="fw-semibold text-xs text-body text-truncate d-block" :title="feat.name">
+                            <span class="fw-medium text-sm text-body text-truncate d-block" :title="feat.name">
                               {{ feat.name }}
                             </span>
                           </div>
                         </div>
                         <span 
-                          class="badge rounded-pill font-monospace text-xs flex-shrink-0"
-                          :class="isFeatureSelected(feat.id) ? 'bg-primary text-white' : 'bg-body-secondary text-muted'"
+                          class="badge rounded-pill font-monospace text-xs flex-shrink-0 px-2.5 py-1"
+                          :class="isFeatureSelected(feat.id) ? 'bg-primary text-white' : 'bg-body-secondary text-muted border'"
                         >
                           #{{ feat.id }}
                         </span>
