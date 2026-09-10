@@ -9,6 +9,7 @@ interface Association {
   chairman_phone: string
   secretary_phone: string
   treasurer_phone: string
+  registrar_phone: string
   created_at?: string
   updated_at?: string
 }
@@ -25,13 +26,15 @@ const address = ref('')
 const chairmanPhone = ref('')
 const secretaryPhone = ref('')
 const treasurerPhone = ref('')
+const registrarPhone = ref('')
 
 const schema = z.object({
   name: z.string().min(2, 'Association name must be at least 2 characters'),
   address: z.string().min(2, 'Address is required'),
   chairman_phone: z.string().min(10, 'Chairman phone number must be at least 10 digits'),
   secretary_phone: z.string().min(10, 'Secretary phone number must be at least 10 digits'),
-  treasurer_phone: z.string().min(10, 'Treasurer phone number must be at least 10 digits')
+  treasurer_phone: z.string().min(10, 'Treasurer phone number must be at least 10 digits'),
+  registrar_phone: z.string().min(10, 'Registrar phone number must be at least 10 digits')
 })
 
 const loadData = async () => {
@@ -46,6 +49,7 @@ const loadData = async () => {
       chairmanPhone.value = record.chairman_phone || ''
       secretaryPhone.value = record.secretary_phone || ''
       treasurerPhone.value = record.treasurer_phone || ''
+      registrarPhone.value = record.registrar_phone || ''
     }
   } catch (err) {
     // Error handled by composable
@@ -60,7 +64,8 @@ const handleSave = async () => {
     address: address.value.trim(),
     chairman_phone: chairmanPhone.value.trim(),
     secretary_phone: secretaryPhone.value.trim(),
-    treasurer_phone: treasurerPhone.value.trim()
+    treasurer_phone: treasurerPhone.value.trim(),
+    registrar_phone: registrarPhone.value.trim()
   }
 
   const validation = schema.safeParse(payload)
@@ -203,7 +208,7 @@ onMounted(() => {
 
               <div class="row g-3 mb-4">
                 <!-- Chairman Phone -->
-                <div class="col-md-4">
+                <div class="col-md-6">
                   <label for="chairmanPhone" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase tracking-wider">
                     Chairman Phone *
                   </label>
@@ -216,14 +221,14 @@ onMounted(() => {
                       v-model="chairmanPhone"
                       type="tel"
                       class="form-control border-start-0 ps-1 py-2.5 text-sm font-monospace"
-                      placeholder="255711111111"
+                      placeholder="255888999111"
                       required
                     />
                   </div>
                 </div>
 
                 <!-- Secretary Phone -->
-                <div class="col-md-4">
+                <div class="col-md-6">
                   <label for="secretaryPhone" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase tracking-wider">
                     Secretary Phone *
                   </label>
@@ -236,14 +241,14 @@ onMounted(() => {
                       v-model="secretaryPhone"
                       type="tel"
                       class="form-control border-start-0 ps-1 py-2.5 text-sm font-monospace"
-                      placeholder="255722222222"
+                      placeholder="255722222223"
                       required
                     />
                   </div>
                 </div>
 
                 <!-- Treasurer Phone -->
-                <div class="col-md-4">
+                <div class="col-md-6">
                   <label for="treasurerPhone" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase tracking-wider">
                     Treasurer Phone *
                   </label>
@@ -257,6 +262,26 @@ onMounted(() => {
                       type="tel"
                       class="form-control border-start-0 ps-1 py-2.5 text-sm font-monospace"
                       placeholder="255733333333"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <!-- Registrar Phone -->
+                <div class="col-md-6">
+                  <label for="registrarPhone" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase tracking-wider">
+                    Registrar Phone *
+                  </label>
+                  <div class="input-group">
+                    <span class="input-group-text bg-transparent border-end-0 text-muted">
+                      <i class="bi bi-person-vcard"></i>
+                    </span>
+                    <input
+                      id="registrarPhone"
+                      v-model="registrarPhone"
+                      type="tel"
+                      class="form-control border-start-0 ps-1 py-2.5 text-sm font-monospace"
+                      placeholder="255755474789"
                       required
                     />
                   </div>
