@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
-import { z } from 'zod'
 
 interface FeatureGroup {
   id: number
@@ -9,32 +8,17 @@ interface FeatureGroup {
   updated_at?: string
 }
 
-const { data: featureGroupsResponse, loading, error, execute: fetchFeatureGroups, fetchWithAuth } = useApi<any>()
+const { data: featureGroupsResponse, loading, error, execute: fetchFeatureGroups } = useApi<any>()
 
 const searchQuery = ref('')
-const isSubmitting = ref(false)
-const modalError = ref('')
-const editingGroup = ref<FeatureGroup | null>(null)
-const isModalOpen = ref(false)
-
-const name = ref('')
 
 // View Modal State
 const viewingGroup = ref<FeatureGroup | null>(null)
 const isViewModalOpen = ref(false)
 
-// Delete Modal State
-const itemToDelete = ref<FeatureGroup | null>(null)
-const isDeleteModalOpen = ref(false)
-const isDeleting = ref(false)
-
 // Pagination State
 const currentPage = ref(1)
 const itemsPerPage = ref(10)
-
-const schema = z.object({
-  name: z.string().min(2, 'Feature group name is required')
-})
 
 const loadData = async () => {
   try {
@@ -77,20 +61,6 @@ watch([searchQuery, itemsPerPage], () => {
   currentPage.value = 1
 })
 
-const openAddModal = () => {
-  editingGroup.value = null
-  name.value = ''
-  modalError.value = ''
-  isModalOpen.value = true
-}
-
-const openEditModal = (g: FeatureGroup) => {
-  editingGroup.value = g
-  name.value = g.name
-  modalError.value = ''
-  isModalOpen.value = true
-}
-
 const openViewModal = (g: FeatureGroup) => {
   viewingGroup.value = g
   isViewModalOpen.value = true
@@ -99,75 +69,6 @@ const openViewModal = (g: FeatureGroup) => {
 const closeViewModal = () => {
   viewingGroup.value = null
   isViewModalOpen.value = false
-}
-
-const closeModal = () => {
-  isModalOpen.value = false
-}
-
-const handleSave = async () => {
-  modalError.value = ''
-  const payload = { name: name.value.trim() }
-
-  const validation = schema.safeParse(payload)
-  if (!validation.success) {
-    modalError.value = validation.error.issues[0].message
-    push.error(modalError.value)
-    return
-  }
-
-  isSubmitting.value = true
-  try {
-    if (editingGroup.value) {
-      await fetchWithAuth(`/api/feature-groups/${editingGroup.value.id}`, {
-        method: 'PUT',
-        body: payload
-      })
-      push.success('Feature group updated successfully!')
-    } else {
-      await fetchWithAuth('/api/feature-groups', {
-        method: 'POST',
-        body: payload
-      })
-      push.success('Feature group created successfully!')
-    }
-    
-    closeModal()
-    await loadData()
-  } catch (err: any) {
-    const serverErrors = err?.data?.errors ? Object.values(err.data.errors).flat().join(', ') : null
-    modalError.value = serverErrors || err?.data?.message || err?.message || 'Failed to save feature group'
-    push.error(modalError.value)
-  } finally {
-    isSubmitting.value = false
-  }
-}
-
-const promptDelete = (g: FeatureGroup) => {
-  itemToDelete.value = g
-  isDeleteModalOpen.value = true
-}
-
-const cancelDelete = () => {
-  itemToDelete.value = null
-  isDeleteModalOpen.value = false
-}
-
-const confirmDelete = async () => {
-  if (!itemToDelete.value) return
-  
-  isDeleting.value = true
-  try {
-    await fetchWithAuth(`/api/feature-groups/${itemToDelete.value.id}`, { method: 'DELETE' })
-    push.success('Feature group deleted successfully!')
-    cancelDelete()
-    await loadData()
-  } catch (err: any) {
-    const msg = err?.data?.message || 'Failed to delete feature group'
-    push.error(msg)
-  } finally {
-    isDeleting.value = false
-  }
 }
 
 const formatDateDisplay = (val?: string) => {
@@ -187,17 +88,38 @@ onMounted(() => {
 
 <template>
   <div>
+    <!-- Page Header -->
     <PageHeader
-      title="Feature Groups"
-      subtitle="Manage system module categories and permission groupings"
+      title="Feature Module Categories"
+      subtitle="System module groupings and functional capability architecture"
       v-model:searchQuery="searchQuery"
-      searchPlaceholder="Search feature groups..."
+      searchPlaceholder="Search module categories..."
       :loading="loading"
       hideRefresh
-      showAddButton
-      addButtonText="Add Feature Group"
-      @add="openAddModal"
     />
+
+    <!-- System Module Architecture Banner -->
+    <div class="alert border-0 rounded-4 shadow-2xs mb-4 d-flex flex-wrap align-items-center justify-content-between gap-3 px-4 py-3" style="background-color: rgba(67, 118, 108, 0.08); color: var(--amms-primary);">
+      <div class="d-flex align-items-center gap-3">
+        <div class="rounded-3 d-flex align-items-center justify-content-center flex-shrink-0 shadow-2xs" style="width: 42px; height: 42px; background-color: var(--amms-primary); color: #fff;">
+          <i class="bi bi-folder-fill fs-5"></i>
+        </div>
+        <div>
+          <div class="fw-bold text-xs text-uppercase tracking-wider">System Module Architecture</div>
+          <div class="text-xs text-secondary-amms">
+            Feature groups categorize granular capabilities across AMMS. To inspect specific capabilities within each module, visit the Features Catalog or configure Role Permissions.
+          </div>
+        </div>
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <NuxtLink to="/settings/features" class="btn btn-sm btn-outline-primary rounded-pill px-3 py-1.5 text-xs fw-semibold shadow-2xs d-flex align-items-center gap-1.5">
+          <i class="bi bi-key"></i> Features Catalog
+        </NuxtLink>
+        <NuxtLink to="/settings/roles" class="btn btn-sm btn-primary rounded-pill px-3 py-1.5 text-xs fw-semibold shadow-2xs d-flex align-items-center gap-1.5">
+          <i class="bi bi-sliders"></i> Role Matrix
+        </NuxtLink>
+      </div>
+    </div>
 
     <div class="card amms-surface border-0 shadow-sm rounded-4 overflow-hidden mb-4 position-relative">
       
@@ -220,10 +142,10 @@ onMounted(() => {
         <table class="table align-middle mb-0 custom-amms-table">
           <thead>
             <tr>
-              <th class="ps-4" style="width: 80px;"># ID</th>
-              <th>Group Name</th>
-              <th>Created At</th>
-              <th class="text-end pe-4" style="width: 140px;">Actions</th>
+              <th class="ps-4" style="width: 90px;"># ID</th>
+              <th>Module Category Name</th>
+              <th>Registered Date</th>
+              <th class="text-end pe-4" style="width: 100px;">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -240,7 +162,8 @@ onMounted(() => {
               <td colspan="4" class="text-center py-5 text-muted">
                 <i class="bi bi-folder-x fs-1 d-block mb-2 text-opacity-50"></i>
                 <p class="mb-0 fw-medium">No feature groups found</p>
-                <small>Click "Add Feature Group" above to create one.</small>
+                <small v-if="searchQuery">Try adjusting your search filter.</small>
+                <small v-else>No module categories are registered in the catalog.</small>
               </td>
             </tr>
 
@@ -258,17 +181,13 @@ onMounted(() => {
                 {{ formatDateDisplay(g.created_at) }}
               </td>
               <td class="pe-4 text-end">
-                <div class="d-flex align-items-center justify-content-end gap-1">
-                  <button class="btn btn-sm btn-light border-0 rounded-circle action-btn" @click="openViewModal(g)" title="View Details">
-                    <i class="bi bi-eye-fill text-primary"></i>
-                  </button>
-                  <button class="btn btn-sm btn-light border-0 rounded-circle action-btn" @click="openEditModal(g)" title="Edit Group">
-                    <i class="bi bi-pencil-fill text-muted"></i>
-                  </button>
-                  <button class="btn btn-sm btn-light border-0 rounded-circle action-btn hover-danger" @click="promptDelete(g)" title="Delete Group">
-                    <i class="bi bi-trash-fill text-danger"></i>
-                  </button>
-                </div>
+                <button 
+                  class="btn btn-sm btn-light border rounded-pill px-2.5 py-1 text-xs fw-semibold text-primary d-inline-flex align-items-center gap-1.5 shadow-2xs" 
+                  @click="openViewModal(g)" 
+                  title="View Group Details"
+                >
+                  <i class="bi bi-eye-fill"></i> View
+                </button>
               </td>
             </tr>
           </tbody>
@@ -295,7 +214,15 @@ onMounted(() => {
     >
       <div class="p-3 bg-body-tertiary rounded-3 border mb-3">
         <div class="row g-3">
-          <div class="col-md-12">
+          <div class="col-md-6">
+            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Group ID</span>
+            <span class="font-monospace fw-bold text-primary text-xs">#{{ viewingGroup?.id }}</span>
+          </div>
+          <div class="col-md-6">
+            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Status</span>
+            <span class="badge rounded-pill bg-success-subtle text-success text-xs fw-semibold">Active Module</span>
+          </div>
+          <div class="col-12">
             <span class="text-xs text-muted text-uppercase fw-semibold d-block">Group Name</span>
             <span class="fw-bold text-primary fs-6">{{ viewingGroup?.name }}</span>
           </div>
@@ -310,66 +237,6 @@ onMounted(() => {
         </div>
       </div>
     </ViewDetailModal>
-
-    <!-- Custom Delete Confirmation Modal -->
-    <div v-if="isDeleteModalOpen" class="modal-backdrop fade show" style="z-index: 1060;"></div>
-    
-    <div v-if="isDeleteModalOpen" class="modal fade show d-block" tabindex="-1" role="dialog" style="z-index: 1065;" @click.self="cancelDelete">
-      <div class="modal-dialog modal-dialog-centered modal-sm">
-        <div class="modal-content amms-surface border-0 shadow-lg rounded-4 overflow-hidden text-center p-4">
-          <div class="d-inline-flex align-items-center justify-content-center bg-danger bg-opacity-10 text-danger rounded-circle p-3 mx-auto mb-3" style="width: 56px; height: 56px;">
-            <i class="bi bi-trash3-fill fs-3"></i>
-          </div>
-          <h5 class="fw-bold text-primary text-sm mb-1">Confirm Deletion</h5>
-          <p class="text-secondary-amms text-xs mb-2">Are you sure you want to delete this feature group?</p>
-          <p class="fw-bold text-danger text-xs mb-4 font-monospace bg-danger bg-opacity-10 py-1.5 px-3 rounded-3 d-inline-block mx-auto">
-            {{ itemToDelete?.name }}
-          </p>
-          <div class="d-flex align-items-center justify-content-center gap-2">
-            <button type="button" class="btn btn-sm btn-light border rounded-pill px-3.5 text-xs fw-semibold" @click="cancelDelete">Cancel</button>
-            <button type="button" class="btn btn-sm btn-danger rounded-pill px-4 text-xs fw-semibold d-flex align-items-center gap-1.5 shadow-sm" :disabled="isDeleting" @click="confirmDelete">
-              <span v-if="isDeleting" class="spinner-border spinner-border-sm" role="status"></span>
-              <span>{{ isDeleting ? 'Deleting...' : 'Delete Group' }}</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Create / Edit Modal -->
-    <div v-if="isModalOpen" class="modal-backdrop fade show"></div>
-    
-    <div v-if="isModalOpen" class="modal fade show d-block" tabindex="-1" role="dialog" @click.self="closeModal">
-      <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content amms-surface border-0 shadow-lg rounded-4 overflow-hidden">
-          <div class="modal-header border-bottom px-4 py-3 bg-body-tertiary position-relative justify-content-center">
-            <h5 class="modal-title fw-bold text-primary text-sm mb-0 text-center">
-              <i class="bi bi-folder me-1.5 amms-accent"></i>
-              <span>{{ editingGroup ? 'Edit Feature Group' : 'Add Feature Group' }}</span>
-            </h5>
-            <button type="button" class="btn-close position-absolute end-0 me-3" @click="closeModal" aria-label="Close"></button>
-          </div>
-          <form @submit.prevent="handleSave">
-            <div class="modal-body p-4">
-              <div v-if="modalError" class="alert alert-danger py-2 px-3 mb-3 rounded-3 small">
-                <i class="bi bi-exclamation-triangle-fill me-1"></i> {{ modalError }}
-              </div>
-              <div class="mb-3">
-                <label for="groupName" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Group Name *</label>
-                <input id="groupName" v-model="name" type="text" class="form-control py-2 text-sm" placeholder="e.g. Member Operations" required />
-              </div>
-            </div>
-            <div class="modal-footer border-top px-4 py-3 bg-body-tertiary">
-              <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3" @click="closeModal">Cancel</button>
-              <button type="submit" class="btn btn-sm btn-primary rounded-pill px-4 fw-semibold d-flex align-items-center gap-2 shadow-sm" :disabled="isSubmitting">
-                <span v-if="isSubmitting" class="spinner-border spinner-border-sm" role="status"></span>
-                <span>{{ isSubmitting ? 'Saving...' : (editingGroup ? 'Update Group' : 'Save Group') }}</span>
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
 
   </div>
 </template>
