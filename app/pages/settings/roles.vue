@@ -673,14 +673,14 @@ onMounted(() => {
         <div class="modal-content amms-surface border-0 shadow-lg rounded-4 overflow-hidden" style="max-height: 90vh;">
 
           <!-- Executive Modal Header -->
-          <div class="modal-header border-bottom px-4 pt-3.5 pb-3 bg-body-tertiary flex-column align-items-stretch flex-shrink-0">
-            <div class="d-flex align-items-center justify-content-between mb-2.5">
+          <div class="modal-header border-bottom px-4 py-3 bg-body-tertiary flex-column align-items-stretch flex-shrink-0">
+            <div class="d-flex align-items-center justify-content-between mb-3">
               <div class="d-flex align-items-center gap-3">
                 <div class="role-icon-badge rounded-3 d-flex align-items-center justify-content-center flex-shrink-0 shadow-2xs" style="width: 44px; height: 44px; background-color: var(--amms-primary); color: #FFFFFF;">
                   <i class="bi bi-shield-lock-fill fs-4"></i>
                 </div>
                 <div>
-                  <div class="d-flex align-items-center gap-2 mb-0.5">
+                  <div class="d-flex align-items-center gap-2 mb-1">
                     <span class="badge rounded-pill text-uppercase px-2.5 py-1 text-xs fw-bold tracking-wider shadow-2xs" style="background-color: var(--amms-primary); color: #fff;">
                       {{ selectedRoleForPerms?.name }}
                     </span>
@@ -701,18 +701,18 @@ onMounted(() => {
             </div>
 
             <!-- Coverage Progress Bar & Metric -->
-            <div class="coverage-bar-container bg-body rounded-3 p-2.5 border shadow-2xs">
-              <div class="d-flex align-items-center justify-content-between mb-1.5">
-                <span class="text-xs fw-semibold text-body">
-                  <i class="bi bi-shield-check text-primary me-1"></i>
-                  System Capability Coverage: 
+            <div class="coverage-bar-container bg-body rounded-3 p-3 border shadow-2xs">
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <span class="text-xs fw-semibold text-body d-flex align-items-center gap-2">
+                  <i class="bi bi-shield-check text-primary fs-6"></i>
+                  <span>System Capability Coverage:</span> 
                   <strong class="text-primary">{{ grantedCount }}</strong> of {{ totalFeaturesCount }} Granted
                 </span>
-                <span class="badge rounded-pill fw-bold text-xs" :class="grantedPercentage > 0 ? 'bg-primary text-white' : 'bg-body-secondary text-muted'">
+                <span class="badge rounded-pill fw-bold text-xs px-2.5 py-1" :class="grantedPercentage > 0 ? 'bg-primary text-white' : 'bg-body-secondary text-muted'">
                   {{ grantedPercentage }}% Active
                 </span>
               </div>
-              <div class="progress-bar-track">
+              <div class="progress-bar-track" style="height: 7px;">
                 <div class="progress-bar-fill" :style="{ width: `${grantedPercentage}%` }"></div>
               </div>
             </div>
@@ -845,10 +845,10 @@ onMounted(() => {
                 <div 
                   v-for="grp in activeGroupsToDisplay" 
                   :key="grp.id"
-                  class="category-detail-section bg-body rounded-4 border p-4 p-md-4.5 shadow-2xs mb-2"
+                  class="category-detail-section bg-body rounded-4 border p-4 shadow-2xs mb-4"
                 >
                   <!-- Section Header with Group Info & Master Switch -->
-                  <div class="d-flex align-items-center justify-content-between pb-3.5 mb-4 border-bottom">
+                  <div class="d-flex align-items-center justify-content-between pb-3 mb-4 border-bottom">
                     <div class="d-flex align-items-center gap-3">
                       <div class="category-icon-box" :style="getGroupIconStyle(grp.name)" style="width: 40px; height: 40px;">
                         <i :class="`bi ${getGroupIcon(grp.name)} fs-5`"></i>
@@ -862,7 +862,7 @@ onMounted(() => {
                     </div>
 
                     <!-- Master Category Toggle -->
-                    <div class="form-check form-switch mb-0 d-flex align-items-center gap-2.5">
+                    <div class="form-check form-switch mb-0 d-flex align-items-center gap-2">
                       <input 
                         class="form-check-input cursor-pointer" 
                         type="checkbox" 
@@ -881,7 +881,7 @@ onMounted(() => {
                   </div>
 
                   <!-- Spacious 2-Column Capability Grid -->
-                  <div class="row g-3.5">
+                  <div class="row gy-3 gx-3" style="row-gap: 14px;">
                     <div 
                       v-for="feat in grp.features" 
                       :key="feat.id"
