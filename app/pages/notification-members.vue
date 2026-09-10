@@ -81,6 +81,15 @@ const selectedTemplateId = ref<number | string>('')
 const messageContent = ref('')
 const selectedMemberIds = ref<number[]>([])
 
+// Broadcast Dispatch Channel State (Step 3: POST /api/notifications/{id}/broadcast)
+const broadcastChannel = ref<'email' | 'sms' | 'both'>('both')
+const isBroadcasting = ref(false)
+const directDispatchNotifId = ref<number | string>('')
+const directDispatchChannel = ref<'email' | 'sms' | 'both'>('both')
+const isDirectDispatchModalOpen = ref(false)
+const broadcastSummary = ref<{ sent: number; failed: number; channel: string } | null>(null)
+const isSummaryModalOpen = ref(false)
+
 // Left Column Filters
 const memberFilterSearch = ref('')
 const memberFilterLocation = ref<string>('')
@@ -360,7 +369,7 @@ const formatDateDisplay = (val?: string) => {
   return str
 }
 
-const handleSaveBatch = async () => {
+const handleSaveBatch = async (alsoBroadcast = false) => {
   modalError.value = ''
   
   if (!notificationId.value) {
@@ -376,8 +385,10 @@ const handleSaveBatch = async () => {
   }
 
   isSubmitting.value = true
+  if (alsoBroadcast) isBroadcasting.value = true
+
   try {
-    // If message content was edited or selected from template, update broadcast content
+    // 1. If message content was edited or selected from template, update broadcast content
     if (notificationId.value && messageContent.value.trim()) {
       const currentNotif = notifications.value?.find(n => Number(n.id) === Number(notificationId.value))
       if (currentNotif && currentNotif.content !== messageContent.value.trim()) {
@@ -392,35 +403,105 @@ const handleSaveBatch = async () => {
       }
     }
 
+    // 2. Link unassigned members (Step 2)
     const toAssign = selectedMemberIds.value.filter(id => !assignedMemberIdsForCurrentBroadcast.value.has(id))
-    
-    if (toAssign.length === 0) {
-      push.info('All selected members are already assigned to this broadcast.')
-      closeModal()
-      return
+    let successCount = 0
+    if (toAssign.length > 0) {
+      for (const mId of toAssign) {
+        await fetchWithAuth('/api/notification-members', {
+          method: 'POST',
+          body: {
+            notification_id: Number(notificationId.value),
+            member_id: Number(mId)
+          }
+        })
+        successCount++
+      }
     }
 
-    let successCount = 0
-    for (const mId of toAssign) {
-      await fetchWithAuth('/api/notification-members', {
+    // 3. If requested, trigger broadcast dispatch (Step 3: POST /api/notifications/{id}/broadcast)
+    if (alsoBroadcast) {
+      const res: any = await fetchWithAuth(`/api/notifications/${notificationId.value}/broadcast`, {
         method: 'POST',
         body: {
-          notification_id: Number(notificationId.value),
-          member_id: Number(mId)
+          channel: broadcastChannel.value
         }
       })
-      successCount++
+
+      const sentCount = res?.data?.sent ?? (successCount > 0 ? successCount : selectedMemberIds.value.length)
+      const failedCount = res?.data?.failed ?? 0
+      broadcastSummary.value = {
+        sent: Number(sentCount),
+        failed: Number(failedCount),
+        channel: broadcastChannel.value
+      }
+      isSummaryModalOpen.value = true
+      push.success(`Broadcast successfully dispatched via ${broadcastChannel.value.toUpperCase()}! ${sentCount} delivered.`)
+    } else {
+      push.success(`Successfully assigned ${successCount} recipient(s) to the broadcast campaign!`)
     }
 
-    push.success(`Successfully assigned ${successCount} recipient(s) to the broadcast campaign!`)
     closeModal()
     await loadData()
   } catch (err: any) {
     const serverErrors = err?.data?.errors ? Object.values(err.data.errors).flat().join(', ') : null
-    modalError.value = serverErrors || err?.data?.message || err?.message || 'Failed to save recipient assignments'
+    modalError.value = serverErrors || err?.data?.message || err?.message || 'Failed to complete broadcast operation'
     push.error(modalError.value)
   } finally {
     isSubmitting.value = false
+    isBroadcasting.value = false
+  }
+}
+
+// Direct Campaign Dispatch Helpers
+const directDispatchRecipientCount = computed(() => {
+  if (!directDispatchNotifId.value || !rawList.value) return 0
+  return rawList.value.filter(item => Number(item.notification_id) === Number(directDispatchNotifId.value)).length
+})
+
+const openDirectDispatchModal = (notifId?: number | string) => {
+  const targetId = notifId || selectedNotificationFilter.value || (notifications.value && notifications.value[0]?.id)
+  if (!targetId) {
+    push.warning('Please select a broadcast campaign first')
+    return
+  }
+  directDispatchNotifId.value = targetId
+  directDispatchChannel.value = 'both'
+  isDirectDispatchModalOpen.value = true
+}
+
+const closeDirectDispatchModal = () => {
+  isDirectDispatchModalOpen.value = false
+}
+
+const executeDirectDispatch = async () => {
+  if (!directDispatchNotifId.value) return
+  isBroadcasting.value = true
+  try {
+    const res: any = await fetchWithAuth(`/api/notifications/${directDispatchNotifId.value}/broadcast`, {
+      method: 'POST',
+      body: {
+        channel: directDispatchChannel.value
+      }
+    })
+
+    const notifName = getNotificationTitle(directDispatchNotifId.value)
+    const sentCount = res?.data?.sent ?? directDispatchRecipientCount.value
+    const failedCount = res?.data?.failed ?? 0
+    broadcastSummary.value = {
+      sent: Number(sentCount),
+      failed: Number(failedCount),
+      channel: directDispatchChannel.value
+    }
+    closeDirectDispatchModal()
+    isSummaryModalOpen.value = true
+    push.success(`Broadcast "${notifName}" dispatched via ${directDispatchChannel.value.toUpperCase()}!`)
+    await loadData()
+  } catch (err: any) {
+    const msg = err?.data?.message || err?.message || 'Failed to dispatch broadcast'
+    push.error(msg)
+  } finally {
+    isBroadcasting.value = false
   }
 }
 
@@ -492,6 +573,16 @@ onMounted(() => {
               </option>
             </select>
           </div>
+
+          <!-- Dispatch Selected Campaign Button -->
+          <button 
+            v-if="selectedNotificationFilter"
+            type="button" 
+            class="btn btn-sm btn-primary rounded-pill px-3 py-1 text-xs fw-semibold shadow-2xs d-flex align-items-center gap-1.5 ms-2"
+            @click="openDirectDispatchModal(selectedNotificationFilter)"
+          >
+            <i class="bi bi-broadcast"></i> Dispatch Campaign
+          </button>
 
           <!-- Clear Filters -->
           <button 
@@ -1042,6 +1133,51 @@ onMounted(() => {
                   ></textarea>
                 </div>
 
+                <!-- Step 3: Broadcast Delivery Channel -->
+                <div class="mb-3">
+                  <div class="d-flex align-items-center justify-content-between mb-1.5">
+                    <label class="form-label text-xs fw-semibold text-secondary-amms text-uppercase mb-0">
+                      Step 3: Dispatch Channel *
+                    </label>
+                    <span class="badge bg-body-secondary text-secondary text-2xs font-monospace">Target Transport</span>
+                  </div>
+                  <div class="row g-2">
+                    <div class="col-4">
+                      <div 
+                        class="channel-card p-2 rounded-3 border text-center cursor-pointer transition-all"
+                        :class="broadcastChannel === 'email' ? 'active-channel-card border-primary shadow-2xs' : 'bg-body border'"
+                        @click="broadcastChannel = 'email'"
+                      >
+                        <i class="bi bi-envelope-fill fs-5 d-block mb-0.5 text-primary"></i>
+                        <span class="fw-bold text-xs d-block text-body">Email</span>
+                        <small class="text-muted text-2xs">SendGrid SMTP</small>
+                      </div>
+                    </div>
+                    <div class="col-4">
+                      <div 
+                        class="channel-card p-2 rounded-3 border text-center cursor-pointer transition-all"
+                        :class="broadcastChannel === 'sms' ? 'active-channel-card border-primary shadow-2xs' : 'bg-body border'"
+                        @click="broadcastChannel = 'sms'"
+                      >
+                        <i class="bi bi-chat-text-fill fs-5 d-block mb-0.5 text-success"></i>
+                        <span class="fw-bold text-xs d-block text-body">SMS</span>
+                        <small class="text-muted text-2xs">Beem Gateway</small>
+                      </div>
+                    </div>
+                    <div class="col-4">
+                      <div 
+                        class="channel-card p-2 rounded-3 border text-center cursor-pointer transition-all"
+                        :class="broadcastChannel === 'both' ? 'active-channel-card border-primary shadow-2xs' : 'bg-body border'"
+                        @click="broadcastChannel = 'both'"
+                      >
+                        <i class="bi bi-broadcast fs-5 d-block mb-0.5 text-warning"></i>
+                        <span class="fw-bold text-xs d-block text-body">Both</span>
+                        <small class="text-muted text-2xs">Email + SMS</small>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <!-- Live SMS Phone Bubble Preview -->
                 <div class="mt-auto pt-3 border-top">
                   <div class="d-flex align-items-center gap-1.5 mb-2 text-xs text-muted fw-semibold">
@@ -1066,27 +1202,159 @@ onMounted(() => {
           </div>
 
           <!-- Modal Action Footer -->
-          <div class="modal-footer border-top px-4 py-3 bg-body-tertiary d-flex align-items-center justify-content-between">
+          <div class="modal-footer border-top px-4 py-3 bg-body-tertiary d-flex flex-wrap align-items-center justify-content-between gap-3">
             <div class="text-xs text-muted">
-              Campaign: <strong class="text-primary">{{ getNotificationTitle(notificationId) }}</strong> • Ready to assign <strong class="text-primary">{{ selectedMemberIds.length }}</strong> recipient(s)
+              Campaign: <strong class="text-primary">{{ getNotificationTitle(notificationId) }}</strong> • Channel: <strong class="text-uppercase text-primary">{{ broadcastChannel }}</strong> • Queue: <strong class="text-primary">{{ selectedMemberIds.length }}</strong> recipient(s)
             </div>
             <div class="d-flex align-items-center gap-2">
-              <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3.5 text-xs" @click="closeModal">
+              <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3.5 text-xs" @click="closeModal" :disabled="isSubmitting || isBroadcasting">
                 Cancel
               </button>
               <button
                 type="button"
-                class="btn btn-sm btn-primary rounded-pill px-4 text-xs fw-semibold d-flex align-items-center gap-2 shadow-sm"
-                :disabled="isSubmitting || selectedMemberIds.length === 0 || !notificationId"
-                @click="handleSaveBatch"
+                class="btn btn-sm btn-outline-primary rounded-pill px-3.5 text-xs fw-semibold d-flex align-items-center gap-1.5 shadow-2xs"
+                :disabled="isSubmitting || isBroadcasting || selectedMemberIds.length === 0 || !notificationId"
+                @click="handleSaveBatch(false)"
               >
-                <span v-if="isSubmitting" class="spinner-border spinner-border-sm" role="status"></span>
+                <span v-if="isSubmitting && !isBroadcasting" class="spinner-border spinner-border-sm" role="status"></span>
+                <i v-else class="bi bi-link-45deg"></i>
+                <span>Assign Recipients Only</span>
+              </button>
+              <button
+                type="button"
+                class="btn btn-sm btn-primary rounded-pill px-4 text-xs fw-semibold d-flex align-items-center gap-2 shadow-sm"
+                :disabled="isSubmitting || isBroadcasting || selectedMemberIds.length === 0 || !notificationId"
+                @click="handleSaveBatch(true)"
+              >
+                <span v-if="isBroadcasting" class="spinner-border spinner-border-sm" role="status"></span>
                 <i v-else class="bi bi-send-fill"></i>
-                <span>{{ isSubmitting ? 'Assigning Recipients...' : `Assign ${selectedMemberIds.length} Recipient(s)` }}</span>
+                <span>{{ isBroadcasting ? 'Broadcasting Now...' : `Assign & Broadcast via ${broadcastChannel.toUpperCase()}` }}</span>
               </button>
             </div>
           </div>
 
+        </div>
+      </div>
+    </div>
+
+    <!-- Direct Campaign Dispatch Modal -->
+    <div v-if="isDirectDispatchModalOpen" class="modal-backdrop fade show" style="z-index: 1060;"></div>
+    <div v-if="isDirectDispatchModalOpen" class="modal fade show d-block" tabindex="-1" role="dialog" style="z-index: 1065;" @click.self="closeDirectDispatchModal">
+      <div class="modal-dialog modal-dialog-centered modal-md">
+        <div class="modal-content amms-surface border-0 shadow-lg rounded-4 overflow-hidden">
+          <div class="modal-header border-bottom px-4 py-3 bg-body-tertiary">
+            <div class="d-flex align-items-center gap-2.5">
+              <div class="rounded-3 d-flex align-items-center justify-content-center flex-shrink-0 shadow-2xs" style="width: 38px; height: 38px; background-color: var(--amms-primary); color: #fff;">
+                <i class="bi bi-broadcast fs-5"></i>
+              </div>
+              <div>
+                <h5 class="modal-title fw-bold text-primary text-sm mb-0">Dispatch Broadcast Campaign</h5>
+                <small class="text-muted text-xs">Execute immediate delivery to all linked recipients</small>
+              </div>
+            </div>
+            <button type="button" class="btn-close" @click="closeDirectDispatchModal" aria-label="Close"></button>
+          </div>
+          
+          <div class="modal-body p-4">
+            <div class="bg-body-tertiary rounded-3 p-3 border mb-3">
+              <span class="text-xs text-muted text-uppercase fw-semibold d-block mb-1">Target Campaign</span>
+              <h6 class="fw-bold text-primary mb-1">{{ getNotificationTitle(directDispatchNotifId) }}</h6>
+              <span class="badge bg-primary text-white rounded-pill text-xs font-monospace">
+                {{ directDispatchRecipientCount }} Assigned Member(s) Linked
+              </span>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label text-xs fw-semibold text-secondary-amms text-uppercase mb-1.5">
+                Select Delivery Channel *
+              </label>
+              <div class="row g-2">
+                <div class="col-4">
+                  <div 
+                    class="channel-card p-2.5 rounded-3 border text-center cursor-pointer transition-all"
+                    :class="directDispatchChannel === 'email' ? 'active-channel-card border-primary shadow-2xs' : 'bg-body border'"
+                    @click="directDispatchChannel = 'email'"
+                  >
+                    <i class="bi bi-envelope-fill fs-5 d-block mb-1 text-primary"></i>
+                    <span class="fw-bold text-xs d-block text-body">Email</span>
+                    <small class="text-muted text-2xs">SendGrid</small>
+                  </div>
+                </div>
+                <div class="col-4">
+                  <div 
+                    class="channel-card p-2.5 rounded-3 border text-center cursor-pointer transition-all"
+                    :class="directDispatchChannel === 'sms' ? 'active-channel-card border-primary shadow-2xs' : 'bg-body border'"
+                    @click="directDispatchChannel = 'sms'"
+                  >
+                    <i class="bi bi-chat-text-fill fs-5 d-block mb-1 text-success"></i>
+                    <span class="fw-bold text-xs d-block text-body">SMS</span>
+                    <small class="text-muted text-2xs">Beem SMS</small>
+                  </div>
+                </div>
+                <div class="col-4">
+                  <div 
+                    class="channel-card p-2.5 rounded-3 border text-center cursor-pointer transition-all"
+                    :class="directDispatchChannel === 'both' ? 'active-channel-card border-primary shadow-2xs' : 'bg-body border'"
+                    @click="directDispatchChannel = 'both'"
+                  >
+                    <i class="bi bi-broadcast fs-5 d-block mb-1 text-warning"></i>
+                    <span class="fw-bold text-xs d-block text-body">Both</span>
+                    <small class="text-muted text-2xs">Email + SMS</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="alert alert-warning border-0 rounded-3 p-2.5 text-xs text-secondary-amms mb-0 d-flex align-items-center gap-2">
+              <i class="bi bi-info-circle-fill text-warning fs-6 flex-shrink-0"></i>
+              <span>This triggers actual live dispatch to all {{ directDispatchRecipientCount }} member(s) linked to this campaign.</span>
+            </div>
+          </div>
+
+          <div class="modal-footer border-top px-4 py-3 bg-body-tertiary d-flex align-items-center justify-content-end gap-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3.5 text-xs" @click="closeDirectDispatchModal" :disabled="isBroadcasting">
+              Cancel
+            </button>
+            <button 
+              type="button" 
+              class="btn btn-sm btn-primary rounded-pill px-4 text-xs fw-semibold d-flex align-items-center gap-2 shadow-sm"
+              :disabled="isBroadcasting || directDispatchRecipientCount === 0"
+              @click="executeDirectDispatch"
+            >
+              <span v-if="isBroadcasting" class="spinner-border spinner-border-sm" role="status"></span>
+              <i v-else class="bi bi-send-fill"></i>
+              <span>{{ isBroadcasting ? 'Dispatching...' : `Dispatch via ${directDispatchChannel.toUpperCase()}` }}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Delivery Results Summary Modal -->
+    <div v-if="isSummaryModalOpen" class="modal-backdrop fade show" style="z-index: 1070;"></div>
+    <div v-if="isSummaryModalOpen" class="modal fade show d-block" tabindex="-1" role="dialog" style="z-index: 1075;" @click.self="isSummaryModalOpen = false">
+      <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content amms-surface border-0 shadow-lg rounded-4 overflow-hidden text-center p-4">
+          <div class="d-inline-flex align-items-center justify-content-center bg-success bg-opacity-10 text-success rounded-circle p-3 mx-auto mb-3" style="width: 56px; height: 56px;">
+            <i class="bi bi-check2-circle fs-2 text-success"></i>
+          </div>
+          <h5 class="fw-bold text-primary text-sm mb-1">Broadcast Dispatched!</h5>
+          <p class="text-secondary-amms text-xs mb-3">
+            Delivery initiated across <strong class="text-uppercase text-primary">{{ broadcastSummary?.channel }}</strong>.
+          </p>
+          <div class="bg-body-tertiary rounded-3 p-2.5 border mb-3 font-monospace text-xs text-start">
+            <div class="d-flex justify-content-between mb-1">
+              <span class="text-muted">Delivered/Sent:</span>
+              <strong class="text-success">{{ broadcastSummary?.sent || 0 }}</strong>
+            </div>
+            <div class="d-flex justify-content-between" v-if="broadcastSummary?.failed">
+              <span class="text-muted">Failed/Skipped:</span>
+              <strong class="text-danger">{{ broadcastSummary.failed }}</strong>
+            </div>
+          </div>
+          <button type="button" class="btn btn-sm btn-primary rounded-pill px-4 text-xs fw-semibold w-100 shadow-sm" @click="isSummaryModalOpen = false">
+            Done
+          </button>
         </div>
       </div>
     </div>
@@ -1128,9 +1396,9 @@ onMounted(() => {
 }
 
 .recip-badge {
-  width: 28px;
-  height: 28px;
-  background-color: rgba(27, 42, 74, 0.08);
+  width: 32px;
+  height: 32px;
+  background-color: rgba(67, 118, 108, 0.1);
 }
 
 .avatar-sm-circle {
@@ -1158,6 +1426,22 @@ onMounted(() => {
 
 .hover-danger:hover {
   color: #dc3545 !important;
+}
+
+.channel-card {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+}
+
+.channel-card:hover {
+  border-color: var(--amms-primary, #43766C) !important;
+  transform: translateY(-1px);
+}
+
+.channel-card.active-channel-card {
+  background: linear-gradient(135deg, rgba(67, 118, 108, 0.08) 0%, rgba(67, 118, 108, 0.16) 100%) !important;
+  border-color: var(--amms-primary, #43766C) !important;
+  box-shadow: 0 2px 8px rgba(67, 118, 108, 0.14);
 }
 
 .text-2xs { font-size: 0.7rem; }
