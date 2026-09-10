@@ -310,7 +310,7 @@ watch(notificationId, (newNotifId) => {
   if (!newNotifId || !notifications.value) return
   const found = notifications.value.find(n => Number(n.id) === Number(newNotifId))
   if (found && found.content && !messageContent.value) {
-    messageContent.value = found.content
+    messageContent.value = found.content.replace(/\{\{fee_year\}\}/g, String(new Date().getFullYear()))
   }
 })
 
@@ -318,12 +318,13 @@ watch(selectedTemplateId, (newTmplId) => {
   if (!newTmplId || !templates.value) return
   const found = templates.value.find(t => Number(t.id) === Number(newTmplId))
   if (found && found.content) {
-    messageContent.value = found.content
+    messageContent.value = found.content.replace(/\{\{fee_year\}\}/g, String(new Date().getFullYear()))
   }
 })
 
 const insertPlaceholder = (tag: string) => {
-  messageContent.value = messageContent.value ? `${messageContent.value} ${tag} ` : `${tag} `
+  const valueToInsert = tag === '{{fee_year}}' ? String(new Date().getFullYear()) : tag
+  messageContent.value = messageContent.value ? `${messageContent.value} ${valueToInsert} ` : `${valueToInsert} `
 }
 
 const openAddModal = () => {
@@ -338,7 +339,7 @@ const openAddModal = () => {
   
   if (notifications.value && notifications.value.length > 0) {
     const first = notifications.value[0]
-    if (first.content) messageContent.value = first.content
+    if (first.content) messageContent.value = first.content.replace(/\{\{fee_year\}\}/g, String(new Date().getFullYear()))
   }
   
   isModalOpen.value = true
@@ -391,12 +392,13 @@ const handleSaveBatch = async (alsoBroadcast = false) => {
     // 1. If message content was edited or selected from template, update broadcast content
     if (notificationId.value && messageContent.value.trim()) {
       const currentNotif = notifications.value?.find(n => Number(n.id) === Number(notificationId.value))
-      if (currentNotif && currentNotif.content !== messageContent.value.trim()) {
+      const sanitizedContent = messageContent.value.trim().replace(/\{\{fee_year\}\}/g, String(new Date().getFullYear()))
+      if (currentNotif && currentNotif.content !== sanitizedContent) {
         await fetchWithAuth(`/api/notifications/${notificationId.value}`, {
           method: 'PUT',
           body: {
-            name: currentNotif.name,
-            content: messageContent.value.trim(),
+            name: currentNotif.name ? currentNotif.name.replace(/\{\{fee_year\}\}/g, String(new Date().getFullYear())) : `Broadcast #${notificationId.value}`,
+            content: sanitizedContent,
             notification_template_id: selectedTemplateId.value || currentNotif.notification_template_id
           }
         }).catch(() => {})

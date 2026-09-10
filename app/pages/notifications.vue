@@ -114,17 +114,17 @@ watch([searchQuery, itemsPerPage], () => {
 
 // Auto-fill content when template is selected
 watch(notificationTemplateId, (newId) => {
-  if (!newId || editingNotification.value) return
-  if (templates.value) {
+  if (newId && templates.value) {
     const selectedTmpl = templates.value.find(t => Number(t.id) === Number(newId))
-    if (selectedTmpl) {
-      content.value = selectedTmpl.content
+    if (selectedTmpl && selectedTmpl.content) {
+      content.value = selectedTmpl.content.replace(/\{\{fee_year\}\}/g, String(new Date().getFullYear()))
     }
   }
 })
 
 const insertPlaceholder = (tag: string) => {
-  content.value += ` ${tag} `
+  const valueToInsert = tag === '{{fee_year}}' ? String(new Date().getFullYear()) : tag
+  content.value += ` ${valueToInsert} `
 }
 
 const openAddModal = () => {
@@ -172,8 +172,8 @@ const formatDateDisplay = (val?: string) => {
 const handleSave = async () => {
   modalError.value = ''
   const payload: any = {
-    name: name.value.trim(),
-    content: content.value.trim()
+    name: name.value.trim().replace(/\{\{fee_year\}\}/g, String(new Date().getFullYear())),
+    content: content.value.trim().replace(/\{\{fee_year\}\}/g, String(new Date().getFullYear()))
   }
 
   if (notificationTemplateId.value) {
