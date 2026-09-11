@@ -7,6 +7,7 @@ definePageMeta({
   layout: 'auth'
 })
 
+const config = useRuntimeConfig()
 const authStore = useAuthStore()
 const email = ref('admin@amms.local')
 const password = ref('admin123')
@@ -15,6 +16,22 @@ const showPassword = ref(false)
 const loading = ref(false)
 const errorMessage = ref('')
 const currentTheme = ref('light')
+
+const logoPath = ref<string | null>(null)
+const logoLoadError = ref(false)
+
+const backendBase = computed(() => {
+  const api = (config.public?.apiBase as string) || ''
+  return api.replace(/\/api\/?$/, '')
+})
+
+const logoUrl = computed(() => {
+  if (logoLoadError.value) return ''
+  const path = logoPath.value || 'uploads/logos/logo.jpg'
+  const cleanPath = path.replace(/^\/+/, '')
+  const base = backendBase.value ? backendBase.value.replace(/\/+$/, '') : ''
+  return base ? `${base}/${cleanPath}` : `/${cleanPath}`
+})
 
 const toggleTheme = () => {
   currentTheme.value = currentTheme.value === 'light' ? 'dark' : 'light'
@@ -140,8 +157,11 @@ const submitPasswordChange = async () => {
         
         <!-- Brand Header (Enlarged & Centered) -->
         <div class="position-relative z-1 text-center w-100 py-3 mt-4">
-          <div class="brand-icon-wrapper rounded-4 d-inline-flex align-items-center justify-content-center mb-4 shadow-sm">
-            <i class="bi bi-shield-check display-4"></i>
+          <div class="mb-4">
+            <img v-if="logoUrl" :src="logoUrl" @error="logoLoadError = true" alt="Logo" class="login-logo shadow-sm" />
+            <div v-else class="brand-icon-wrapper rounded-4 d-inline-flex align-items-center justify-content-center shadow-sm">
+              <i class="bi bi-shield-check display-4"></i>
+            </div>
           </div>
           <div>
             <h1 class="display-3 fw-bold mb-1 text-white tracking-tight">ASA</h1>
@@ -194,7 +214,8 @@ const submitPasswordChange = async () => {
           
           <!-- Mobile Brand Logo -->
           <div class="d-lg-none text-center mb-5">
-            <div class="d-inline-flex align-items-center justify-content-center bg-primary bg-opacity-10 p-3 rounded-circle mb-3">
+            <img v-if="logoUrl" :src="logoUrl" @error="logoLoadError = true" alt="Logo" class="mobile-login-logo shadow-sm mb-3" />
+            <div v-else class="d-inline-flex align-items-center justify-content-center bg-primary bg-opacity-10 p-3 rounded-circle mb-3">
               <i class="bi bi-shield-check fs-1 text-primary"></i>
             </div>
             <h2 class="fw-bold text-primary mb-0">ASA Portal</h2>
@@ -372,6 +393,22 @@ const submitPasswordChange = async () => {
 </template>
 
 <style scoped>
+.login-logo {
+  width: 90px;
+  height: 90px;
+  object-fit: contain;
+  background-color: white;
+  border-radius: 1rem;
+}
+
+.mobile-login-logo {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+  background-color: white;
+  border-radius: 50%;
+}
+
 .left-banner {
   background: linear-gradient(135deg, var(--amms-primary) 0%, var(--amms-secondary) 100%);
   background-size: cover;
