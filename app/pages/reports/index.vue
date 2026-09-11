@@ -21,21 +21,23 @@ const { data: members, execute: fetchMembers } = useApi<MemberOption[]>()
 const { data: fees, execute: fetchFees } = useApi<FeeOption[]>()
 const { downloadPdf, getPdfBlobUrl, openPdfInNewTab, isGenerating } = useReportPdf()
 
+const searchQuery = ref('')
+const activeCategory = ref<'all' | 'finance' | 'roster' | 'demographics' | 'member'>('all')
+
+// Configuration Modal State
+const reportToConfigure = ref<ReportDef | null>(null)
+const pendingActionType = ref<'preview' | 'download' | 'tab' | null>(null)
 const selectedMemberId = ref<number | string>('')
 const selectedFeeId = ref<number | string>('')
 const filterFromDate = ref('')
 const filterToDate = ref('')
-const searchQuery = ref('')
-const activeCategory = ref<'all' | 'finance' | 'roster' | 'demographics' | 'member'>('all')
 
+// Preview Modal State
 const isPreviewModalOpen = ref(false)
 const previewReportTitle = ref('')
 const previewPdfUrl = ref<string | null>(null)
 const isPreviewLoading = ref(false)
 const activeReportKey = ref<string | null>(null)
-
-const hasFilters = computed(() => !!selectedFeeId.value || !!filterFromDate.value || !!filterToDate.value)
-const resetFilters = () => { selectedFeeId.value = ''; filterFromDate.value = ''; filterToDate.value = '' }
 
 const loadDependencies = async () => {
   try {
@@ -43,7 +45,6 @@ const loadDependencies = async () => {
       fetchMembers((api) => api('/api/members')).catch(() => []),
       fetchFees((api) => api('/api/fees')).catch(() => [])
     ])
-    if (members.value && members.value.length > 0) selectedMemberId.value = members.value[0].id
   } catch (_) {}
 }
 
@@ -101,10 +102,54 @@ const selectCategory = (catId: string) => {
   activeCategory.value = activeCategory.value === catId ? 'all' : catId as any
 }
 
+// Action Dispatcher
+const handleActionClick = (report: ReportDef, action: 'preview' | 'download' | 'tab') => {
+  const needsConfig = report.requiresMember || report.supportsFeeFilter || report.supportsDateFilter
+  if (needsConfig) {
+    selectedMemberId.value = ''
+    selectedFeeId.value = ''
+    filterFromDate.value = ''
+    filterToDate.value = ''
+    reportToConfigure.value = report
+    pendingActionType.value = action
+  } else {
+    executeAction(report, action)
+  }
+}
+
+const cancelConfiguration = () => {
+  reportToConfigure.value = null
+  pendingActionType.value = null
+}
+
+const isConfigValid = computed(() => {
+  if (!reportToConfigure.value) return false
+  if (reportToConfigure.value.requiresMember && !selectedMemberId.value) return false
+  return true
+})
+
+const confirmConfiguration = () => {
+  if (!isConfigValid.value) return
+  const report = reportToConfigure.value!
+  const action = pendingActionType.value!
+  
+  // Close modal but keep parameter values for the execution
+  reportToConfigure.value = null
+  pendingActionType.value = null
+  
+  executeAction(report, action)
+}
+
+const executeAction = (report: ReportDef, action: 'preview' | 'download' | 'tab') => {
+  if (action === 'preview') handlePreviewReport(report)
+  else if (action === 'download') handleDownloadReport(report)
+  else if (action === 'tab') handleOpenInNewTab(report)
+}
+
 const buildReportUrl = (report: ReportDef, isDownload = false): string => {
   let base = report.endpoint
   if (report.requiresMember) {
-    if (!selectedMemberId.value) throw new Error('Please choose a target member from the parameters bar first.')
+    if (!selectedMemberId.value) throw new Error('Target member is required.')
     base = `${report.endpoint}/${selectedMemberId.value}`
   }
   const params = new URLSearchParams()
@@ -159,6 +204,13 @@ const closePreviewModal = () => {
   isPreviewModalOpen.value = false
 }
 
+const getActionLabel = (action: 'preview' | 'download' | 'tab' | null) => {
+  if (action === 'preview') return 'Generate & Preview'
+  if (action === 'download') return 'Generate & Download'
+  if (action === 'tab') return 'Generate & Open'
+  return 'Generate Report'
+}
+
 onMounted(loadDependencies)
 </script>
 
@@ -201,48 +253,6 @@ onMounted(loadDependencies)
       </div>
     </div>
 
-    <!-- Parameters Bar -->
-    <div class="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden rpt-params-card">
-      <div class="rpt-params-inner">
-        <div class="rpt-params-field">
-          <i class="bi bi-person-fill rpt-params-ico"></i>
-          <div class="rpt-params-field-content">
-            <label class="rpt-params-label">Target Member</label>
-            <select v-model="selectedMemberId" class="rpt-params-select">
-              <option value="">— Choose member —</option>
-              <option v-for="m in members" :key="m.id" :value="m.id">{{ m.first_name }} {{ m.last_name }}{{ m.phone ? ` · ${m.phone}` : '' }}</option>
-            </select>
-          </div>
-        </div>
-        <div class="rpt-params-divider"></div>
-        <div class="rpt-params-field">
-          <i class="bi bi-receipt rpt-params-ico"></i>
-          <div class="rpt-params-field-content">
-            <label class="rpt-params-label">Fee Year</label>
-            <select v-model="selectedFeeId" class="rpt-params-select">
-              <option value="">All years</option>
-              <option v-for="f in fees" :key="f.id" :value="f.id">{{ f.year || f.fee_year }} — {{ f.name }}</option>
-            </select>
-          </div>
-        </div>
-        <div class="rpt-params-divider"></div>
-        <div class="rpt-params-field">
-          <i class="bi bi-calendar3 rpt-params-ico"></i>
-          <div class="rpt-params-field-content">
-            <label class="rpt-params-label">Date Range</label>
-            <div class="d-flex align-items-center gap-1">
-              <input v-model="filterFromDate" type="date" class="rpt-params-date" />
-              <span class="text-muted" style="font-size:.8rem;">—</span>
-              <input v-model="filterToDate" type="date" class="rpt-params-date" />
-            </div>
-          </div>
-        </div>
-        <button v-if="hasFilters" class="rpt-params-reset" @click="resetFilters">
-          <i class="bi bi-x-circle-fill"></i> Reset
-        </button>
-      </div>
-    </div>
-
     <!-- Report List -->
     <div class="card border-0 shadow-sm rounded-4 overflow-hidden mb-5">
 
@@ -263,7 +273,7 @@ onMounted(loadDependencies)
         <i class="bi bi-search rpt-empty-icon"></i>
         <div class="rpt-empty-title">No reports found</div>
         <p class="rpt-empty-sub">Try a different keyword or select another category.</p>
-        <button class="btn btn-sm btn-outline-primary rounded-pill px-4" @click="searchQuery = ''; activeCategory = 'all'">Clear Filters</button>
+        <button class="btn btn-sm btn-outline-primary rounded-pill px-4 mt-2" @click="searchQuery = ''; activeCategory = 'all'">Clear Filters</button>
       </div>
 
       <!-- Report Rows -->
@@ -299,7 +309,7 @@ onMounted(loadDependencies)
             <button
               class="rpt-icon-btn"
               :disabled="activeReportKey === report.id || isGenerating"
-              @click="handlePreviewReport(report)"
+              @click="handleActionClick(report, 'preview')"
               title="Preview PDF"
             >
               <i class="bi bi-eye"></i>
@@ -307,7 +317,7 @@ onMounted(loadDependencies)
             <button
               class="rpt-icon-btn"
               :disabled="activeReportKey === report.id || isGenerating"
-              @click="handleDownloadReport(report)"
+              @click="handleActionClick(report, 'download')"
               title="Download PDF"
             >
               <i class="bi bi-download"></i>
@@ -315,13 +325,110 @@ onMounted(loadDependencies)
             <button
               class="rpt-icon-btn rpt-icon-btn--primary"
               :disabled="activeReportKey === report.id || isGenerating"
-              @click="handleOpenInNewTab(report)"
+              @click="handleActionClick(report, 'tab')"
               title="Open in new tab"
             >
               <span v-if="activeReportKey === report.id" class="spinner-border spinner-border-sm" role="status"></span>
               <i v-else class="bi bi-box-arrow-up-right"></i>
             </button>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Configure Contextual Modal Backdrop -->
+    <div v-if="reportToConfigure" class="modal-backdrop fade show" style="z-index:1050;"></div>
+    
+    <!-- Configure Contextual Modal -->
+    <div v-if="reportToConfigure" class="modal fade show d-block" tabindex="-1" role="dialog" style="z-index:1055;" @click.self="cancelConfiguration">
+      <div class="modal-dialog modal-dialog-centered" style="max-width: 540px;">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+          
+          <div class="modal-header border-bottom px-4 py-3" style="background-color: var(--bs-body-bg);">
+            <div class="d-flex align-items-center gap-3">
+              <div class="rpt-row__iconbox" :style="{ background: reportToConfigure.accentColor + '15', color: reportToConfigure.accentColor }">
+                <i :class="`bi ${reportToConfigure.icon}`"></i>
+              </div>
+              <div>
+                <h5 class="modal-title fw-bold mb-0 text-dark" style="font-size: 1rem;">Configure Report</h5>
+                <small class="text-muted" style="font-size: .75rem;">{{ reportToConfigure.title }}</small>
+              </div>
+            </div>
+            <button type="button" class="btn-close" @click="cancelConfiguration" aria-label="Close"></button>
+          </div>
+          
+          <div class="modal-body p-4 bg-body-tertiary">
+            <p class="text-secondary-amms text-sm mb-4">
+              This report requires specific parameters before it can be generated. Please provide the required information below.
+            </p>
+            
+            <div class="row g-3">
+              <!-- Member Filter -->
+              <div v-if="reportToConfigure.requiresMember" class="col-12">
+                <label class="form-label fw-bold text-xs text-secondary-amms mb-1">
+                  Target Member <span class="text-danger">*</span>
+                </label>
+                <div class="input-group">
+                  <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-person-fill"></i></span>
+                  <select v-model="selectedMemberId" class="form-select border-start-0" :class="{ 'is-invalid': !selectedMemberId }">
+                    <option value="">— Select a member —</option>
+                    <option v-for="m in members" :key="m.id" :value="m.id">{{ m.first_name }} {{ m.last_name }}{{ m.phone ? ` · ${m.phone}` : '' }}</option>
+                  </select>
+                </div>
+                <div v-if="!selectedMemberId" class="text-danger mt-1 text-2xs"><i class="bi bi-exclamation-circle"></i> A target member is required.</div>
+              </div>
+              
+              <!-- Fee Year Filter -->
+              <div v-if="reportToConfigure.supportsFeeFilter" class="col-12">
+                <label class="form-label fw-bold text-xs text-secondary-amms mb-1">
+                  Fee Year Filter <span class="text-muted fw-normal">(Optional)</span>
+                </label>
+                <div class="input-group">
+                  <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-receipt"></i></span>
+                  <select v-model="selectedFeeId" class="form-select border-start-0">
+                    <option value="">— All Years —</option>
+                    <option v-for="f in fees" :key="f.id" :value="f.id">{{ f.year || f.fee_year }} — {{ f.name }}</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Date Range Filter -->
+              <div v-if="reportToConfigure.supportsDateFilter" class="col-12">
+                <label class="form-label fw-bold text-xs text-secondary-amms mb-1">
+                  Date Range Filter <span class="text-muted fw-normal">(Optional)</span>
+                </label>
+                <div class="row g-2">
+                  <div class="col-6">
+                    <div class="input-group">
+                      <span class="input-group-text bg-white border-end-0 text-muted" style="font-size: .75rem;">From</span>
+                      <input v-model="filterFromDate" type="date" class="form-control border-start-0" style="font-size: .8rem;" />
+                    </div>
+                  </div>
+                  <div class="col-6">
+                    <div class="input-group">
+                      <span class="input-group-text bg-white border-end-0 text-muted" style="font-size: .75rem;">To</span>
+                      <input v-model="filterToDate" type="date" class="form-control border-start-0" style="font-size: .8rem;" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="modal-footer border-top px-4 py-3 bg-white">
+            <button type="button" class="btn btn-light rounded-pill px-4 fw-semibold border" @click="cancelConfiguration">Cancel</button>
+            <button 
+              type="button" 
+              class="btn btn-primary rounded-pill px-4 fw-semibold d-flex align-items-center gap-2" 
+              :style="{ backgroundColor: reportToConfigure.accentColor, borderColor: reportToConfigure.accentColor }"
+              :disabled="!isConfigValid"
+              @click="confirmConfiguration"
+            >
+              <i class="bi" :class="{ 'bi-eye': pendingActionType === 'preview', 'bi-download': pendingActionType === 'download', 'bi-box-arrow-up-right': pendingActionType === 'tab' }"></i>
+              {{ getActionLabel(pendingActionType) }}
+            </button>
+          </div>
+          
         </div>
       </div>
     </div>
@@ -428,19 +535,6 @@ onMounted(loadDependencies)
   color: #fff;
   font-size: .75rem;
 }
-
-/* -- Parameters Bar ----------------------- */
-.rpt-params-card { border: 1px solid rgba(0,0,0,.06) !important; }
-.rpt-params-inner { display: flex; align-items: stretch; flex-wrap: wrap; }
-.rpt-params-field { display: flex; align-items: center; gap: .65rem; padding: .8rem 1.25rem; flex: 1; min-width: 180px; }
-.rpt-params-ico { font-size: .95rem; color: #43766C; flex-shrink: 0; }
-.rpt-params-field-content { display: flex; flex-direction: column; gap: .08rem; flex: 1; min-width: 0; }
-.rpt-params-label { font-size: .6rem; font-weight: 700; text-transform: uppercase; letter-spacing: .065em; color: #bbb; margin: 0; }
-.rpt-params-select { border: none; background: transparent; font-size: .8rem; font-weight: 500; color: inherit; outline: none; padding: 0; width: 100%; cursor: pointer; }
-.rpt-params-date { border: none; background: transparent; font-size: .78rem; color: inherit; outline: none; padding: 0; min-width: 0; flex: 1; cursor: pointer; font-family: ui-monospace, monospace; }
-.rpt-params-divider { width: 1px; background: rgba(0,0,0,.08); margin: .5rem 0; flex-shrink: 0; }
-.rpt-params-reset { display: flex; align-items: center; gap: .35rem; padding: .5rem 1.1rem; border: none; background: rgba(220,53,69,.06); color: #dc3545; font-size: .75rem; font-weight: 700; cursor: pointer; border-left: 1px solid rgba(220,53,69,.15); transition: background .15s; flex-shrink: 0; }
-.rpt-params-reset:hover { background: rgba(220,53,69,.12); }
 
 /* -- Report List -------------------------- */
 .rpt-list-header {
