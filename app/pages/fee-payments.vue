@@ -558,84 +558,66 @@ onMounted(() => {
         <button class="btn btn-sm btn-outline-danger rounded-pill" @click="loadData">Retry</button>
       </div>
 
-      <div class="table-responsive">
-        <table class="table align-middle mb-0 custom-amms-table">
-          <thead>
-            <tr>
-              <th class="ps-4" style="width: 70px;"># ID</th>
-              <th>Member Name</th>
-              <th>Fee Year</th>
-              <th>Payment Mode</th>
-              <th>Amount Paid</th>
-              <th>Balance Due</th>
-              <th>Payment Date</th>
-              <th class="text-end pe-4" style="width: 140px;">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <!-- Loading Skeleton -->
-            <template v-if="loading && rawPaymentsList.length === 0">
-              <tr v-for="i in 5" :key="i">
-                <td class="ps-4"><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-8"></span></td>
-                <td><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-6"></span></td>
-                <td class="pe-4 text-end"><span class="placeholder col-10"></span></td>
-              </tr>
-            </template>
+      
+    <!-- Replaced by AppTable Component -->
+    <AppTable
+      :columns="[{key: 'id', label: '# ID', width: '70px', headerClass: 'ps-4', cellClass: 'ps-4 font-monospace text-muted text-xs'}, {key: 'member-name', label: 'Member Name', cellClass: 'fw-semibold text-primary'}, {key: 'fee-year', label: 'Fee Year'}, {key: 'payment-mode', label: 'Payment Mode', cellClass: 'text-xs fw-medium text-body'}, {key: 'amount-paid', label: 'Amount Paid', cellClass: 'fw-bold text-success font-monospace text-sm'}, {key: 'balance-due', label: 'Balance Due', cellClass: 'font-monospace text-xs'}, {key: 'payment-date', label: 'Payment Date', cellClass: 'font-monospace text-xs text-body'}, {key: 'actions', label: 'Actions', align: 'right', width: '140px', headerClass: 'pe-4', cellClass: 'pe-4'}]"
+      :items="paginatedPayments"
+      :loading="loading"
+      emptyIcon="bi bi-receipt-cutoff"
+      emptyTitle="No fee payment records found"
+      emptySubtitle="Click 'Record Fee Payment' above to enter a payment transaction."
 
-            <!-- Empty State -->
-            <tr v-else-if="filteredPayments.length === 0">
-              <td colspan="8" class="text-center py-5 text-muted">
-                <i class="bi bi-receipt-cutoff fs-1 d-block mb-2 text-opacity-50"></i>
-                <p class="mb-0 fw-medium">No fee payment records found</p>
-                <small>Click "Record Fee Payment" above to enter a payment transaction.</small>
-              </td>
-            </tr>
+    >
+      <template #cell-id="{ item }">
+#{{ item.id }}
+      </template>
+      <template #cell-member-name="{ item }">
 
-            <!-- Payment Rows -->
-            <tr v-for="p in paginatedPayments" :key="p.id">
-              <td class="ps-4 font-monospace text-muted text-xs">#{{ p.id }}</td>
-              <td class="fw-semibold text-primary">
                 <div class="d-flex align-items-center gap-2.5">
                   <div class="pay-icon-badge rounded-circle d-flex align-items-center justify-content-center">
                     <i class="bi bi-person text-primary text-xs"></i>
                   </div>
                   <div>
-                    <span>{{ p.member ? `${p.member.first_name} ${p.member.last_name}` : getMemberName(p.member_id) }}</span>
-                    <small v-if="getMemberPhone(p.member_id)" class="d-block text-muted font-monospace text-xs">{{ getMemberPhone(p.member_id) }}</small>
+                    <span>{{ item.member ? `${item.member.first_name} ${item.member.last_name}` : getMemberName(item.member_id) }}</span>
+                    <small v-if="getMemberPhone(item.member_id)" class="d-block text-muted font-monospace text-xs">{{ getMemberPhone(item.member_id) }}</small>
                   </div>
                 </div>
-              </td>
-              <td>
+              
+      </template>
+      <template #cell-fee-year="{ item }">
+
                 <span class="badge bg-body-tertiary text-body border px-2.5 py-1 rounded-pill font-monospace text-xs">
-                  Year {{ p.fee ? getFeeYear(p.fee) : getFeeYear(p.fee_id) }}
+                  Year {{ item.fee ? getFeeYear(item.fee) : getFeeYear(item.fee_id) }}
                 </span>
-              </td>
-              <td class="text-xs fw-medium text-body">
+              
+      </template>
+      <template #cell-payment-mode="{ item }">
+
                 <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-20 px-2.5 py-1 rounded-pill text-xs">
                   <i class="bi bi-credit-card me-1"></i>
-                  {{ p.payment_mode?.name || getPaymentModeName(p.payment_mode_id) }}
+                  {{ item.payment_mode?.name || getPaymentModeName(item.payment_mode_id) }}
                 </span>
-              </td>
-              <td class="fw-bold text-success font-monospace text-sm">
-                {{ formatCurrency(p.amount) }}
-              </td>
-              <td class="font-monospace text-xs">
+              
+      </template>
+      <template #cell-amount-paid="{ item }">
+
+                {{ formatCurrency(item.amount) }}
+              
+      </template>
+      <template #cell-balance-due="{ item }">
+
                 <span 
-                  v-if="p.member?.fee_exemption === 'yes' || getMemberExemption(p.member_id) === 'yes'" 
+                  v-if="item.member?.fee_exemption === 'yes' || getMemberExemption(item.member_id) === 'yes'" 
                   class="badge bg-warning bg-opacity-15 text-warning border border-warning border-opacity-25 px-2 py-0.5 rounded-pill"
                 >
                   Exempted
                 </span>
                 <span 
-                  v-else-if="getPaymentBalance(p) > 0" 
+                  v-else-if="getPaymentBalance(item) > 0" 
                   class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-20 px-2 py-0.5 rounded-pill fw-bold"
                 >
-                  <i class="bi bi-exclamation-circle me-1"></i>{{ formatCurrency(getPaymentBalance(p)) }}
+                  <i class="bi bi-exclamation-circle me-1"></i>{{ formatCurrency(getPaymentBalance(item)) }}
                 </span>
                 <span 
                   v-else 
@@ -643,39 +625,41 @@ onMounted(() => {
                 >
                   <i class="bi bi-check2 me-1"></i>0.00 (Paid)
                 </span>
-              </td>
-              <td class="font-monospace text-xs text-body">
-                {{ formatDateDisplay(p.date) }}
-              </td>
-              <td class="pe-4 text-end">
+              
+      </template>
+      <template #cell-payment-date="{ item }">
+
+                {{ formatDateDisplay(item.date) }}
+              
+      </template>
+      <template #cell-actions="{ item }">
+
                 <div class="d-flex align-items-center justify-content-end gap-1">
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
-                    @click="openViewModal(p)"
+                    @click="openViewModal(item)"
                     title="View Receipt Details"
                   >
                     <i class="bi bi-eye-fill text-primary"></i>
                   </button>
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
-                    @click="downloadMemberStatement(p.member_id)"
+                    @click="downloadMemberStatement(item.member_id)"
                     title="Download Member Statement PDF"
                   >
                     <i class="bi bi-file-earmark-pdf text-danger"></i>
                   </button>
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn hover-danger" 
-                    @click="promptDelete(p)"
+                    @click="promptDelete(item)"
                     title="Delete / Void Transaction"
                   >
                     <i class="bi bi-trash-fill text-danger"></i>
                   </button>
                 </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+              
+      </template>
+    </AppTable>
 
       <!-- Reusable Pagination Control Footer -->
       <PaginationControl
@@ -1000,4 +984,5 @@ onMounted(() => {
   background-color: rgba(220, 53, 69, 0.12) !important;
 }
 </style>
+
 

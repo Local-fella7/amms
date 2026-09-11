@@ -215,81 +215,65 @@ onMounted(() => {
         <button class="btn btn-sm btn-outline-danger rounded-pill" @click="loadData">Retry</button>
       </div>
 
-      <div class="table-responsive">
-        <table class="table align-middle mb-0 custom-amms-table">
-          <thead>
-            <tr>
-              <th class="ps-4" style="width: 90px;"># ID</th>
-              <th>Template Title</th>
-              <th>Message Content Preview</th>
-              <th class="text-end pe-4" style="width: 140px;">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <!-- Loading Skeleton -->
-            <template v-if="loading && (!templates || templates.length === 0)">
-              <tr v-for="i in 4" :key="i">
-                <td class="ps-4"><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-8"></span></td>
-                <td><span class="placeholder col-10"></span></td>
-                <td class="pe-4 text-end"><span class="placeholder col-10"></span></td>
-              </tr>
-            </template>
+      
+    <!-- Replaced by AppTable Component -->
+    <AppTable
+      :columns="[{key: 'id', label: '# ID', width: '90px', headerClass: 'ps-4', cellClass: 'ps-4 font-monospace text-muted text-xs'}, {key: 'template-title', label: 'Template Title', cellClass: 'fw-semibold text-primary'}, {key: 'message-content-preview', label: 'Message Content Preview', cellClass: 'text-secondary-amms text-xs font-monospace'}, {key: 'actions', label: 'Actions', align: 'right', width: '140px', headerClass: 'pe-4', cellClass: 'pe-4'}]"
+      :items="paginatedTemplates"
+      :loading="loading"
+      emptyIcon="bi bi-file-earmark-text"
+      emptyTitle="No templates found"
+      emptySubtitle="Click 'New Template' above to create your first notification template."
 
-            <!-- Empty State -->
-            <tr v-else-if="filteredTemplates.length === 0">
-              <td colspan="4" class="text-center py-5 text-muted">
-                <i class="bi bi-file-earmark-text fs-1 d-block mb-2 text-opacity-50"></i>
-                <p class="mb-0 fw-medium">No templates found</p>
-                <small>Click "New Template" above to create your first notification template.</small>
-              </td>
-            </tr>
+    >
+      <template #cell-id="{ item }">
+#{{ item.id }}
+      </template>
+      <template #cell-template-title="{ item }">
 
-            <!-- Template Rows -->
-            <tr v-for="tmpl in paginatedTemplates" :key="tmpl.id">
-              <td class="ps-4 font-monospace text-muted text-xs">#{{ tmpl.id }}</td>
-              <td class="fw-semibold text-primary">
                 <div class="d-flex align-items-center gap-2.5">
-                  <div class="tmpl-icon-badge rounded-circle d-flex align-items-center justify-content-center">
+                  <div class="item-icon-badge rounded-circle d-flex align-items-center justify-content-center">
                     <i class="bi bi-file-text-fill text-primary text-xs"></i>
                   </div>
-                  <span>{{ tmpl.name }}</span>
+                  <span>{{ item.name }}</span>
                 </div>
-              </td>
-              <td class="text-secondary-amms text-xs font-monospace">
+              
+      </template>
+      <template #cell-message-content-preview="{ item }">
+
                 <div class="text-truncate" style="max-width: 450px;">
-                  "{{ tmpl.content }}"
+                  "{{ item.content }}"
                 </div>
-              </td>
-              <td class="pe-4 text-end">
+              
+      </template>
+      <template #cell-actions="{ item }">
+
                 <div class="d-flex align-items-center justify-content-end gap-1">
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
-                    @click="openViewModal(tmpl)"
+                    @click="openViewModal(item)"
                     title="View Template Details"
                   >
                     <i class="bi bi-eye-fill text-primary"></i>
                   </button>
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
-                    @click="openEditModal(tmpl)"
+                    @click="openEditModal(item)"
                     title="Edit Template"
                   >
                     <i class="bi bi-pencil-fill text-muted"></i>
                   </button>
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn hover-danger" 
-                    @click="promptDelete(tmpl)"
+                    @click="promptDelete(item)"
                     title="Delete Template"
                   >
                     <i class="bi bi-trash-fill text-danger"></i>
                   </button>
                 </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+              
+      </template>
+    </AppTable>
 
       <!-- Reusable Pagination Control Footer -->
       <PaginationControl
@@ -553,4 +537,5 @@ onMounted(() => {
   opacity: 1 !important;
 }
 </style>
+
 

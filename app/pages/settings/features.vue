@@ -181,64 +181,50 @@ onMounted(() => {
         <button class="btn btn-sm btn-outline-danger rounded-pill" @click="loadData">Retry</button>
       </div>
 
-      <div class="table-responsive">
-        <table class="table align-middle mb-0 custom-amms-table">
-          <thead>
-            <tr>
-              <th class="ps-4" style="width: 90px;"># ID</th>
-              <th>Capability Name</th>
-              <th>Parent Feature Module</th>
-              <th class="text-end pe-4" style="width: 100px;">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <template v-if="loading && rawFeaturesList.length === 0">
-              <tr v-for="i in 5" :key="i">
-                <td class="ps-4"><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-8"></span></td>
-                <td><span class="placeholder col-6"></span></td>
-                <td class="pe-4 text-end"><span class="placeholder col-10"></span></td>
-              </tr>
-            </template>
+      
+    <!-- Replaced by AppTable Component -->
+    <AppTable
+      :columns="[{key: 'id', label: '# ID', width: '90px', headerClass: 'ps-4', cellClass: 'ps-4 font-monospace text-muted text-xs'}, {key: 'capability-name', label: 'Capability Name', cellClass: 'fw-semibold text-primary'}, {key: 'parent-feature-module', label: 'Parent Feature Module'}, {key: 'actions', label: 'Actions', align: 'right', width: '100px', headerClass: 'pe-4', cellClass: 'pe-4'}]"
+      :items="paginatedFeatures"
+      :loading="loading"
+      emptyIcon="bi bi-shield-slash"
+      emptyTitle="No capabilities found"
+      emptySubtitle="Try adjusting your filters."
 
-            <tr v-else-if="filteredFeatures.length === 0">
-              <td colspan="4" class="text-center py-5 text-muted">
-                <i class="bi bi-shield-slash fs-1 d-block mb-2 text-opacity-50"></i>
-                <p class="mb-0 fw-medium">No capabilities found</p>
-                <small v-if="searchQuery || selectedGroupFilter">Try adjusting your filters.</small>
-                <small v-else>No features are registered in the system catalog.</small>
-              </td>
-            </tr>
+    >
+      <template #cell-id="{ item }">
+#{{ item.id }}
+      </template>
+      <template #cell-capability-name="{ item }">
 
-            <tr v-for="f in paginatedFeatures" :key="f.id">
-              <td class="ps-4 font-monospace text-muted text-xs">#{{ f.id }}</td>
-              <td class="fw-semibold text-primary">
                 <div class="d-flex align-items-center gap-2.5">
                   <div class="feat-icon-badge rounded-circle d-flex align-items-center justify-content-center">
                     <i class="bi bi-key-fill text-primary text-xs"></i>
                   </div>
-                  <span>{{ f.name }}</span>
+                  <span>{{ item.name }}</span>
                 </div>
-              </td>
-              <td>
+              
+      </template>
+      <template #cell-parent-feature-module="{ item }">
+
                 <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-20 px-2.5 py-1 rounded-pill text-xs">
                   <i class="bi bi-folder me-1"></i>
-                  {{ f.group?.name || getGroupName(f.features_group_id) }}
+                  {{ item.group?.name || getGroupName(item.features_group_id) }}
                 </span>
-              </td>
-              <td class="pe-4 text-end">
+              
+      </template>
+      <template #cell-actions="{ item }">
+
                 <button 
                   class="btn btn-sm btn-light border rounded-pill px-2.5 py-1 text-xs fw-semibold text-primary d-inline-flex align-items-center gap-1.5 shadow-2xs" 
-                  @click="openViewModal(f)" 
+                  @click="openViewModal(item)" 
                   title="View Capability Details"
                 >
                   <i class="bi bi-eye-fill"></i> View
                 </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+              
+      </template>
+    </AppTable>
 
       <PaginationControl
         v-if="filteredFeatures.length > 0"
@@ -339,3 +325,5 @@ onMounted(() => {
   background-color: rgba(220, 53, 69, 0.12) !important;
 }
 </style>
+
+

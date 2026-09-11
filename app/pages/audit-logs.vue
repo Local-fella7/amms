@@ -253,80 +253,64 @@ onMounted(() => {
         <button class="btn btn-sm btn-outline-danger rounded-pill" @click="loadData">Retry</button>
       </div>
 
-      <div class="table-responsive">
-        <table class="table align-middle mb-0 custom-amms-table">
-          <thead>
-            <tr>
-              <th class="ps-4" style="width: 80px;"># ID</th>
-              <th>Executing User</th>
-              <th>System Feature / Action</th>
-              <th>Timestamp</th>
-              <th class="text-end pe-4" style="width: 140px;">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <!-- Loading Skeleton -->
-            <template v-if="loading && rawLogsList.length === 0">
-              <tr v-for="i in 5" :key="i">
-                <td class="ps-4"><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-8"></span></td>
-                <td><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-6"></span></td>
-                <td class="pe-4 text-end"><span class="placeholder col-10"></span></td>
-              </tr>
-            </template>
+      
+    <!-- Replaced by AppTable Component -->
+    <AppTable
+      :columns="[{key: 'id', label: '# ID', width: '80px', headerClass: 'ps-4', cellClass: 'ps-4 font-monospace text-muted text-xs'}, {key: 'executing-user', label: 'Executing User', cellClass: 'fw-semibold text-primary'}, {key: 'actions', label: 'System Feature / Action'}, {key: 'timestamp', label: 'Timestamp', cellClass: 'font-monospace text-xs text-body'}, {key: 'actions-2', label: 'Actions', align: 'right', width: '140px', headerClass: 'pe-4', cellClass: 'pe-4'}]"
+      :items="paginatedLogs"
+      :loading="loading"
+      emptyIcon="bi bi-journal-x"
+      emptyTitle="No audit log records found"
+      emptySubtitle="System action events will be logged here automatically."
 
-            <!-- Empty State -->
-            <tr v-else-if="filteredLogs.length === 0">
-              <td colspan="5" class="text-center py-5 text-muted">
-                <i class="bi bi-journal-x fs-1 d-block mb-2 text-opacity-50"></i>
-                <p class="mb-0 fw-medium">No audit log records found</p>
-                <small>System action events will be logged here automatically.</small>
-              </td>
-            </tr>
+    >
+      <template #cell-id="{ item }">
+#{{ item.id }}
+      </template>
+      <template #cell-executing-user="{ item }">
 
-            <!-- Log Rows -->
-            <tr v-for="l in paginatedLogs" :key="l.id">
-              <td class="ps-4 font-monospace text-muted text-xs">#{{ l.id }}</td>
-              <td class="fw-semibold text-primary">
                 <div class="d-flex align-items-center gap-2.5">
                   <div class="user-avatar-badge rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold text-xs">
-                    {{ l.user?.first_name ? l.user.first_name[0] : 'A' }}
+                    {{ item.user?.first_name ? item.user.first_name[0] : 'A' }}
                   </div>
-                  <span>{{ l.user ? `${l.user.first_name} ${l.user.last_name}` : getUserName(l.user_id) }}</span>
+                  <span>{{ item.user ? `${item.user.first_name} ${item.user.last_name}` : getUserName(item.user_id) }}</span>
                 </div>
-              </td>
-              <td>
+              
+      </template>
+      <template #cell-actions="{ item }">
+
                 <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-20 px-2.5 py-1 rounded-pill text-xs">
                   <i class="bi bi-shield-check me-1"></i>
-                  {{ l.feature?.name || getFeatureName(l.feature_id) }}
+                  {{ item.feature?.name || getFeatureName(item.feature_id) }}
                 </span>
-              </td>
-              <td class="font-monospace text-xs text-body">
-                {{ formatDateDisplay(l.datetime || l.created_at) }}
-              </td>
-              <td class="pe-4 text-end">
+              
+      </template>
+      <template #cell-timestamp="{ item }">
+
+                {{ formatDateDisplay(item.datetime || item.created_at) }}
+              
+      </template>
+      <template #cell-actions-2="{ item }">
+
                 <div class="d-flex align-items-center justify-content-end gap-1">
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
-                    @click="openViewModal(l)"
+                    @click="openViewModal(item)"
                     title="View Audit Log Details & Diffs"
                   >
                     <i class="bi bi-eye-fill text-primary"></i>
                   </button>
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn hover-danger" 
-                    @click="promptDelete(l)"
+                    @click="promptDelete(item)"
                     title="Delete Audit Log"
                   >
                     <i class="bi bi-trash-fill text-danger"></i>
                   </button>
                 </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+              
+      </template>
+    </AppTable>
 
       <!-- Reusable Pagination Control Footer -->
       <PaginationControl
@@ -448,4 +432,6 @@ onMounted(() => {
   background-color: rgba(220, 53, 69, 0.12) !important;
 }
 </style>
+
+
 

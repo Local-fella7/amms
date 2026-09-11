@@ -619,44 +619,22 @@ onMounted(() => {
         <button class="btn btn-sm btn-outline-danger rounded-pill" @click="loadData">Retry</button>
       </div>
 
-      <div class="table-responsive">
-        <table class="table align-middle mb-0 custom-amms-table">
-          <thead>
-            <tr>
-              <th class="ps-4" style="width: 80px;"># ID</th>
-              <th>Recipient Member</th>
-              <th>Phone Number</th>
-              <th>Broadcast Campaign</th>
-              <th>Assigned Date</th>
-              <th class="text-end pe-4" style="width: 120px;">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <!-- Loading Skeleton -->
-            <template v-if="loading && rawList.length === 0">
-              <tr v-for="i in 5" :key="i">
-                <td class="ps-4"><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-8"></span></td>
-                <td><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-8"></span></td>
-                <td><span class="placeholder col-6"></span></td>
-                <td class="pe-4 text-end"><span class="placeholder col-10"></span></td>
-              </tr>
-            </template>
+      
+    <!-- Replaced by AppTable Component -->
+    <AppTable
+      :columns="[{key: 'id', label: '# ID', width: '80px', headerClass: 'ps-4', cellClass: 'ps-4 font-monospace text-muted text-xs'}, {key: 'recipient-member', label: 'Recipient Member', cellClass: 'fw-semibold text-primary'}, {key: 'phone-number', label: 'Phone Number', cellClass: 'font-monospace text-xs text-body'}, {key: 'broadcast-campaign', label: 'Broadcast Campaign'}, {key: 'assigned-date', label: 'Assigned Date', cellClass: 'font-monospace text-xs text-secondary-amms'}, {key: 'actions', label: 'Actions', align: 'right', width: '120px', headerClass: 'pe-4', cellClass: 'pe-4'}]"
+      :items="paginatedItems"
+      :loading="loading"
+      emptyIcon="bi bi-person-lines-fill"
+      emptyTitle="No broadcast recipients assigned yet"
+      emptySubtitle="Click 'Assign Broadcast Recipients' above to select and queue members."
 
-            <!-- Empty State -->
-            <tr v-else-if="filteredItems.length === 0">
-              <td colspan="6" class="text-center py-5 text-muted">
-                <i class="bi bi-person-lines-fill fs-1 d-block mb-2 text-opacity-50"></i>
-                <p class="mb-0 fw-medium">No broadcast recipients assigned yet</p>
-                <small>Click "Assign Broadcast Recipients" above to select and queue members.</small>
-              </td>
-            </tr>
+    >
+      <template #cell-id="{ item }">
+#{{ item.id }}
+      </template>
+      <template #cell-recipient-member="{ item }">
 
-            <!-- Recipient Assignment Rows -->
-            <tr v-for="item in paginatedItems" :key="item.id">
-              <td class="ps-4 font-monospace text-muted text-xs">#{{ item.id }}</td>
-              <td class="fw-semibold text-primary">
                 <div class="d-flex align-items-center gap-2.5">
                   <div class="recip-badge rounded-circle d-flex align-items-center justify-content-center text-primary font-monospace fw-bold text-xs">
                     {{ item.member ? `${item.member.first_name[0]}${item.member.last_name[0]}` : 'MB' }}
@@ -668,21 +646,29 @@ onMounted(() => {
                     </small>
                   </div>
                 </div>
-              </td>
-              <td class="font-monospace text-xs text-body">
+              
+      </template>
+      <template #cell-phone-number="{ item }">
+
                 <i class="bi bi-telephone text-muted me-1"></i>
                 {{ item.member?.phone || getMemberPhone(item.member_id) }}
-              </td>
-              <td>
+              
+      </template>
+      <template #cell-broadcast-campaign="{ item }">
+
                 <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-20 px-2.5 py-1 rounded-pill text-xs fw-semibold">
                   <i class="bi bi-send-fill me-1"></i>
                   {{ item.notification?.name || getNotificationTitle(item.notification_id) }}
                 </span>
-              </td>
-              <td class="font-monospace text-xs text-secondary-amms">
+              
+      </template>
+      <template #cell-assigned-date="{ item }">
+
                 {{ formatDateDisplay(item.created_at) }}
-              </td>
-              <td class="pe-4 text-end">
+              
+      </template>
+      <template #cell-actions="{ item }">
+
                 <div class="d-flex align-items-center justify-content-end gap-1">
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
@@ -699,11 +685,9 @@ onMounted(() => {
                     <i class="bi bi-trash-fill text-danger"></i>
                   </button>
                 </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+              
+      </template>
+    </AppTable>
 
       <!-- Pagination Footer -->
       <PaginationControl
@@ -1433,4 +1417,5 @@ onMounted(() => {
 .text-2xs { font-size: 0.7rem; }
 .shadow-2xs { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); }
 </style>
+
 

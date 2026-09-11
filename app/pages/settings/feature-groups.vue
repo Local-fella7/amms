@@ -138,61 +138,47 @@ onMounted(() => {
         <button class="btn btn-sm btn-outline-danger rounded-pill" @click="loadData">Retry</button>
       </div>
 
-      <div class="table-responsive">
-        <table class="table align-middle mb-0 custom-amms-table">
-          <thead>
-            <tr>
-              <th class="ps-4" style="width: 90px;"># ID</th>
-              <th>Module Category Name</th>
-              <th>Registered Date</th>
-              <th class="text-end pe-4" style="width: 100px;">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <template v-if="loading && rawGroupsList.length === 0">
-              <tr v-for="i in 5" :key="i">
-                <td class="ps-4"><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-8"></span></td>
-                <td><span class="placeholder col-6"></span></td>
-                <td class="pe-4 text-end"><span class="placeholder col-10"></span></td>
-              </tr>
-            </template>
+      
+    <!-- Replaced by AppTable Component -->
+    <AppTable
+      :columns="[{key: 'id', label: '# ID', width: '90px', headerClass: 'ps-4', cellClass: 'ps-4 font-monospace text-muted text-xs'}, {key: 'module-category-name', label: 'Module Category Name', cellClass: 'fw-semibold text-primary'}, {key: 'registered-date', label: 'Registered Date', cellClass: 'text-xs text-secondary-amms font-monospace'}, {key: 'actions', label: 'Actions', align: 'right', width: '100px', headerClass: 'pe-4', cellClass: 'pe-4'}]"
+      :items="paginatedGroups"
+      :loading="loading"
+      emptyIcon="bi bi-folder-x"
+      emptyTitle="No feature groups found"
+      emptySubtitle="Try adjusting your search filter."
 
-            <tr v-else-if="filteredGroups.length === 0">
-              <td colspan="4" class="text-center py-5 text-muted">
-                <i class="bi bi-folder-x fs-1 d-block mb-2 text-opacity-50"></i>
-                <p class="mb-0 fw-medium">No feature groups found</p>
-                <small v-if="searchQuery">Try adjusting your search filter.</small>
-                <small v-else>No module categories are registered in the catalog.</small>
-              </td>
-            </tr>
+    >
+      <template #cell-id="{ item }">
+#{{ item.id }}
+      </template>
+      <template #cell-module-category-name="{ item }">
 
-            <tr v-for="g in paginatedGroups" :key="g.id">
-              <td class="ps-4 font-monospace text-muted text-xs">#{{ g.id }}</td>
-              <td class="fw-semibold text-primary">
                 <div class="d-flex align-items-center gap-2.5">
                   <div class="group-icon-badge rounded-circle d-flex align-items-center justify-content-center">
                     <i class="bi bi-folder-fill text-primary text-xs"></i>
                   </div>
-                  <span>{{ g.name }}</span>
+                  <span>{{ item.name }}</span>
                 </div>
-              </td>
-              <td class="text-xs text-secondary-amms font-monospace">
-                {{ formatDateDisplay(g.created_at) }}
-              </td>
-              <td class="pe-4 text-end">
+              
+      </template>
+      <template #cell-registered-date="{ item }">
+
+                {{ formatDateDisplay(item.created_at) }}
+              
+      </template>
+      <template #cell-actions="{ item }">
+
                 <button 
                   class="btn btn-sm btn-light border rounded-pill px-2.5 py-1 text-xs fw-semibold text-primary d-inline-flex align-items-center gap-1.5 shadow-2xs" 
-                  @click="openViewModal(g)" 
+                  @click="openViewModal(item)" 
                   title="View Group Details"
                 >
                   <i class="bi bi-eye-fill"></i> View
                 </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+              
+      </template>
+    </AppTable>
 
       <PaginationControl
         v-if="filteredGroups.length > 0"
@@ -283,3 +269,5 @@ onMounted(() => {
   background-color: rgba(220, 53, 69, 0.12) !important;
 }
 </style>
+
+

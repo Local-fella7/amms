@@ -193,8 +193,8 @@ onMounted(() => {
       :loading="loading"
       emptyIcon="bi bi-credit-card"
       emptyTitle="No payment modes found"
-      emptySubtitle="Click 'New Payment Mode' above to add an accepted payment channel."
-      v-model:currentPage="currentPage"
+      emptySubtitle="Click 'New Payment Mode' above to add an accepted payment channel.'
+      v-model:currentPage='currentPage"
       v-model:itemsPerPage="itemsPerPage"
       :totalPages="totalPages"
       :totalItems="filteredPaymentModes.length"
@@ -397,6 +397,7 @@ onMounted(() => {
   background-color: rgba(220, 53, 69, 0.12) !important;
 }
 </style>
+
 
 
 

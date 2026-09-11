@@ -30,7 +30,7 @@ const perPage = computed({
 </script>
 
 <template>
-  <div class="card amms-surface border-0 shadow-sm rounded-4 overflow-hidden mb-4 position-relative">
+  <div class="w-100 position-relative">
     
     <!-- Center Loading Spinner Overlay -->
     <div v-if="loading" class="position-absolute top-0 start-0 w-100 h-100 bg-body bg-opacity-75 d-flex flex-column align-items-center justify-content-center z-3">
@@ -139,3 +139,4 @@ const perPage = computed({
 .text-xs { font-size: 0.775rem !important; }
 .text-sm { font-size: 0.875rem !important; }
 </style>
+

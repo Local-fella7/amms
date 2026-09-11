@@ -691,148 +691,132 @@ onMounted(() => {
         <button class="btn btn-sm btn-outline-danger rounded-pill" @click="loadData">Retry</button>
       </div>
 
-      <div class="table-responsive">
-        <table class="table align-middle mb-0 custom-amms-table">
-          <thead>
-            <tr>
-              <th class="ps-4" style="width: 70px;"># ID</th>
-              <th>Full Name & Gender</th>
-              <th>Contact Info</th>
-              <th>Location Branch</th>
-              <th>Age Group</th>
-              <th>Registration Date</th>
-              <th>Exemption</th>
-              <th>Status</th>
-              <th class="text-end pe-4" style="width: 170px;">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <!-- Loading Skeleton -->
-            <template v-if="loading && rawMembersList.length === 0">
-              <tr v-for="i in 5" :key="i">
-                <td class="ps-4"><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-8"></span></td>
-                <td><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-4"></span></td>
-                <td><span class="placeholder col-4"></span></td>
-                <td class="pe-4 text-end"><span class="placeholder col-10"></span></td>
-              </tr>
-            </template>
+      
+    <!-- Replaced by AppTable Component -->
+    <AppTable
+      :columns="[{key: 'id', label: '# ID', width: '70px', headerClass: 'ps-4', cellClass: 'ps-4 font-monospace text-muted text-xs'}, {key: 'full-name-gender', label: 'Full Name & Gender', cellClass: 'fw-semibold text-primary'}, {key: 'contact-info', label: 'Contact Info', cellClass: 'text-xs text-body'}, {key: 'location-branch', label: 'Location Branch', cellClass: 'text-xs fw-medium text-body'}, {key: 'age-group', label: 'Age Group', cellClass: 'text-xs text-secondary-amms'}, {key: 'registration-date', label: 'Registration Date', cellClass: 'font-monospace text-xs text-body'}, {key: 'exemption', label: 'Exemption'}, {key: 'status', label: 'Status'}, {key: 'actions', label: 'Actions', align: 'right', width: '170px', headerClass: 'pe-4', cellClass: 'pe-4'}]"
+      :items="paginatedMembers"
+      :loading="loading"
+      emptyIcon="bi bi-person-x"
+      emptyTitle="No members found matching criteria"
+      emptySubtitle="Click 'Register New Member' above to add a member to the registry."
 
-            <!-- Empty State -->
-            <tr v-else-if="filteredMembers.length === 0">
-              <td colspan="9" class="text-center py-5 text-muted">
-                <i class="bi bi-person-x fs-1 d-block mb-2 text-opacity-50"></i>
-                <p class="mb-0 fw-medium">No members found matching criteria</p>
-                <small>Click "Register New Member" above to add a member to the registry.</small>
-              </td>
-            </tr>
+    >
+      <template #cell-id="{ item }">
+#{{ item.id }}
+      </template>
+      <template #cell-full-name-gender="{ item }">
 
-            <!-- Member Rows -->
-            <tr v-for="m in paginatedMembers" :key="m.id">
-              <td class="ps-4 font-monospace text-muted text-xs">#{{ m.id }}</td>
-              <td class="fw-semibold text-primary">
                 <div class="d-flex align-items-center gap-2.5">
-                  <div v-if="hasValidMemberPhoto(m)" class="avatar-badge rounded-circle overflow-hidden d-flex align-items-center justify-content-center">
+                  <div v-if="hasValidMemberPhoto(item)" class="avatar-badge rounded-circle overflow-hidden d-flex align-items-center justify-content-center">
                     <img 
-                      :src="getMemberPhotoUrl(getMemberPhotoPath(m))" 
-                      :alt="m.first_name" 
+                      :src="getMemberPhotoUrl(getMemberPhotoPath(item))" 
+                      :alt="item.first_name" 
                       class="w-100 h-100 object-fit-cover" 
-                      @error="onMemberPhotoError(m.id)"
+                      @error="onMemberPhotoError(item.id)"
                     />
                   </div>
                   <div v-else class="avatar-badge rounded-circle d-flex align-items-center justify-content-center text-primary font-monospace fw-bold text-xs">
-                    {{ m.first_name[0] }}{{ m.last_name[0] }}
+                    {{ item.first_name[0] }}{{ item.last_name[0] }}
                   </div>
                   <div>
-                    <span class="d-block">{{ m.first_name }} {{ m.last_name }}</span>
+                    <span class="d-block">{{ item.first_name }} {{ item.last_name }}</span>
                     <small class="text-muted text-xs text-capitalize">
-                      <i :class="m.gender === 'female' ? 'bi bi-gender-female text-danger' : 'bi bi-gender-male text-primary'" class="me-1"></i>{{ m.gender || 'male' }}
+                      <i :class="item.gender === 'female' ? 'bi bi-gender-female text-danger' : 'bi bi-gender-male text-primary'" class="me-1"></i>{{ item.gender || 'male' }}
                     </small>
                   </div>
                 </div>
-              </td>
-              <td class="text-xs text-body">
+              
+      </template>
+      <template #cell-contact-info="{ item }">
+
                 <div class="font-monospace">
-                  <i class="bi bi-telephone text-muted me-1"></i>{{ m.phone }}
+                  <i class="bi bi-telephone text-muted me-1"></i>{{ item.phone }}
                 </div>
-                <div v-if="m.email" class="text-muted text-xs text-truncate font-monospace" style="max-width: 170px;" :title="m.email">
-                  <i class="bi bi-envelope text-primary me-1"></i>{{ m.email }}
+                <div v-if="item.email" class="text-muted text-xs text-truncate font-monospace" style="max-width: 170px;" :title="item.email">
+                  <i class="bi bi-envelope text-primary me-1"></i>{{ item.email }}
                 </div>
-              </td>
-              <td class="text-xs fw-medium text-body">
-                <i class="bi bi-geo-alt text-muted me-1"></i> {{ m.location?.name || getLocationName(m.location_id) }}
-              </td>
-              <td class="text-xs text-secondary-amms">
-                {{ m.age_group?.name || getAgeGroupName(m.age_group_id) }}
-              </td>
-              <td class="font-monospace text-xs text-body">
-                {{ formatDateDisplay(m.registration_date) }}
-              </td>
-              <td>
+              
+      </template>
+      <template #cell-location-branch="{ item }">
+
+                <i class="bi bi-geo-alt text-muted me-1"></i> {{ item.location?.name || getLocationName(item.location_id) }}
+              
+      </template>
+      <template #cell-age-group="{ item }">
+
+                {{ item.age_group?.name || getAgeGroupName(item.age_group_id) }}
+              
+      </template>
+      <template #cell-registration-date="{ item }">
+
+                {{ formatDateDisplay(item.registration_date) }}
+              
+      </template>
+      <template #cell-exemption="{ item }">
+
                 <span 
                   class="badge px-2 py-0.8 rounded-pill text-xs"
-                  :class="m.fee_exemption === 'yes' ? 'bg-warning bg-opacity-15 text-warning border border-warning border-opacity-25' : 'bg-light text-muted'"
+                  :class="item.fee_exemption === 'yes' ? 'bg-warning bg-opacity-15 text-warning border border-warning border-opacity-25' : 'bg-light text-muted'"
                 >
-                  {{ m.fee_exemption === 'yes' ? 'Exempted' : 'Standard' }}
+                  {{ item.fee_exemption === 'yes' ? 'Exempted' : 'Standard' }}
                 </span>
-              </td>
-              <td>
+              
+      </template>
+      <template #cell-status="{ item }">
+
                 <span 
                   class="badge px-2.5 py-1 rounded-pill text-xs fw-semibold"
                   :class="{
-                    'bg-success bg-opacity-10 text-success border border-success border-opacity-20': m.member_status === 'active',
-                    'bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-20': m.member_status === 'inactive',
-                    'bg-dark bg-opacity-10 text-dark border border-dark border-opacity-20': m.member_status === 'deceased'
+                    'bg-success bg-opacity-10 text-success border border-success border-opacity-20': item.member_status === 'active',
+                    'bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-20': item.member_status === 'inactive',
+                    'bg-dark bg-opacity-10 text-dark border border-dark border-opacity-20': item.member_status === 'deceased'
                   }"
                 >
                   <i :class="{
-                    'bi bi-check-circle-fill me-1': m.member_status === 'active',
-                    'bi bi-dash-circle-fill me-1': m.member_status === 'inactive',
-                    'bi bi-slash-circle-fill me-1': m.member_status === 'deceased'
+                    'bi bi-check-circle-fill me-1': item.member_status === 'active',
+                    'bi bi-dash-circle-fill me-1': item.member_status === 'inactive',
+                    'bi bi-slash-circle-fill me-1': item.member_status === 'deceased'
                   }"></i>
-                  {{ m.member_status === 'deceased' ? 'Deceased' : (m.member_status === 'active' ? 'Active' : 'Inactive') }}
+                  {{ item.member_status === 'deceased' ? 'Deceased' : (item.member_status === 'active' ? 'Active' : 'Inactive') }}
                 </span>
-              </td>
-              <td class="pe-4 text-end">
+              
+      </template>
+      <template #cell-actions="{ item }">
+
                 <div class="d-flex align-items-center justify-content-end gap-2">
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
-                    @click="openViewModal(m)"
+                    @click="openViewModal(item)"
                     title="View Member Profile"
                   >
                     <i class="bi bi-eye-fill text-primary"></i>
                   </button>
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
-                    @click="exportMemberProfilePdf(m.id)"
+                    @click="exportMemberProfilePdf(item.id)"
                     title="Download Profile Dossier PDF"
                   >
                     <i class="bi bi-file-earmark-person text-danger"></i>
                   </button>
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
-                    @click="openEditModal(m)"
+                    @click="openEditModal(item)"
                     title="Edit Member Details"
                   >
                     <i class="bi bi-pencil-fill text-muted"></i>
                   </button>
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn hover-danger" 
-                    @click="promptDelete(m)"
+                    @click="promptDelete(item)"
                     title="Delete Member"
                   >
                     <i class="bi bi-trash-fill text-danger"></i>
                   </button>
                 </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+              
+      </template>
+    </AppTable>
 
       <!-- Reusable Pagination Control Footer -->
       <PaginationControl
@@ -1402,4 +1386,5 @@ onMounted(() => {
   background-color: rgba(220, 53, 69, 0.12) !important;
 }
 </style>
+
 

@@ -254,82 +254,66 @@ onMounted(() => {
         <button class="btn btn-sm btn-outline-danger rounded-pill" @click="loadData">Retry</button>
       </div>
 
-      <div class="table-responsive">
-        <table class="table align-middle mb-0 custom-amms-table">
-          <thead>
-            <tr>
-              <th class="ps-4" style="width: 90px;"># ID</th>
-              <th>Fee Year</th>
-              <th>Annual Amount</th>
-              <th>Description</th>
-              <th class="text-end pe-4" style="width: 140px;">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <!-- Loading Skeleton -->
-            <template v-if="loading && (!fees || fees.length === 0)">
-              <tr v-for="i in 4" :key="i">
-                <td class="ps-4"><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-8"></span></td>
-                <td><span class="placeholder col-10"></span></td>
-                <td class="pe-4 text-end"><span class="placeholder col-10"></span></td>
-              </tr>
-            </template>
+      
+    <!-- Replaced by AppTable Component -->
+    <AppTable
+      :columns="[{key: 'id', label: '# ID', width: '90px', headerClass: 'ps-4', cellClass: 'ps-4 font-monospace text-muted text-xs'}, {key: 'fee-year', label: 'Fee Year'}, {key: 'annual-amount', label: 'Annual Amount', cellClass: 'fw-bold text-success font-monospace fs-6'}, {key: 'description', label: 'Description', cellClass: 'text-secondary-amms text-xs'}, {key: 'actions', label: 'Actions', align: 'right', width: '140px', headerClass: 'pe-4', cellClass: 'pe-4'}]"
+      :items="paginatedFees"
+      :loading="loading"
+      emptyIcon="bi bi-receipt"
+      emptyTitle="No fee schedules found"
+      emptySubtitle="Click 'New Fee Schedule' above to define an annual fee rate."
 
-            <!-- Empty State -->
-            <tr v-else-if="filteredFees.length === 0">
-              <td colspan="5" class="text-center py-5 text-muted">
-                <i class="bi bi-receipt fs-1 d-block mb-2 text-opacity-50"></i>
-                <p class="mb-0 fw-medium">No fee schedules found</p>
-                <small>Click "New Fee Schedule" above to define an annual fee rate.</small>
-              </td>
-            </tr>
+    >
+      <template #cell-id="{ item }">
+#{{ item.id }}
+      </template>
+      <template #cell-fee-year="{ item }">
 
-            <!-- Fee Schedule Rows -->
-            <tr v-for="fee in paginatedFees" :key="fee.id">
-              <td class="ps-4 font-monospace text-muted text-xs">#{{ fee.id }}</td>
-              <td>
                 <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-20 px-3 py-1.5 rounded-pill font-monospace fw-semibold">
                   <i class="bi bi-calendar-event me-1"></i>
-                  {{ getFeeYear(fee) }}
+                  {{ getFeeYear(item) }}
                 </span>
-              </td>
-              <td class="fw-bold text-success font-monospace fs-6">
-                {{ formatCurrency(fee.amount) }}
-              </td>
-              <td class="text-secondary-amms text-xs">
-                {{ fee.description || fee.name || '—' }}
-              </td>
-              <td class="pe-4 text-end">
+              
+      </template>
+      <template #cell-annual-amount="{ item }">
+
+                {{ formatCurrency(item.amount) }}
+              
+      </template>
+      <template #cell-description="{ item }">
+
+                {{ item.description || item.name || '—' }}
+              
+      </template>
+      <template #cell-actions="{ item }">
+
                 <div class="d-flex align-items-center justify-content-end gap-1">
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
-                    @click="openViewModal(fee)"
+                    @click="openViewModal(item)"
                     title="View Fee Schedule Details"
                   >
                     <i class="bi bi-eye-fill text-primary"></i>
                   </button>
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
-                    @click="openEditModal(fee)"
+                    @click="openEditModal(item)"
                     title="Edit Fee Schedule"
                   >
                     <i class="bi bi-pencil-fill text-muted"></i>
                   </button>
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn hover-danger" 
-                    @click="promptDelete(fee)"
+                    @click="promptDelete(item)"
                     title="Delete Fee Schedule"
                   >
                     <i class="bi bi-trash-fill text-danger"></i>
                   </button>
                 </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+              
+      </template>
+    </AppTable>
 
       <!-- Reusable Pagination Control Footer -->
       <PaginationControl
@@ -541,4 +525,5 @@ onMounted(() => {
   background-color: rgba(220, 53, 69, 0.12) !important;
 }
 </style>
+
 

@@ -209,8 +209,8 @@ onMounted(() => {
       :loading="loading"
       emptyIcon="bi bi-people"
       emptyTitle="No age groups found"
-      emptySubtitle="Click 'New Age Group' above to add your first bracket."
-      v-model:currentPage="currentPage"
+      emptySubtitle="Click 'New Age Group' above to add your first bracket.'
+      v-model:currentPage='currentPage"
       v-model:itemsPerPage="itemsPerPage"
       :totalPages="totalPages"
       :totalItems="filteredAgeGroups.length"
@@ -242,7 +242,7 @@ onMounted(() => {
       <template #cell-range="{ item }">
         <span class="badge bg-body-tertiary text-body border px-3 py-1.5 rounded-pill font-monospace text-xs">
           <i class="bi bi-clock-history me-1 text-muted"></i>
-          {{ item.from_age }} — {{ item.to_age }} Years
+          {{ item.from_age }} ï¿½ {{ item.to_age }} Years
         </span>
       </template>
 
@@ -511,6 +511,7 @@ onMounted(() => {
   background-color: rgba(220, 53, 69, 0.12) !important;
 }
 </style>
+
 
 
 

@@ -385,8 +385,8 @@ onMounted(loadDependencies)
                 <div class="input-group">
                   <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-person-fill"></i></span>
                   <select v-model="selectedMemberId" class="form-select border-start-0" :class="{ 'is-invalid': !selectedMemberId }">
-                    <option value="">— Select a member —</option>
-                    <option v-for="m in members" :key="m.id" :value="m.id">{{ m.first_name }} {{ m.last_name }}{{ m.phone ? ` · ${m.phone}` : '' }}</option>
+                    <option value="">ï¿½ Select a member ï¿½</option>
+                    <option v-for="m in members" :key="m.id" :value="m.id">{{ m.first_name }} {{ m.last_name }}{{ m.phone ? ` ï¿½ ${m.phone}` : '' }}</option>
                   </select>
                 </div>
                 <div v-if="!selectedMemberId" class="text-danger mt-1 text-2xs"><i class="bi bi-exclamation-circle"></i> A target member is required.</div>
@@ -400,8 +400,8 @@ onMounted(loadDependencies)
                 <div class="input-group">
                   <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-receipt"></i></span>
                   <select v-model="selectedFeeId" class="form-select border-start-0">
-                    <option value="">— All Years —</option>
-                    <option v-for="f in fees" :key="f.id" :value="f.id">{{ f.year || f.fee_year }} — {{ f.name }}</option>
+                    <option value="">ï¿½ All Years ï¿½</option>
+                    <option v-for="f in fees" :key="f.id" :value="f.id">{{ f.year || f.fee_year }} ï¿½ {{ f.name }}</option>
                   </select>
                 </div>
               </div>
@@ -502,7 +502,7 @@ onMounted(loadDependencies)
             <iframe v-else-if="previewPdfUrl" :src="previewPdfUrl" class="w-100 h-100 border-0" title="PDF Report Preview"></iframe>
           </div>
           <div class="modal-footer border-top px-4 py-2 bg-body-tertiary d-flex justify-content-between">
-            <small class="text-muted" style="font-size:.7rem;">Official PDF · AMMS Dompdf Engine</small>
+            <small class="text-muted" style="font-size:.7rem;">Official PDF ï¿½ AMMS Dompdf Engine</small>
             <button type="button" class="btn btn-sm btn-secondary rounded-pill px-4 fw-semibold" @click="closePreviewModal">Close</button>
           </div>
         </div>

@@ -325,84 +325,71 @@ onMounted(() => {
         <button class="btn btn-sm btn-outline-danger rounded-pill" @click="loadData">Retry</button>
       </div>
 
-      <div class="table-responsive">
-        <table class="table align-middle mb-0 custom-amms-table">
-          <thead>
-            <tr>
-              <th class="ps-4" style="width: 70px;"># ID</th>
-              <th>User Name</th>
-              <th>Email & Phone</th>
-              <th>Assigned Role</th>
-              <th>Status</th>
-              <th class="text-end pe-4" style="width: 140px;">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <template v-if="loading && rawUsersList.length === 0">
-              <tr v-for="i in 5" :key="i">
-                <td class="ps-4"><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-8"></span></td>
-                <td><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-4"></span></td>
-                <td class="pe-4 text-end"><span class="placeholder col-10"></span></td>
-              </tr>
-            </template>
+      
+    <!-- Replaced by AppTable Component -->
+    <AppTable
+      :columns="[{key: 'id', label: '# ID', width: '70px', headerClass: 'ps-4', cellClass: 'ps-4 font-monospace text-muted text-xs'}, {key: 'user-name', label: 'User Name', cellClass: 'fw-semibold text-primary'}, {key: 'email-phone', label: 'Email & Phone'}, {key: 'assigned-role', label: 'Assigned Role'}, {key: 'status', label: 'Status'}, {key: 'actions', label: 'Actions', align: 'right', width: '140px', headerClass: 'pe-4', cellClass: 'pe-4'}]"
+      :items="paginatedUsers"
+      :loading="loading"
+      emptyIcon="bi bi-person-x"
+      emptyTitle="No system users found"
+      emptySubtitle="Click 'Add System User' above to create one."
 
-            <tr v-else-if="filteredUsers.length === 0">
-              <td colspan="6" class="text-center py-5 text-muted">
-                <i class="bi bi-person-x fs-1 d-block mb-2 text-opacity-50"></i>
-                <p class="mb-0 fw-medium">No system users found</p>
-                <small>Click "Add System User" above to create one.</small>
-              </td>
-            </tr>
+    >
+      <template #cell-id="{ item }">
+#{{ item.id }}
+      </template>
+      <template #cell-user-name="{ item }">
 
-            <tr v-for="u in paginatedUsers" :key="u.id">
-              <td class="ps-4 font-monospace text-muted text-xs">#{{ u.id }}</td>
-              <td class="fw-semibold text-primary">
                 <div class="d-flex align-items-center gap-2.5">
                   <div class="user-avatar-badge rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold text-xs">
-                    {{ u.first_name ? u.first_name[0] : 'U' }}
+                    {{ item.first_name ? item.first_name[0] : 'U' }}
                   </div>
-                  <span>{{ u.first_name }} {{ u.last_name }}</span>
+                  <span>{{ item.first_name }} {{ item.last_name }}</span>
                 </div>
-              </td>
-              <td>
-                <div class="text-xs font-monospace text-body">{{ u.email }}</div>
-                <small v-if="u.phone" class="text-muted font-monospace text-xs">{{ u.phone }}</small>
-              </td>
-              <td>
+              
+      </template>
+      <template #cell-email-phone="{ item }">
+
+                <div class="text-xs font-monospace text-body">{{ item.email }}</div>
+                <small v-if="item.phone" class="text-muted font-monospace text-xs">{{ item.phone }}</small>
+              
+      </template>
+      <template #cell-assigned-role="{ item }">
+
                 <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-20 px-2.5 py-1 rounded-pill text-xs">
                   <i class="bi bi-shield-check me-1"></i>
-                  {{ u.role?.name || getRoleName(u.role_id) }}
+                  {{ item.role?.name || getRoleName(item.role_id) }}
                 </span>
-              </td>
-              <td>
+              
+      </template>
+      <template #cell-status="{ item }">
+
                 <span 
                   class="badge px-2.5 py-1 rounded-pill text-xs fw-semibold"
-                  :class="u.status === 'inactive' ? 'bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-20' : 'bg-success bg-opacity-10 text-success border border-success border-opacity-20'"
+                  :class="item.status === 'inactive' ? 'bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-20' : 'bg-success bg-opacity-10 text-success border border-success border-opacity-20'"
                 >
-                  <i :class="u.status === 'inactive' ? 'bi bi-dash-circle-fill me-1' : 'bi bi-check-circle-fill me-1'"></i>
-                  {{ u.status === 'inactive' ? 'Inactive' : 'Active' }}
+                  <i :class="item.status === 'inactive' ? 'bi bi-dash-circle-fill me-1' : 'bi bi-check-circle-fill me-1'"></i>
+                  {{ item.status === 'inactive' ? 'Inactive' : 'Active' }}
                 </span>
-              </td>
-              <td class="pe-4 text-end">
+              
+      </template>
+      <template #cell-actions="{ item }">
+
                 <div class="d-flex align-items-center justify-content-end gap-1">
-                  <button class="btn btn-sm btn-light border-0 rounded-circle action-btn" @click="openViewModal(u)" title="View User Details">
+                  <button class="btn btn-sm btn-light border-0 rounded-circle action-btn" @click="openViewModal(item)" title="View User Details">
                     <i class="bi bi-eye-fill text-primary"></i>
                   </button>
-                  <button class="btn btn-sm btn-light border-0 rounded-circle action-btn" @click="openEditModal(u)" title="Edit User">
+                  <button class="btn btn-sm btn-light border-0 rounded-circle action-btn" @click="openEditModal(item)" title="Edit User">
                     <i class="bi bi-pencil-fill text-muted"></i>
                   </button>
-                  <button class="btn btn-sm btn-light border-0 rounded-circle action-btn hover-danger" @click="promptDelete(u)" title="Delete User">
+                  <button class="btn btn-sm btn-light border-0 rounded-circle action-btn hover-danger" @click="promptDelete(item)" title="Delete User">
                     <i class="bi bi-trash-fill text-danger"></i>
                   </button>
                 </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+              
+      </template>
+    </AppTable>
 
       <PaginationControl
         v-if="filteredUsers.length > 0"
@@ -595,5 +582,6 @@ onMounted(() => {
   background-color: rgba(220, 53, 69, 0.12) !important;
 }
 </style>
+
 
 
