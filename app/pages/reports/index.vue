@@ -26,14 +26,7 @@ const selectedFeeId = ref<number | string>('')
 const filterFromDate = ref('')
 const filterToDate = ref('')
 const searchQuery = ref('')
-
-const openSections = ref<Set<string>>(new Set(['finance', 'roster', 'demographics', 'member']))
-
-const toggleSection = (catId: string) => {
-  const s = new Set(openSections.value)
-  if (s.has(catId)) { s.delete(catId) } else { s.add(catId) }
-  openSections.value = s
-}
+const activeCategory = ref<'all' | 'finance' | 'roster' | 'demographics' | 'member'>('all')
 
 const isPreviewModalOpen = ref(false)
 const previewReportTitle = ref('')
@@ -42,12 +35,7 @@ const isPreviewLoading = ref(false)
 const activeReportKey = ref<string | null>(null)
 
 const hasFilters = computed(() => !!selectedFeeId.value || !!filterFromDate.value || !!filterToDate.value)
-
-const resetFilters = () => {
-  selectedFeeId.value = ''
-  filterFromDate.value = ''
-  filterToDate.value = ''
-}
+const resetFilters = () => { selectedFeeId.value = ''; filterFromDate.value = ''; filterToDate.value = '' }
 
 const loadDependencies = async () => {
   try {
@@ -55,9 +43,7 @@ const loadDependencies = async () => {
       fetchMembers((api) => api('/api/members')).catch(() => []),
       fetchFees((api) => api('/api/fees')).catch(() => [])
     ])
-    if (members.value && members.value.length > 0) {
-      selectedMemberId.value = members.value[0].id
-    }
+    if (members.value && members.value.length > 0) selectedMemberId.value = members.value[0].id
   } catch (_) {}
 }
 
@@ -88,22 +74,32 @@ const reportsList: ReportDef[] = [
   { id: 'member-history', category: 'member', title: 'Member Activity & Statement', subtitle: 'Financial Statement & Log', description: 'Comprehensive financial statement and chronological activity log for a specific member.', icon: 'bi-clock-history', accentColor: '#B19470', endpoint: '/api/reports/member-history', requiresMember: true, supportsDateFilter: true }
 ]
 
-const filteredReports = computed(() => {
-  if (!searchQuery.value.trim()) return reportsList
-  const q = searchQuery.value.toLowerCase().trim()
-  return reportsList.filter(r =>
-    r.title.toLowerCase().includes(q) ||
-    r.subtitle.toLowerCase().includes(q) ||
-    r.description.toLowerCase().includes(q)
-  )
+const categoryDefs = [
+  { id: 'finance', label: 'Finance & Revenue', icon: 'bi-wallet2', accentColor: '#43766C', description: 'Fee ledgers, payment receipts, arrears & compliance reports.' },
+  { id: 'roster', label: 'Member Rosters', icon: 'bi-people-fill', accentColor: '#B19470', description: 'Official member directories and archival registers.' },
+  { id: 'demographics', label: 'Demographics & Trends', icon: 'bi-bar-chart-line-fill', accentColor: '#43766C', description: 'Age, gender, location, and marital distribution analytics.' },
+  { id: 'member', label: 'Individual Dossiers', icon: 'bi-person-vcard-fill', accentColor: '#76453B', description: 'Per-member profile documents and financial statements.' }
+]
+
+const categoryCounts = computed(() => {
+  const counts: Record<string, number> = {}
+  reportsList.forEach(r => { counts[r.category] = (counts[r.category] || 0) + 1 })
+  return counts
 })
 
-const categoryGroups = computed(() => [
-  { id: 'finance', label: 'Finance & Revenue', icon: 'bi-wallet2', accentColor: '#43766C', reports: filteredReports.value.filter(r => r.category === 'finance') },
-  { id: 'roster', label: 'Member Rosters', icon: 'bi-people-fill', accentColor: '#B19470', reports: filteredReports.value.filter(r => r.category === 'roster') },
-  { id: 'demographics', label: 'Demographics & Trends', icon: 'bi-bar-chart-line-fill', accentColor: '#43766C', reports: filteredReports.value.filter(r => r.category === 'demographics') },
-  { id: 'member', label: 'Individual Dossiers', icon: 'bi-person-vcard-fill', accentColor: '#76453B', reports: filteredReports.value.filter(r => r.category === 'member') }
-])
+const filteredReports = computed(() => {
+  let list = reportsList
+  if (activeCategory.value !== 'all') list = list.filter(r => r.category === activeCategory.value)
+  if (searchQuery.value.trim()) {
+    const q = searchQuery.value.toLowerCase().trim()
+    list = list.filter(r => r.title.toLowerCase().includes(q) || r.subtitle.toLowerCase().includes(q) || r.description.toLowerCase().includes(q))
+  }
+  return list
+})
+
+const selectCategory = (catId: string) => {
+  activeCategory.value = activeCategory.value === catId ? 'all' : catId as any
+}
 
 const buildReportUrl = (report: ReportDef, isDownload = false): string => {
   let base = report.endpoint
@@ -168,6 +164,7 @@ onMounted(loadDependencies)
 
 <template>
   <div>
+    <!-- Page Header -->
     <PageHeader
       title="Reports & Analytics Center"
       subtitle="Generate, preview, and export official PDF ledgers, demographic analytics, member registries, and executive statements"
@@ -176,6 +173,33 @@ onMounted(loadDependencies)
       hideRefresh
       :showAddButton="false"
     />
+
+    <!-- Category Hub: 2x2 grid of clickable category cards -->
+    <div class="row g-3 mb-4">
+      <div v-for="cat in categoryDefs" :key="cat.id" class="col-6 col-lg-3">
+        <button
+          type="button"
+          class="rpt-cat-card w-100 text-start"
+          :class="{ 'rpt-cat-card--active': activeCategory === cat.id }"
+          :style="activeCategory === cat.id ? { borderColor: cat.accentColor, boxShadow: `0 0 0 3px ${cat.accentColor}22` } : {}"
+          @click="selectCategory(cat.id)"
+        >
+          <div class="rpt-cat-card__icon" :style="{ background: cat.accentColor + '18', color: cat.accentColor }">
+            <i :class="`bi ${cat.icon}`"></i>
+          </div>
+          <div class="rpt-cat-card__body">
+            <div class="rpt-cat-card__label">{{ cat.label }}</div>
+            <div class="rpt-cat-card__count" :style="{ color: cat.accentColor }">
+              {{ categoryCounts[cat.id] || 0 }} reports
+            </div>
+            <div class="rpt-cat-card__desc">{{ cat.description }}</div>
+          </div>
+          <div v-if="activeCategory === cat.id" class="rpt-cat-card__check" :style="{ background: cat.accentColor }">
+            <i class="bi bi-check2"></i>
+          </div>
+        </button>
+      </div>
+    </div>
 
     <!-- Parameters Bar -->
     <div class="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden rpt-params-card">
@@ -213,85 +237,92 @@ onMounted(loadDependencies)
             </div>
           </div>
         </div>
-        <button v-if="hasFilters" class="rpt-params-reset" @click="resetFilters" title="Clear all filters">
-          <i class="bi bi-x-circle-fill"></i>
-          <span>Reset</span>
+        <button v-if="hasFilters" class="rpt-params-reset" @click="resetFilters">
+          <i class="bi bi-x-circle-fill"></i> Reset
         </button>
       </div>
     </div>
 
-    <!-- Accordion Sections -->
-    <div class="rpt-accordions">
-      <template v-for="grp in categoryGroups" :key="grp.id">
-        <div v-if="grp.reports.length > 0" class="rpt-accordion mb-3">
+    <!-- Report List -->
+    <div class="card border-0 shadow-sm rounded-4 overflow-hidden mb-5">
 
-          <!-- Header -->
-          <button class="rpt-accordion-hd" :style="{ background: grp.accentColor }" @click="toggleSection(grp.id)">
-            <div class="d-flex align-items-center gap-2">
-              <div class="rpt-accordion-hd-icon"><i :class="`bi ${grp.icon}`"></i></div>
-              <span class="rpt-accordion-hd-label">{{ grp.label }}</span>
-              <span class="rpt-accordion-hd-badge">{{ grp.reports.length }} {{ grp.reports.length === 1 ? 'report' : 'reports' }}</span>
+      <!-- List header bar -->
+      <div class="rpt-list-header">
+        <span class="rpt-list-header__label">
+          <span v-if="activeCategory === 'all'">All Reports</span>
+          <span v-else>{{ categoryDefs.find(c => c.id === activeCategory)?.label }}</span>
+        </span>
+        <span class="rpt-list-header__count">{{ filteredReports.length }} {{ filteredReports.length === 1 ? 'report' : 'reports' }}</span>
+        <button v-if="activeCategory !== 'all'" class="rpt-list-header__clear" @click="activeCategory = 'all'">
+          <i class="bi bi-x"></i> Show all
+        </button>
+      </div>
+
+      <!-- Empty state -->
+      <div v-if="filteredReports.length === 0" class="rpt-empty">
+        <i class="bi bi-search rpt-empty-icon"></i>
+        <div class="rpt-empty-title">No reports found</div>
+        <p class="rpt-empty-sub">Try a different keyword or select another category.</p>
+        <button class="btn btn-sm btn-outline-primary rounded-pill px-4" @click="searchQuery = ''; activeCategory = 'all'">Clear Filters</button>
+      </div>
+
+      <!-- Report Rows -->
+      <div v-else class="rpt-list">
+        <div
+          v-for="report in filteredReports"
+          :key="report.id"
+          class="rpt-row"
+          :style="{ borderLeftColor: report.accentColor }"
+        >
+          <!-- Left: icon + info -->
+          <div class="rpt-row__left">
+            <div class="rpt-row__iconbox" :style="{ background: report.accentColor + '15', color: report.accentColor }">
+              <i :class="`bi ${report.icon}`"></i>
             </div>
-            <i class="bi rpt-accordion-chevron" :class="openSections.has(grp.id) ? 'bi-chevron-down' : 'bi-chevron-right'"></i>
-          </button>
-
-          <!-- Body -->
-          <div v-show="openSections.has(grp.id)" class="rpt-accordion-body">
-            <div class="row g-3 p-3">
-              <div v-for="report in grp.reports" :key="report.id" class="col-12 col-lg-6">
-                <div class="rpt-card h-100" :style="{ borderLeftColor: report.accentColor }">
-
-                  <!-- Icon + Titles -->
-                  <div class="rpt-card-head">
-                    <div class="rpt-card-iconbox" :style="{ background: report.accentColor + '18', color: report.accentColor }">
-                      <i :class="`bi ${report.icon}`"></i>
-                    </div>
-                    <div class="rpt-card-titles">
-                      <div class="rpt-card-title">{{ report.title }}</div>
-                      <div class="rpt-card-sub">{{ report.subtitle }}</div>
-                    </div>
-                  </div>
-
-                  <!-- Description -->
-                  <p class="rpt-card-desc">{{ report.description }}</p>
-
-                  <!-- Tags -->
-                  <div class="rpt-card-tags">
-                    <span v-if="report.requiresMember" class="rpt-tag"><i class="bi bi-person-check-fill"></i> Member Specific</span>
-                    <span v-if="report.supportsFeeFilter" class="rpt-tag"><i class="bi bi-funnel-fill"></i> Fee Year Filter</span>
-                    <span v-if="report.supportsDateFilter" class="rpt-tag"><i class="bi bi-calendar3"></i> Date Range</span>
-                    <span v-if="!report.requiresMember && !report.supportsFeeFilter && !report.supportsDateFilter" class="rpt-tag rpt-tag-ok"><i class="bi bi-check2-circle"></i> Full Scope</span>
-                  </div>
-
-                  <!-- Actions -->
-                  <div class="rpt-card-actions">
-                    <button class="rpt-btn rpt-btn-ghost" :disabled="activeReportKey === report.id || isGenerating" @click="handlePreviewReport(report)" title="Preview in fullscreen viewer">
-                      <i class="bi bi-eye"></i><span>Preview</span>
-                    </button>
-                    <button class="rpt-btn rpt-btn-ghost" :disabled="activeReportKey === report.id || isGenerating" @click="handleDownloadReport(report)" title="Download PDF">
-                      <i class="bi bi-download"></i><span>Download</span>
-                    </button>
-                    <button class="rpt-btn rpt-btn-primary ms-auto" :disabled="activeReportKey === report.id || isGenerating" @click="handleOpenInNewTab(report)" title="Open in new tab">
-                      <span v-if="activeReportKey === report.id" class="spinner-border spinner-border-sm" role="status"></span>
-                      <i v-else class="bi bi-box-arrow-up-right"></i>
-                      <span>{{ activeReportKey === report.id ? 'Loading...' : 'Open Tab' }}</span>
-                    </button>
-                  </div>
-
-                </div>
-              </div>
+            <div class="rpt-row__info">
+              <div class="rpt-row__title">{{ report.title }}</div>
+              <div class="rpt-row__sub">{{ report.subtitle }}</div>
+              <div class="rpt-row__desc">{{ report.description }}</div>
             </div>
           </div>
 
-        </div>
-      </template>
+          <!-- Middle: scope tags -->
+          <div class="rpt-row__tags">
+            <span v-if="report.requiresMember" class="rpt-tag"><i class="bi bi-person-check-fill"></i> Member</span>
+            <span v-if="report.supportsFeeFilter" class="rpt-tag"><i class="bi bi-funnel-fill"></i> Fee Year</span>
+            <span v-if="report.supportsDateFilter" class="rpt-tag"><i class="bi bi-calendar3"></i> Date Range</span>
+            <span v-if="!report.requiresMember && !report.supportsFeeFilter && !report.supportsDateFilter" class="rpt-tag rpt-tag-ok"><i class="bi bi-check2-circle"></i> Full Scope</span>
+          </div>
 
-      <!-- Empty State -->
-      <div v-if="filteredReports.length === 0" class="rpt-empty card border-0 shadow-sm rounded-4">
-        <i class="bi bi-search rpt-empty-icon"></i>
-        <div class="rpt-empty-title">No reports match "{{ searchQuery }}"</div>
-        <p class="rpt-empty-sub">Try a different keyword — report name, subtitle, or description.</p>
-        <button class="btn btn-sm btn-outline-primary rounded-pill px-4" @click="searchQuery = ''">Clear Search</button>
+          <!-- Right: actions -->
+          <div class="rpt-row__actions">
+            <button
+              class="rpt-icon-btn"
+              :disabled="activeReportKey === report.id || isGenerating"
+              @click="handlePreviewReport(report)"
+              title="Preview PDF"
+            >
+              <i class="bi bi-eye"></i>
+            </button>
+            <button
+              class="rpt-icon-btn"
+              :disabled="activeReportKey === report.id || isGenerating"
+              @click="handleDownloadReport(report)"
+              title="Download PDF"
+            >
+              <i class="bi bi-download"></i>
+            </button>
+            <button
+              class="rpt-icon-btn rpt-icon-btn--primary"
+              :disabled="activeReportKey === report.id || isGenerating"
+              @click="handleOpenInNewTab(report)"
+              title="Open in new tab"
+            >
+              <span v-if="activeReportKey === report.id" class="spinner-border spinner-border-sm" role="status"></span>
+              <i v-else class="bi bi-box-arrow-up-right"></i>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -302,7 +333,6 @@ onMounted(loadDependencies)
     <div v-if="isPreviewModalOpen" class="modal fade show d-block" tabindex="-1" role="dialog" style="z-index:1065;" @click.self="closePreviewModal">
       <div class="modal-dialog modal-dialog-centered modal-xl" style="max-width:90vw;height:90vh;">
         <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden d-flex flex-column h-100">
-
           <div class="modal-header border-bottom px-4 py-3 bg-body-tertiary">
             <div class="d-flex align-items-center gap-2 flex-grow-1">
               <i class="bi bi-file-earmark-pdf-fill text-danger fs-5"></i>
@@ -318,7 +348,6 @@ onMounted(loadDependencies)
               <button type="button" class="btn-close" @click="closePreviewModal" aria-label="Close"></button>
             </div>
           </div>
-
           <div class="modal-body p-0 flex-grow-1 bg-dark d-flex align-items-center justify-content-center">
             <div v-if="isPreviewLoading" class="text-center text-white p-5">
               <div class="spinner-border text-light mb-3" style="width:2.5rem;height:2.5rem;" role="status"></div>
@@ -327,20 +356,80 @@ onMounted(loadDependencies)
             </div>
             <iframe v-else-if="previewPdfUrl" :src="previewPdfUrl" class="w-100 h-100 border-0" title="PDF Report Preview"></iframe>
           </div>
-
           <div class="modal-footer border-top px-4 py-2 bg-body-tertiary d-flex justify-content-between">
             <small class="text-muted" style="font-size:.7rem;">Official PDF · AMMS Dompdf Engine</small>
             <button type="button" class="btn btn-sm btn-secondary rounded-pill px-4 fw-semibold" @click="closePreviewModal">Close</button>
           </div>
-
         </div>
       </div>
     </div>
-
   </div>
 </template>
 
 <style scoped>
+/* -- Category Hub Cards ------------------- */
+.rpt-cat-card {
+  background: var(--bs-body-bg, #fff);
+  border: 1.5px solid rgba(0,0,0,.08);
+  border-radius: .9rem;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: .6rem;
+  cursor: pointer;
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+  position: relative;
+  overflow: hidden;
+}
+.rpt-cat-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 28px rgba(0,0,0,.09);
+  border-color: rgba(0,0,0,.15);
+}
+.rpt-cat-card--active {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 28px rgba(0,0,0,.1);
+}
+.rpt-cat-card__icon {
+  width: 44px;
+  height: 44px;
+  border-radius: .65rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+.rpt-cat-card__label {
+  font-size: .85rem;
+  font-weight: 700;
+  color: #222;
+  line-height: 1.25;
+}
+.rpt-cat-card__count {
+  font-size: .75rem;
+  font-weight: 700;
+}
+.rpt-cat-card__desc {
+  font-size: .72rem;
+  color: #999;
+  line-height: 1.45;
+}
+.rpt-cat-card__check {
+  position: absolute;
+  top: .65rem;
+  right: .65rem;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: .75rem;
+}
+
+/* -- Parameters Bar ----------------------- */
 .rpt-params-card { border: 1px solid rgba(0,0,0,.06) !important; }
 .rpt-params-inner { display: flex; align-items: stretch; flex-wrap: wrap; }
 .rpt-params-field { display: flex; align-items: center; gap: .65rem; padding: .8rem 1.25rem; flex: 1; min-width: 180px; }
@@ -353,37 +442,103 @@ onMounted(loadDependencies)
 .rpt-params-reset { display: flex; align-items: center; gap: .35rem; padding: .5rem 1.1rem; border: none; background: rgba(220,53,69,.06); color: #dc3545; font-size: .75rem; font-weight: 700; cursor: pointer; border-left: 1px solid rgba(220,53,69,.15); transition: background .15s; flex-shrink: 0; }
 .rpt-params-reset:hover { background: rgba(220,53,69,.12); }
 
-.rpt-accordion { border: 1px solid rgba(0,0,0,.08); border-radius: .9rem; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,.04); }
-.rpt-accordion-hd { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: .9rem 1.3rem; border: none; cursor: pointer; color: #fff; text-align: left; transition: filter .15s ease; }
-.rpt-accordion-hd:hover { filter: brightness(1.07); }
-.rpt-accordion-hd-icon { width: 32px; height: 32px; border-radius: .5rem; background: rgba(255,255,255,.18); display: flex; align-items: center; justify-content: center; font-size: .95rem; flex-shrink: 0; }
-.rpt-accordion-hd-label { font-size: .92rem; font-weight: 700; }
-.rpt-accordion-hd-badge { font-size: .67rem; font-weight: 600; background: rgba(255,255,255,.2); padding: .12rem .5rem; border-radius: 999px; white-space: nowrap; }
-.rpt-accordion-chevron { font-size: .9rem; flex-shrink: 0; transition: transform .2s ease; }
-.rpt-accordion-body { background: var(--bs-body-bg, #fff); border-top: 1px solid rgba(0,0,0,.06); }
+/* -- Report List -------------------------- */
+.rpt-list-header {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  padding: .75rem 1.25rem;
+  border-bottom: 1px solid rgba(0,0,0,.06);
+  background: var(--bs-tertiary-bg, #f8f9fa);
+}
+.rpt-list-header__label { font-size: .8rem; font-weight: 700; color: #444; flex: 1; }
+.rpt-list-header__count { font-size: .72rem; font-weight: 600; background: rgba(0,0,0,.06); color: #777; padding: .15rem .55rem; border-radius: 999px; }
+.rpt-list-header__clear { border: none; background: none; font-size: .72rem; font-weight: 600; color: #43766C; cursor: pointer; display: flex; align-items: center; gap: .2rem; padding: .15rem .4rem; border-radius: .35rem; transition: background .15s; }
+.rpt-list-header__clear:hover { background: rgba(67,118,108,.08); }
 
-.rpt-card { background: var(--bs-body-bg, #fff); border: 1px solid rgba(0,0,0,.07); border-left: 4px solid #43766C; border-radius: .75rem; padding: 1rem 1rem .9rem; display: flex; flex-direction: column; gap: .58rem; transition: transform .18s ease, box-shadow .18s ease; }
-.rpt-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.09); }
-.rpt-card-head { display: flex; align-items: flex-start; gap: .7rem; }
-.rpt-card-iconbox { width: 38px; height: 38px; min-width: 38px; border-radius: .55rem; display: flex; align-items: center; justify-content: center; font-size: 1.05rem; flex-shrink: 0; }
-.rpt-card-titles { flex: 1; min-width: 0; }
-.rpt-card-title { font-size: .87rem; font-weight: 700; color: #222; line-height: 1.3; }
-.rpt-card-sub { font-size: .63rem; font-weight: 600; text-transform: uppercase; letter-spacing: .055em; color: #bbb; margin-top: .1rem; }
-.rpt-card-desc { font-size: .77rem; color: #666; line-height: 1.55; margin: 0; flex: 1; }
-.rpt-card-tags { display: flex; flex-wrap: wrap; gap: .3rem; }
-.rpt-tag { display: inline-flex; align-items: center; gap: .28rem; font-size: .66rem; font-weight: 600; background: rgba(0,0,0,.05); color: #777; border-radius: 999px; padding: .16rem .48rem; }
+.rpt-list { display: flex; flex-direction: column; }
+
+.rpt-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid rgba(0,0,0,.05);
+  border-left: 4px solid transparent;
+  transition: background .15s ease;
+}
+.rpt-row:last-child { border-bottom: none; }
+.rpt-row:hover { background: rgba(0,0,0,.018); }
+
+.rpt-row__left {
+  display: flex;
+  align-items: flex-start;
+  gap: .85rem;
+  flex: 1;
+  min-width: 0;
+}
+.rpt-row__iconbox {
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  border-radius: .55rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+.rpt-row__info { flex: 1; min-width: 0; }
+.rpt-row__title { font-size: .86rem; font-weight: 700; color: #222; line-height: 1.3; }
+.rpt-row__sub { font-size: .63rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: #bbb; margin-bottom: .2rem; }
+.rpt-row__desc { font-size: .75rem; color: #888; line-height: 1.45; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 420px; }
+
+.rpt-row__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .3rem;
+  justify-content: flex-end;
+  min-width: 120px;
+}
+.rpt-tag { display: inline-flex; align-items: center; gap: .25rem; font-size: .65rem; font-weight: 600; background: rgba(0,0,0,.05); color: #777; border-radius: 999px; padding: .14rem .45rem; white-space: nowrap; }
 .rpt-tag-ok { background: rgba(47,133,90,.09); color: #2F855A; }
 
-.rpt-card-actions { display: flex; align-items: center; gap: .4rem; padding-top: .65rem; border-top: 1px solid rgba(0,0,0,.06); margin-top: auto; }
-.rpt-btn { display: inline-flex; align-items: center; gap: .3rem; font-size: .73rem; font-weight: 600; padding: .32rem .7rem; border-radius: 999px; border: 1px solid transparent; cursor: pointer; transition: all .15s ease; white-space: nowrap; }
-.rpt-btn:disabled { opacity: .5; cursor: not-allowed; }
-.rpt-btn-ghost { background: var(--bs-body-bg); border-color: rgba(0,0,0,.13); color: #555; }
-.rpt-btn-ghost:hover:not(:disabled) { background: rgba(67,118,108,.07); border-color: #43766C; color: #43766C; }
-.rpt-btn-primary { background: #43766C; border-color: #43766C; color: #fff; }
-.rpt-btn-primary:hover:not(:disabled) { background: #325e56; border-color: #325e56; }
+.rpt-row__actions {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+  flex-shrink: 0;
+}
+.rpt-icon-btn {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(0,0,0,.12);
+  background: var(--bs-body-bg);
+  border-radius: .5rem;
+  cursor: pointer;
+  font-size: .85rem;
+  color: #555;
+  transition: all .15s ease;
+  flex-shrink: 0;
+}
+.rpt-icon-btn:hover:not(:disabled) { background: rgba(67,118,108,.07); border-color: #43766C; color: #43766C; }
+.rpt-icon-btn--primary { background: #43766C; border-color: #43766C; color: #fff; }
+.rpt-icon-btn--primary:hover:not(:disabled) { background: #325e56; border-color: #325e56; }
+.rpt-icon-btn:disabled { opacity: .45; cursor: not-allowed; }
 
-.rpt-empty { padding: 3.5rem 1.5rem; text-align: center; display: flex; flex-direction: column; align-items: center; gap: .6rem; border: 1px solid rgba(0,0,0,.06) !important; }
+/* -- Empty State -------------------------- */
+.rpt-empty { padding: 3.5rem 1.5rem; text-align: center; display: flex; flex-direction: column; align-items: center; gap: .6rem; }
 .rpt-empty-icon { font-size: 2.5rem; color: #ccc; }
 .rpt-empty-title { font-size: .95rem; font-weight: 700; color: #888; }
 .rpt-empty-sub { font-size: .78rem; color: #aaa; margin: 0; }
+
+/* -- Responsive --------------------------- */
+@media (max-width: 767px) {
+  .rpt-row { flex-wrap: wrap; }
+  .rpt-row__tags { min-width: unset; justify-content: flex-start; }
+  .rpt-row__desc { max-width: 100%; white-space: normal; }
+}
 </style>
