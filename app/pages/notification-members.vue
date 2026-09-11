@@ -749,7 +749,7 @@ onMounted(() => {
     <DeleteConfirmModal
       v-model="isDeleteModalOpen"
       message="Are you sure you want to permanently remove this recipient from the notification?"
-      :itemTitle="itemToDelete ? &quot; &quot; : ''"
+        :itemTitle="itemToDelete ? `&quot;${itemToDelete.member?.first_name} ${itemToDelete.member?.last_name}&quot;` : ''"
       :loading="isDeleting"
       confirmText="Remove Recipient"
       @confirm="confirmDelete"

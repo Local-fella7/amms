@@ -226,11 +226,11 @@ onMounted(() => {
         </div>
       </template>
       
-      <template #cell(id)="{ item }">
+      <template #cell-id="{ item }">
         #{{ item.id }}
       </template>
 
-      <template #cell(name)="{ item }">
+      <template #cell-name="{ item }">
         <div class="fw-semibold text-primary d-flex align-items-center gap-2.5">
           <div class="group-icon-badge rounded-circle d-flex align-items-center justify-content-center">
             <i class="bi bi-person-bounding-box text-primary text-xs"></i>
@@ -239,14 +239,14 @@ onMounted(() => {
         </div>
       </template>
       
-      <template #cell(range)="{ item }">
+      <template #cell-range="{ item }">
         <span class="badge bg-body-tertiary text-body border px-3 py-1.5 rounded-pill font-monospace text-xs">
           <i class="bi bi-clock-history me-1 text-muted"></i>
           {{ item.from_age }} — {{ item.to_age }} Years
         </span>
       </template>
 
-      <template #cell(actions)="{ item }">
+      <template #cell-actions="{ item }">
         <div class="d-flex align-items-center justify-content-end gap-1">
           <button 
             class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
@@ -511,5 +511,6 @@ onMounted(() => {
   background-color: rgba(220, 53, 69, 0.12) !important;
 }
 </style>
+
 
 

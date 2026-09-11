@@ -388,7 +388,7 @@ onMounted(() => {
     <DeleteConfirmModal
       v-model="isDeleteModalOpen"
       message="Are you sure you want to permanently delete this audit log record?"
-      :itemTitle="itemToDelete ? &quot;Log #&quot; : ''"
+        :itemTitle="itemToDelete ? `&quot;Log #${itemToDelete.id}&quot;` : ''"
       :loading="isDeleting"
       confirmText="Delete Log"
       @confirm="confirmDelete"

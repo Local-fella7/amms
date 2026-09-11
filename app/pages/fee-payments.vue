@@ -749,7 +749,7 @@ onMounted(() => {
     <DeleteConfirmModal
       v-model="isDeleteModalOpen"
       message="Are you sure you want to permanently delete this fee payment receipt?"
-      :itemTitle="itemToDelete ? `&quot;Receipt #${itemToDelete.receipt_number}&quot;` : '"
+        :itemTitle="itemToDelete ? `&quot;Receipt #${itemToDelete.receipt_number}&quot;` : ''"
       :loading="isDeleting"
       confirmText="Delete Payment"
       @confirm="confirmDelete"

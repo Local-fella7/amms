@@ -303,7 +303,7 @@ onMounted(() => {
     <DeleteConfirmModal
       v-model="isDeleteModalOpen"
       message="Are you sure you want to permanently delete this location branch?"
-      :itemTitle="itemToDelete ? `&quot;${itemToDelete.name}&quot;` : '"
+        :itemTitle="itemToDelete ? `&quot;${itemToDelete.name}&quot;` : ''"
       :loading="isDeleting"
       confirmText="Delete Branch"
       @confirm="confirmDelete"

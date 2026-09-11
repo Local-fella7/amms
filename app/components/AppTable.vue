@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import PaginationControl from './PaginationControl.vue'
 
 const props = defineProps<{
   columns: { key: string, label: string, width?: string, align?: 'left' | 'center' | 'right', headerClass?: string, cellClass?: string }[]
@@ -90,7 +89,7 @@ const perPage = computed({
                   col.cellClass
                 ]"
               >
-                <slot :name="`cell(${col.key})`" :item="item">
+                <slot :name="'cell-' + col.key" :item="item">
                   {{ item[col.key] }}
                 </slot>
               </td>
@@ -110,3 +109,33 @@ const perPage = computed({
     />
   </div>
 </template>
+
+
+
+
+<style scoped>
+/* Civic Registry Custom Table Styling */
+.custom-amms-table {
+  --bs-table-bg: transparent;
+  --bs-table-hover-bg: rgba(27, 42, 74, 0.03);
+}
+
+.custom-amms-table thead {
+  background-color: var(--amms-primary) !important;
+}
+
+.custom-amms-table thead th {
+  color: #FFFFFF !important;
+  border-bottom: 2px solid var(--amms-accent);
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  padding-top: 0.85rem;
+  padding-bottom: 0.85rem;
+}
+</style>
+
+<style>
+.text-xs { font-size: 0.775rem !important; }
+.text-sm { font-size: 0.875rem !important; }
+</style>

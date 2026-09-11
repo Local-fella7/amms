@@ -379,7 +379,7 @@ onMounted(() => {
     <DeleteConfirmModal
       v-model="isDeleteModalOpen"
       message="Are you sure you want to permanently delete this annual fee schedule?"
-      :itemTitle="itemToDelete ? `Year ${getFeeYear(itemToDelete)} (${formatCurrency(itemToDelete.amount)})` : '"
+        :itemTitle="itemToDelete ? `Year ${getFeeYear(itemToDelete)} (${formatCurrency(itemToDelete.amount)})` : ''"
       :loading="isDeleting"
       confirmText="Delete Fee"
       @confirm="confirmDelete"

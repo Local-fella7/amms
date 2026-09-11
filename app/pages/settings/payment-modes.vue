@@ -199,11 +199,11 @@ onMounted(() => {
       :totalPages="totalPages"
       :totalItems="filteredPaymentModes.length"
     >
-      <template #cell(id)="{ item }">
+      <template #cell-id="{ item }">
         <span class="font-monospace text-muted text-xs">#{{ item.id }}</span>
       </template>
 
-      <template #cell(name)="{ item }">
+      <template #cell-name="{ item }">
         <div class="fw-semibold text-primary d-flex align-items-center gap-2.5">
           <div class="mode-icon-badge rounded-circle d-flex align-items-center justify-content-center">
             <i class="bi bi-credit-card-2-front text-primary text-xs"></i>
@@ -212,7 +212,7 @@ onMounted(() => {
         </div>
       </template>
 
-      <template #cell(actions)="{ item }">
+      <template #cell-actions="{ item }">
         <div class="d-flex align-items-center justify-content-end gap-1">
           <button 
             class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
@@ -268,7 +268,7 @@ onMounted(() => {
     <DeleteConfirmModal
       v-model="isDeleteModalOpen"
       message="Are you sure you want to permanently delete this payment mode?"
-      :itemTitle="itemToDelete ? `&quot;${itemToDelete.name}&quot;` : '"
+        :itemTitle="itemToDelete ? `&quot;${itemToDelete.name}&quot;` : ''"
       :loading="isDeleting"
       confirmText="Delete Mode"
       @confirm="confirmDelete"
@@ -397,5 +397,6 @@ onMounted(() => {
   background-color: rgba(220, 53, 69, 0.12) !important;
 }
 </style>
+
 
 

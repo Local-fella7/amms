@@ -431,7 +431,7 @@ onMounted(() => {
     <DeleteConfirmModal
       v-model="isDeleteModalOpen"
       message="Are you sure you want to permanently delete this notification?"
-      :itemTitle="itemToDelete ? &quot;&quot; : ''"
+        :itemTitle="itemToDelete ? `&quot;${itemToDelete.subject}&quot;` : ''"
       :loading="isDeleting"
       confirmText="Delete Notification"
       @confirm="confirmDelete"
