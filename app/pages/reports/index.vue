@@ -146,6 +146,18 @@ const executeAction = (report: ReportDef, action: 'preview' | 'download' | 'tab'
   else if (action === 'tab') handleOpenInNewTab(report)
 }
 
+const formatDateToYMD = (val: any) => {
+  if (!val) return ''
+  if (typeof val === 'string') return val.substring(0, 10)
+  if (val instanceof Date) {
+    const yyyy = val.getFullYear()
+    const mm = String(val.getMonth() + 1).padStart(2, '0')
+    const dd = String(val.getDate()).padStart(2, '0')
+    return `${yyyy}-${mm}-${dd}`
+  }
+  return ''
+}
+
 const buildReportUrl = (report: ReportDef, isDownload = false): string => {
   let base = report.endpoint
   if (report.requiresMember) {
@@ -156,8 +168,10 @@ const buildReportUrl = (report: ReportDef, isDownload = false): string => {
   if (isDownload) params.set('download', '1')
   if (report.supportsFeeFilter && selectedFeeId.value) params.set('fee_id', String(selectedFeeId.value))
   if (report.supportsDateFilter) {
-    if (filterFromDate.value) params.set('from', filterFromDate.value)
-    if (filterToDate.value) params.set('to', filterToDate.value)
+    const fromStr = formatDateToYMD(filterFromDate.value)
+    const toStr = formatDateToYMD(filterToDate.value)
+    if (fromStr) params.set('from', fromStr)
+    if (toStr) params.set('to', toStr)
   }
   const qs = params.toString()
   return qs ? `${base}?${qs}` : base
@@ -397,18 +411,42 @@ onMounted(loadDependencies)
                 <label class="form-label fw-bold text-xs text-secondary-amms mb-1">
                   Date Range Filter <span class="text-muted fw-normal">(Optional)</span>
                 </label>
-                <div class="row g-2">
+                <div class="row g-3">
                   <div class="col-6">
-                    <div class="input-group">
-                      <span class="input-group-text bg-white border-end-0 text-muted" style="font-size: .75rem;">From</span>
-                      <input v-model="filterFromDate" type="date" class="form-control border-start-0" style="font-size: .8rem;" />
-                    </div>
+                    <ClientOnly>
+                      <VDatePicker v-model="filterFromDate" mode="date" string-format="yyyy-MM-dd" :masks="{ input: 'DD-MM-YYYY' }">
+                        <template #default="{ inputValue, inputEvents }">
+                          <div class="input-group">
+                            <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-calendar3"></i></span>
+                            <input
+                              class="form-control border-start-0 text-sm font-monospace"
+                              :value="inputValue"
+                              v-on="inputEvents"
+                              placeholder="From Date"
+                              readonly
+                            />
+                          </div>
+                        </template>
+                      </VDatePicker>
+                    </ClientOnly>
                   </div>
                   <div class="col-6">
-                    <div class="input-group">
-                      <span class="input-group-text bg-white border-end-0 text-muted" style="font-size: .75rem;">To</span>
-                      <input v-model="filterToDate" type="date" class="form-control border-start-0" style="font-size: .8rem;" />
-                    </div>
+                    <ClientOnly>
+                      <VDatePicker v-model="filterToDate" mode="date" string-format="yyyy-MM-dd" :masks="{ input: 'DD-MM-YYYY' }">
+                        <template #default="{ inputValue, inputEvents }">
+                          <div class="input-group">
+                            <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-calendar3"></i></span>
+                            <input
+                              class="form-control border-start-0 text-sm font-monospace"
+                              :value="inputValue"
+                              v-on="inputEvents"
+                              placeholder="To Date"
+                              readonly
+                            />
+                          </div>
+                        </template>
+                      </VDatePicker>
+                    </ClientOnly>
                   </div>
                 </div>
               </div>
@@ -636,3 +674,4 @@ onMounted(loadDependencies)
   .rpt-row__desc { max-width: 100%; white-space: normal; }
 }
 </style>
+
