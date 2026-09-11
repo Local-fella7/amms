@@ -53,4 +53,17 @@ useHead({
   --dp-background-color: #ffffff;
   --dp-text-color: var(--amms-primary);
 }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+#__nuxt {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
 </style>
