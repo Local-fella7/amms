@@ -192,6 +192,14 @@ const rawPaymentsList = computed<FeePayment[]>(() => {
   return []
 })
 
+const getFullMember = (item: any) => {
+  if (members.value) {
+    const found = members.value.find(m => Number(m.id) === Number(item.member_id))
+    if (found) return found
+  }
+  return item.member
+}
+
 const getMemberName = (mId: number | string) => {
   if (!members.value) return `Member #${mId}`
   const found = members.value.find(m => Number(m.id) === Number(mId))
@@ -564,9 +572,7 @@ onMounted(() => {
       <template #cell-member-name="{ item }">
 
                 <div class="d-flex align-items-center gap-2.5">
-                  <div class="pay-icon-badge rounded-circle d-flex align-items-center justify-content-center">
-                    <i class="bi bi-person text-primary text-xs"></i>
-                  </div>
+                  <MemberAvatar :member="getFullMember(item)" />
                   <div>
                     <span>{{ item.member ? `${item.member.first_name} ${item.member.last_name}` : getMemberName(item.member_id) }}</span>
                     <small v-if="getMemberPhone(item.member_id)" class="d-block text-muted font-monospace text-xs">{{ getMemberPhone(item.member_id) }}</small>

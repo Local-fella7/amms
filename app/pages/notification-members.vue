@@ -146,6 +146,14 @@ const getNotificationTitle = (nId: number | string) => {
   return found ? found.name : `Broadcast #${nId}`
 }
 
+const getFullMember = (item: any) => {
+  if (members.value) {
+    const found = members.value.find(m => Number(m.id) === Number(item.member_id))
+    if (found) return found
+  }
+  return item.member
+}
+
 const getMemberName = (mId: number | string) => {
   if (!members.value) return `Member #${mId}`
   const found = members.value.find(m => Number(m.id) === Number(mId))
@@ -625,9 +633,7 @@ onMounted(() => {
       <template #cell-recipient-member="{ item }">
 
                 <div class="d-flex align-items-center gap-2.5">
-                  <div class="recip-badge rounded-circle d-flex align-items-center justify-content-center text-primary font-monospace fw-bold text-xs">
-                    {{ item.member ? `${item.member.first_name[0]}${item.member.last_name[0]}` : 'MB' }}
-                  </div>
+                  <MemberAvatar :member="getFullMember(item)" />
                   <div>
                     <span>{{ item.member ? `${item.member.first_name} ${item.member.last_name}` : getMemberName(item.member_id) }}</span>
                     <small v-if="item.member?.gender" class="d-block text-muted text-xs text-capitalize">

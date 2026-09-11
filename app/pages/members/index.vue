@@ -697,17 +697,7 @@ onMounted(() => {
       <template #cell-full-name-gender="{ item }">
 
                 <div class="d-flex align-items-center gap-2.5">
-                  <div v-if="hasValidMemberPhoto(item)" class="avatar-badge rounded-circle overflow-hidden d-flex align-items-center justify-content-center">
-                    <img 
-                      :src="getMemberPhotoUrl(getMemberPhotoPath(item))" 
-                      :alt="item.first_name" 
-                      class="w-100 h-100 object-fit-cover" 
-                      @error="onMemberPhotoError(item.id)"
-                    />
-                  </div>
-                  <div v-else class="avatar-badge rounded-circle d-flex align-items-center justify-content-center text-primary font-monospace fw-bold text-xs">
-                    {{ item.first_name[0] }}{{ item.last_name[0] }}
-                  </div>
+                  <MemberAvatar :member="item" />
                   <div>
                     <span class="d-block">{{ item.first_name }} {{ item.last_name }}</span>
                     <small class="text-muted text-xs text-capitalize">

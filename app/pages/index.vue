@@ -118,6 +118,7 @@ const getMemberName = (p: any) => {
   const m = rawMembers.value.find((m: any) => Number(m.id) === Number(p.member_id))
   return m ? `${m.first_name} ${m.last_name}` : `Member #${p.member_id}`
 }
+const getFullMember = (p: any) => rawMembers.value.find((m: any) => Number(m.id) === Number(p.member_id)) || p.member
 const getMemberInitials = (p: any) => { const parts = getMemberName(p).split(' '); return `${(parts[0]||'?')[0]}${(parts[1]||'')[0]||''}`.toUpperCase() }
 
 const PALETTE = ['#43766C','#B19470','#76453B','#6B9E8C','#C4A882','#9E6358']
@@ -415,7 +416,7 @@ const sendReminder = async (m: any) => {
               <div v-if="!overdueMembers.length" class="eact"><i class="bi bi-check2-all text-success fs-3 d-block mb-2"></i><span>All active members are up to date!</span></div>
               <div v-else class="alist">
                 <div v-for="m in overdueMembers" :key="m.id" class="aitem">
-                  <div class="aav aav--red">{{ initials(m) }}</div>
+                  <MemberAvatar :member="m" style="width: 40px; height: 40px; font-size: 0.8rem;" />
                   <div class="ainf"><span class="aname">{{ m.first_name }} {{ m.last_name }}</span><span class="ameta">{{ getLocationName(m.location_id) }}</span></div>
                   <button class="arem" @click="sendReminder(m)" :disabled="sendingReminderId===m.id">
                     <i class="bi" :class="sendingReminderId===m.id?'bi-hourglass-split spin':'bi-bell-fill'"></i>
@@ -436,7 +437,7 @@ const sendReminder = async (m: any) => {
               <div v-if="!recentPayments.length" class="eact"><i class="bi bi-credit-card fs-3 d-block mb-2"></i><span>No payments recorded yet</span></div>
               <div v-else class="alist">
                 <div v-for="p in recentPayments" :key="p.id" class="aitem">
-                  <div class="aav aav--teal">{{ getMemberInitials(p) }}</div>
+                  <MemberAvatar :member="getFullMember(p)" style="width: 40px; height: 40px; font-size: 0.8rem;" />
                   <div class="ainf"><span class="aname">{{ getMemberName(p) }}</span><span class="ameta">{{ formatDate(p.date||p.created_at) }}</span></div>
                   <div class="aamt"><span class="aamt__v">{{ formatCompact(Number(p.amount)) }}</span><span class="aamt__l">paid</span></div>
                 </div>
@@ -454,7 +455,7 @@ const sendReminder = async (m: any) => {
               <div v-if="!recentMembers.length" class="eact"><i class="bi bi-person-plus fs-3 d-block mb-2"></i><span>No members registered yet</span></div>
               <div v-else class="alist">
                 <div v-for="m in recentMembers" :key="m.id" class="aitem">
-                  <div class="aav aav--gold">{{ initials(m) }}</div>
+                  <MemberAvatar :member="m" style="width: 40px; height: 40px; font-size: 0.8rem;" />
                   <div class="ainf"><span class="aname">{{ m.first_name }} {{ m.last_name }}</span><span class="ameta">{{ getLocationName(m.location_id) }}</span></div>
                   <span class="asbadge" :class="m.member_status==='active'?'asbadge--active':'asbadge--inactive'">{{ m.member_status }}</span>
                 </div>
