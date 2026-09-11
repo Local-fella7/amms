@@ -161,20 +161,16 @@ const cancelDelete = () => {
 }
 
 const confirmDelete = async () => {
-  if (!itemToDelete.value) return
-  
-  isDeleting.value = true
-  try {
-    await fetchWithAuth(`/api/age-groups/${itemToDelete.value.id}`, { method: 'DELETE' })
-    push.success(`Age Group "${itemToDelete.value.name}" deleted successfully!`)
-    cancelDelete()
-    await loadData()
-  } catch (err: any) {
-    const msg = err?.data?.message || 'Failed to delete age group'
-    push.error(msg)
-  } finally {
-    isDeleting.value = false
-  }
+    if (!itemToDelete.value) return
+    
+    const success = await mutate(api => api(`/api/age-groups/${itemToDelete.value.id}`, { method: 'DELETE' }), {
+      successMessage: `Age Group "${itemToDelete.value.name}" deleted successfully!`
+    })
+    
+    if (success) {
+      cancelDelete()
+      await loadData()
+    }
 }
 
 onMounted(() => {

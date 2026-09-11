@@ -146,20 +146,16 @@ const cancelDelete = () => {
 }
 
 const confirmDelete = async () => {
-  if (!itemToDelete.value) return
-  
-  isDeleting.value = true
-  try {
-    await fetchWithAuth(`/api/payment-modes/${itemToDelete.value.id}`, { method: 'DELETE' })
-    push.success(`Payment mode "${itemToDelete.value.name}" deleted successfully!`)
-    cancelDelete()
-    await loadData()
-  } catch (err: any) {
-    const msg = err?.data?.message || 'Failed to delete payment mode'
-    push.error(msg)
-  } finally {
-    isDeleting.value = false
-  }
+    if (!itemToDelete.value) return
+    
+    const success = await mutate(api => api(`/api/payment-modes/${itemToDelete.value.id}`, { method: 'DELETE' }), {
+      successMessage: `Payment mode "${itemToDelete.value.name}" deleted successfully!`
+    })
+    
+    if (success) {
+      cancelDelete()
+      await loadData()
+    }
 }
 
 onMounted(() => {

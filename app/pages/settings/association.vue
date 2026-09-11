@@ -211,13 +211,6 @@ onMounted(() => {
         
         <div class="card amms-surface border-0 shadow-sm rounded-4 overflow-hidden position-relative">
           
-          <!-- Center Loading Spinner Overlay -->
-          <div v-if="loading" class="position-absolute top-0 start-0 w-100 h-100 bg-body bg-opacity-75 d-flex flex-column align-items-center justify-content-center z-3">
-            <div class="spinner-border text-primary" role="status" style="width: 2.5rem; height: 2.5rem;">
-              <span class="visually-hidden">Loading association details...</span>
-            </div>
-            <span class="text-xs fw-semibold text-primary mt-2">Loading profile data...</span>
-          </div>
 
           <!-- Card Header Banner -->
           <div class="card-header bg-primary text-white p-4 border-0">

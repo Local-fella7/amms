@@ -10,6 +10,7 @@ export interface ApiState<T> {
 export function useApi<T>() {
   const data = ref<T | null>(null) as Ref<T | null>
   const loading = ref(false)
+  const isMutating = ref(false)
   const error = ref<string | null>(null)
   const authStore = useAuthStore()
 
@@ -42,12 +43,41 @@ export function useApi<T>() {
     }
   }
 
+  /**
+   * Helper for mutation actions (POST, PUT, DELETE). 
+   * Wraps execute, catches errors, and pushes notivue notifications automatically.
+   * Returns a boolean indicating success.
+   */
+  const mutate = async (
+    requestFn: (apiFetch: typeof $fetch) => Promise<any>,
+    options?: { successMessage?: string, errorMessage?: string, onSuccess?: (res: any) => void }
+  ): Promise<boolean> => {
+    isMutating.value = true
+    error.value = null
+    try {
+      const response = await requestFn(fetchWithAuth as any)
+      if (options?.successMessage) push.success(options.successMessage)
+      if (options?.onSuccess) options.onSuccess(response)
+      return true
+    } catch (err: any) {
+      const message = err?.data?.message || err?.response?._data?.message || err?.message || options?.errorMessage || 'An unexpected error occurred'
+      error.value = message
+      push.error(message)
+      return false
+    } finally {
+      isMutating.value = false
+    }
+  }
+
   return {
     data,
+    isMutating,
     loading,
     error,
     execute,
+    mutate,
     fetchWithAuth
   }
 }
+
 
