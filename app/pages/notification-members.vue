@@ -15,6 +15,7 @@ interface NotificationMemberItem {
     first_name: string
     last_name: string
     phone?: string
+    email?: string
     gender?: string
     location_id?: number | string
     member_status?: string
@@ -46,6 +47,7 @@ interface MemberOption {
   first_name: string
   last_name: string
   phone?: string
+  email?: string
   gender?: string
   location_id?: number | string
   member_status?: string
@@ -70,6 +72,44 @@ const { data: payments, execute: fetchPayments } = useApi<any[]>()
 
 const searchQuery = ref('')
 const selectedNotificationFilter = ref<string>('')
+const selectedLocationFilter = ref<string>('')
+const selectedStatusFilter = ref<string>('all')
+const selectedReachabilityFilter = ref<string>('all')
+const selectedPaymentFilter = ref<string>('all')
+const selectedDateFilter = ref<string>('all')
+const selectedGenderFilter = ref<string>('all')
+const isFilterDrawerOpen = ref(false)
+
+const secondaryActiveFilterCount = computed(() => {
+  let count = 0
+  if (selectedStatusFilter.value !== 'all') count++
+  if (selectedReachabilityFilter.value !== 'all') count++
+  if (selectedPaymentFilter.value !== 'all') count++
+  if (selectedDateFilter.value !== 'all') count++
+  if (selectedGenderFilter.value !== 'all') count++
+  return count
+})
+
+const activeFilterCount = computed(() => {
+  let count = secondaryActiveFilterCount.value
+  if (selectedNotificationFilter.value) count++
+  if (selectedLocationFilter.value) count++
+  if (searchQuery.value.trim()) count++
+  return count
+})
+
+const hasActiveFilters = computed(() => activeFilterCount.value > 0)
+
+const resetAllFilters = () => {
+  searchQuery.value = ''
+  selectedNotificationFilter.value = ''
+  selectedLocationFilter.value = ''
+  selectedStatusFilter.value = 'all'
+  selectedReachabilityFilter.value = 'all'
+  selectedPaymentFilter.value = 'all'
+  selectedDateFilter.value = 'all'
+  selectedGenderFilter.value = 'all'
+}
 
 const isSubmitting = ref(false)
 const modalError = ref('')
@@ -172,20 +212,138 @@ const getLocationName = (locId?: number | string) => {
   return found ? found.name : 'Branch'
 }
 
+const currentYear = new Date().getFullYear()
+
+const paidMemberIds = computed(() => {
+  const ids = new Set<number>()
+  const list = Array.isArray(payments.value) ? payments.value : (payments.value?.data || [])
+  list.forEach((p: any) => {
+    if ((p.date || p.created_at || '').startsWith(String(currentYear))) {
+      ids.add(Number(p.member_id))
+    }
+  })
+  return ids
+})
+
+const isMemberOutstanding = (m?: MemberOption | any) => {
+  if (!m) return false
+  return (m.member_status || 'active') === 'active' && m.fee_exemption !== 'yes' && !paidMemberIds.value.has(Number(m.id))
+}
+
+const checkReachability = (member: any, mode: string) => {
+  if (mode === 'all') return true
+  const phone = (member?.phone || '').trim().replace(/\D/g, '')
+  const email = (member?.email || '').trim().toLowerCase()
+  const hasPhone = phone.length >= 9
+  const hasEmail = email.includes('@') && email.includes('.')
+
+  if (mode === 'has_phone') return hasPhone
+  if (mode === 'missing_phone') return !hasPhone
+  if (mode === 'has_email') return hasEmail
+  if (mode === 'missing_email') return !hasEmail
+  return true
+}
+
+const checkPaymentStatus = (member: any, mode: string) => {
+  if (mode === 'all') return true
+  if (mode === 'outstanding') return isMemberOutstanding(member)
+  if (mode === 'paid') return paidMemberIds.value.has(Number(member?.id))
+  if (mode === 'exempted') return member?.fee_exemption === 'yes'
+  return true
+}
+
+const isDateMatching = (createdAtStr?: string, filterMode = 'all') => {
+  if (!createdAtStr || filterMode === 'all') return true
+  const created = new Date(createdAtStr)
+  if (isNaN(created.getTime())) return true
+
+  const now = new Date()
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  const createdTime = created.getTime()
+
+  if (filterMode === 'today') {
+    return createdTime >= todayStart
+  }
+  if (filterMode === 'this_week') {
+    const day = now.getDay() === 0 ? 6 : now.getDay() - 1
+    const weekStart = todayStart - day * 86400000
+    return createdTime >= weekStart
+  }
+  if (filterMode === 'this_month') {
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime()
+    return createdTime >= monthStart
+  }
+  return true
+}
+
 const filteredItems = computed(() => {
   let result = [...rawList.value]
 
   if (searchQuery.value.trim()) {
     const q = searchQuery.value.toLowerCase()
     result = result.filter(item => {
-      const mName = item.member ? `${item.member.first_name} ${item.member.last_name}` : getMemberName(item.member_id)
+      const m = getFullMember(item)
+      const mName = m ? `${m.first_name} ${m.last_name}` : getMemberName(item.member_id)
+      const phone = (m?.phone || '').toLowerCase()
+      const email = (m?.email || '').toLowerCase()
       const nTitle = item.notification?.name || getNotificationTitle(item.notification_id)
-      return mName.toLowerCase().includes(q) || nTitle.toLowerCase().includes(q) || String(item.id).includes(q)
+      return mName.toLowerCase().includes(q) ||
+             phone.includes(q) ||
+             email.includes(q) ||
+             nTitle.toLowerCase().includes(q) ||
+             String(item.id).includes(q)
     })
   }
 
+  // 1. Broadcast Filter
   if (selectedNotificationFilter.value) {
     result = result.filter(item => Number(item.notification_id) === Number(selectedNotificationFilter.value))
+  }
+
+  // 2. Location / Branch Filter
+  if (selectedLocationFilter.value) {
+    result = result.filter(item => {
+      const m = getFullMember(item)
+      return String(m?.location_id || '') === String(selectedLocationFilter.value)
+    })
+  }
+
+  // 3. Member Status Filter
+  if (selectedStatusFilter.value !== 'all') {
+    result = result.filter(item => {
+      const m = getFullMember(item)
+      const status = m?.member_status || 'active'
+      return status === selectedStatusFilter.value
+    })
+  }
+
+  // 4. Reachability Filter
+  if (selectedReachabilityFilter.value !== 'all') {
+    result = result.filter(item => {
+      const m = getFullMember(item)
+      return checkReachability(m, selectedReachabilityFilter.value)
+    })
+  }
+
+  // 5. Payment / Outstanding Status Filter
+  if (selectedPaymentFilter.value !== 'all') {
+    result = result.filter(item => {
+      const m = getFullMember(item)
+      return checkPaymentStatus(m, selectedPaymentFilter.value)
+    })
+  }
+
+  // 6. Assignment Period / Date Filter
+  if (selectedDateFilter.value !== 'all') {
+    result = result.filter(item => isDateMatching(item.created_at, selectedDateFilter.value))
+  }
+
+  // 7. Gender Filter
+  if (selectedGenderFilter.value !== 'all') {
+    result = result.filter(item => {
+      const m = getFullMember(item)
+      return (m?.gender || '').toLowerCase() === selectedGenderFilter.value
+    })
   }
 
   // Descending sort by ID
@@ -200,26 +358,19 @@ const paginatedItems = computed(() => {
   return filteredItems.value.slice(start, start + itemsPerPage.value)
 })
 
-watch([searchQuery, selectedNotificationFilter, itemsPerPage], () => {
+watch([
+  searchQuery,
+  selectedNotificationFilter,
+  selectedLocationFilter,
+  selectedStatusFilter,
+  selectedReachabilityFilter,
+  selectedPaymentFilter,
+  selectedDateFilter,
+  selectedGenderFilter,
+  itemsPerPage
+], () => {
   currentPage.value = 1
 })
-
-const currentYear = new Date().getFullYear()
-
-const paidMemberIds = computed(() => {
-  const ids = new Set<number>()
-  const list = Array.isArray(payments.value) ? payments.value : (payments.value?.data || [])
-  list.forEach((p: any) => {
-    if ((p.date || p.created_at || '').startsWith(String(currentYear))) {
-      ids.add(Number(p.member_id))
-    }
-  })
-  return ids
-})
-
-const isMemberOutstanding = (m: MemberOption) => {
-  return (m.member_status || 'active') === 'active' && m.fee_exemption !== 'yes' && !paidMemberIds.value.has(Number(m.id))
-}
 
 // Left Column Filtering for Available Members
 const availableFilteredMembers = computed(() => {
@@ -571,7 +722,7 @@ onMounted(() => {
             <select 
               v-model="selectedNotificationFilter" 
               class="form-select form-select-sm filter-pill-select rounded-pill text-xs shadow-none border bg-body"
-              style="min-width: 220px;"
+              style="min-width: 200px;"
             >
               <option value="">All Broadcasts ({{ rawList.length }})</option>
               <option v-for="n in notifications" :key="n.id" :value="String(n.id)">
@@ -580,21 +731,51 @@ onMounted(() => {
             </select>
           </div>
 
+          <!-- Branch / Location Filter -->
+          <div class="d-flex align-items-center gap-1.5">
+            <span class="text-xs fw-semibold text-muted text-uppercase font-monospace">Branch:</span>
+            <select 
+              v-model="selectedLocationFilter" 
+              class="form-select form-select-sm filter-pill-select rounded-pill text-xs shadow-none border bg-body"
+              style="min-width: 170px;"
+            >
+              <option value="">All Branches</option>
+              <option v-for="loc in locations" :key="loc.id" :value="String(loc.id)">
+                {{ loc.name }}
+              </option>
+            </select>
+          </div>
+
+          <!-- More Filters Drawer Toggle Button -->
+          <button 
+            type="button" 
+            class="btn btn-sm rounded-pill px-3 py-1 text-xs fw-semibold shadow-2xs d-flex align-items-center gap-1.5 transition-all"
+            :class="isFilterDrawerOpen || secondaryActiveFilterCount > 0 ? 'btn-primary' : 'btn-outline-secondary'"
+            @click="isFilterDrawerOpen = !isFilterDrawerOpen"
+            title="Toggle more filters"
+          >
+            <i class="bi bi-sliders"></i>
+            <span>Filters</span>
+            <span v-if="secondaryActiveFilterCount > 0" class="badge rounded-pill bg-warning text-dark ms-0.5">
+              +{{ secondaryActiveFilterCount }}
+            </span>
+          </button>
+
           <!-- Dispatch Selected Campaign Button -->
           <button 
             v-if="selectedNotificationFilter"
             type="button" 
-            class="btn btn-sm btn-primary rounded-pill px-3 py-1 text-xs fw-semibold shadow-2xs d-flex align-items-center gap-1.5 ms-2"
+            class="btn btn-sm btn-primary rounded-pill px-3 py-1 text-xs fw-semibold shadow-2xs d-flex align-items-center gap-1.5"
             @click="openDirectDispatchModal(selectedNotificationFilter)"
           >
             <i class="bi bi-broadcast"></i> Dispatch Campaign
           </button>
 
-          <!-- Clear Filters -->
+          <!-- Clear All Filters -->
           <button 
-            v-if="selectedNotificationFilter || searchQuery"
-            class="btn btn-sm btn-link text-decoration-none text-xs text-danger p-0 ms-2"
-            @click="selectedNotificationFilter = ''; searchQuery = ''"
+            v-if="hasActiveFilters"
+            class="btn btn-sm btn-link text-decoration-none text-xs text-danger p-0 ms-1"
+            @click="resetAllFilters"
           >
             <i class="bi bi-x-circle me-1"></i>Reset
           </button>
@@ -602,10 +783,117 @@ onMounted(() => {
 
         <!-- Total Counter Badge -->
         <div class="text-xs text-muted font-monospace d-none d-sm-block">
-          Showing <span class="fw-bold text-primary">{{ filteredItems.length }}</span> assignments
+          Showing <span class="fw-bold text-primary">{{ filteredItems.length }}</span> of {{ rawList.length }} assignments
         </div>
       </div>
 
+      <!-- Expandable Secondary Filter Drawer -->
+      <div v-if="isFilterDrawerOpen" class="bg-body-tertiary border-bottom px-4 py-3">
+        <div class="row g-2.5 align-items-end">
+          <!-- Member Status Filter -->
+          <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+            <label class="form-label text-xs fw-semibold text-muted text-uppercase mb-1">Status</label>
+            <select v-model="selectedStatusFilter" class="form-select form-select-sm rounded-3 text-xs shadow-none bg-body">
+              <option value="all">All Statuses</option>
+              <option value="active">Active Members</option>
+              <option value="inactive">Inactive Members</option>
+              <option value="deceased">Deceased</option>
+            </select>
+          </div>
+
+          <!-- Reachability Filter -->
+          <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+            <label class="form-label text-xs fw-semibold text-muted text-uppercase mb-1">Contact Reachability</label>
+            <select v-model="selectedReachabilityFilter" class="form-select form-select-sm rounded-3 text-xs shadow-none bg-body">
+              <option value="all">All Channels</option>
+              <option value="has_phone">Phone Available (SMS-Ready)</option>
+              <option value="missing_phone">⚠️ Missing Phone (Needs Update)</option>
+              <option value="has_email">Email Available</option>
+              <option value="missing_email">Missing Email</option>
+            </select>
+          </div>
+
+          <!-- Payment / Dues Filter -->
+          <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+            <label class="form-label text-xs fw-semibold text-muted text-uppercase mb-1">Fee Status ({{ currentYear }})</label>
+            <select v-model="selectedPaymentFilter" class="form-select form-select-sm rounded-3 text-xs shadow-none bg-body">
+              <option value="all">All Payment Statuses</option>
+              <option value="outstanding">Outstanding Dues (Due {{ currentYear }})</option>
+              <option value="paid">Fully Paid</option>
+              <option value="exempted">Fee Exempted</option>
+            </select>
+          </div>
+
+          <!-- Gender Filter -->
+          <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+            <label class="form-label text-xs fw-semibold text-muted text-uppercase mb-1">Gender</label>
+            <select v-model="selectedGenderFilter" class="form-select form-select-sm rounded-3 text-xs shadow-none bg-body">
+              <option value="all">All Genders</option>
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+            </select>
+          </div>
+
+          <!-- Assigned Period -->
+          <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+            <label class="form-label text-xs fw-semibold text-muted text-uppercase mb-1">Assigned Period</label>
+            <select v-model="selectedDateFilter" class="form-select form-select-sm rounded-3 text-xs shadow-none bg-body">
+              <option value="all">All Time</option>
+              <option value="today">Today</option>
+              <option value="this_week">This Week</option>
+              <option value="this_month">This Month</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Active filter chips -->
+        <div v-if="hasActiveFilters" class="d-flex flex-wrap align-items-center gap-1.5 mt-3 pt-2 border-top">
+          <span class="text-xs text-muted me-1 font-monospace">Active Filters:</span>
+          
+          <span v-if="selectedNotificationFilter" class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-20 rounded-pill px-2.5 py-1 text-xs d-flex align-items-center gap-1">
+            <i class="bi bi-broadcast"></i> {{ getNotificationTitle(selectedNotificationFilter) }}
+            <i class="bi bi-x cursor-pointer ms-1" @click="selectedNotificationFilter = ''"></i>
+          </span>
+
+          <span v-if="selectedLocationFilter" class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-20 rounded-pill px-2.5 py-1 text-xs d-flex align-items-center gap-1">
+            <i class="bi bi-geo-alt"></i> {{ getLocationName(selectedLocationFilter) }}
+            <i class="bi bi-x cursor-pointer ms-1" @click="selectedLocationFilter = ''"></i>
+          </span>
+
+          <span v-if="selectedStatusFilter !== 'all'" class="badge bg-secondary bg-opacity-10 text-secondary border rounded-pill px-2.5 py-1 text-xs d-flex align-items-center gap-1 text-capitalize">
+            Status: {{ selectedStatusFilter }}
+            <i class="bi bi-x cursor-pointer ms-1" @click="selectedStatusFilter = 'all'"></i>
+          </span>
+
+          <span v-if="selectedReachabilityFilter !== 'all'" class="badge rounded-pill px-2.5 py-1 text-xs d-flex align-items-center gap-1"
+            :class="selectedReachabilityFilter === 'missing_phone' ? 'bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25' : 'bg-info bg-opacity-10 text-info border border-info border-opacity-25'">
+            <i class="bi bi-telephone"></i>
+            {{ selectedReachabilityFilter === 'has_phone' ? 'Has Phone' : selectedReachabilityFilter === 'missing_phone' ? 'Missing Phone' : selectedReachabilityFilter === 'has_email' ? 'Has Email' : 'Missing Email' }}
+            <i class="bi bi-x cursor-pointer ms-1" @click="selectedReachabilityFilter = 'all'"></i>
+          </span>
+
+          <span v-if="selectedPaymentFilter !== 'all'" class="badge rounded-pill px-2.5 py-1 text-xs d-flex align-items-center gap-1"
+            :class="selectedPaymentFilter === 'outstanding' ? 'bg-warning bg-opacity-15 text-warning-emphasis border border-warning border-opacity-25' : 'bg-success bg-opacity-10 text-success border border-success border-opacity-25'">
+            <i class="bi bi-cash-stack"></i>
+            {{ selectedPaymentFilter === 'outstanding' ? 'Outstanding Dues' : selectedPaymentFilter === 'paid' ? 'Paid' : 'Exempted' }}
+            <i class="bi bi-x cursor-pointer ms-1" @click="selectedPaymentFilter = 'all'"></i>
+          </span>
+
+          <span v-if="selectedGenderFilter !== 'all'" class="badge bg-secondary bg-opacity-10 text-secondary border rounded-pill px-2.5 py-1 text-xs d-flex align-items-center gap-1 text-capitalize">
+            Gender: {{ selectedGenderFilter }}
+            <i class="bi bi-x cursor-pointer ms-1" @click="selectedGenderFilter = 'all'"></i>
+          </span>
+
+          <span v-if="selectedDateFilter !== 'all'" class="badge bg-secondary bg-opacity-10 text-secondary border rounded-pill px-2.5 py-1 text-xs d-flex align-items-center gap-1 text-capitalize">
+            Period: {{ selectedDateFilter.replace('_', ' ') }}
+            <i class="bi bi-x cursor-pointer ms-1" @click="selectedDateFilter = 'all'"></i>
+          </span>
+
+          <button class="btn btn-link btn-xs text-danger text-decoration-none p-0 ms-2" @click="resetAllFilters">
+            Clear All
+          </button>
+        </div>
+      </div>
 
       <!-- Error Alert -->
       <div v-if="error" class="alert alert-danger rounded-0 mb-0 py-3 px-4 d-flex align-items-center justify-content-between">
@@ -616,80 +904,118 @@ onMounted(() => {
         <button class="btn btn-sm btn-outline-danger rounded-pill" @click="loadData">Retry</button>
       </div>
 
-      
-    <!-- Replaced by AppTable Component -->
-    <AppTable
-      :columns="[
-        { key: 'id', label: '# ID', width: '70px', headerClass: 'ps-4 d-none d-xl-table-cell', cellClass: 'ps-4 font-monospace text-muted text-xs d-none d-xl-table-cell' },
-        { key: 'recipient-member', label: 'Recipient Member', cellClass: 'fw-semibold text-primary' },
-        { key: 'phone-number', label: 'Phone Number', headerClass: 'd-none d-sm-table-cell', cellClass: 'font-monospace text-xs text-body d-none d-sm-table-cell' },
-        { key: 'broadcast-campaign', label: 'Broadcast Campaign', headerClass: 'd-none d-md-table-cell', cellClass: 'd-none d-md-table-cell' },
-        { key: 'assigned-date', label: 'Assigned Date', headerClass: 'd-none d-lg-table-cell', cellClass: 'font-monospace text-xs text-secondary-amms d-none d-lg-table-cell' },
-        { key: 'actions', label: 'Actions', align: 'right', width: '120px', headerClass: 'pe-4', cellClass: 'pe-4' }
-      ]"
-      :items="paginatedItems"
-      :loading="loading"
-      emptyIcon="bi bi-person-lines-fill"
-      emptyTitle="No broadcast recipients assigned yet"
-      emptySubtitle="Click 'Assign Broadcast Recipients' above to select and queue members."
-
-    >
-      <template #cell-id="{ item }">
-#{{ item.id }}
-      </template>
-      <template #cell-recipient-member="{ item }">
-
-                <div class="d-flex align-items-center gap-2.5">
-                  <MemberAvatar :member="getFullMember(item)" />
-                  <div>
-                    <span>{{ item.member ? `${item.member.first_name} ${item.member.last_name}` : getMemberName(item.member_id) }}</span>
-                    <small v-if="item.member?.gender" class="d-block text-muted text-xs text-capitalize">
-                      <i :class="item.member.gender === 'female' ? 'bi bi-gender-female text-danger' : 'bi bi-gender-male text-primary'" class="me-1"></i>{{ item.member.gender }}
-                    </small>
-                  </div>
-                </div>
-              
-      </template>
-      <template #cell-phone-number="{ item }">
-
-                <i class="bi bi-telephone text-muted me-1"></i>
-                {{ item.member?.phone || getMemberPhone(item.member_id) }}
-              
-      </template>
-      <template #cell-broadcast-campaign="{ item }">
-
-                <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-20 px-2.5 py-1 rounded-pill text-xs fw-semibold">
-                  <i class="bi bi-send-fill me-1"></i>
-                  {{ item.notification?.name || getNotificationTitle(item.notification_id) }}
+      <!-- Replaced by AppTable Component -->
+      <AppTable
+        :columns="[
+          { key: 'id', label: '# ID', width: '70px', headerClass: 'ps-4 d-none d-xl-table-cell', cellClass: 'ps-4 font-monospace text-muted text-xs d-none d-xl-table-cell' },
+          { key: 'recipient-member', label: 'Recipient Member', cellClass: 'fw-semibold text-primary' },
+          { key: 'phone-number', label: 'Contact Reachability', headerClass: 'd-none d-sm-table-cell', cellClass: 'd-none d-sm-table-cell' },
+          { key: 'broadcast-campaign', label: 'Broadcast Campaign', headerClass: 'd-none d-md-table-cell', cellClass: 'd-none d-md-table-cell' },
+          { key: 'status-branch', label: 'Branch & Status', headerClass: 'd-none d-lg-table-cell', cellClass: 'd-none d-lg-table-cell text-xs' },
+          { key: 'assigned-date', label: 'Assigned Date', headerClass: 'd-none d-xl-table-cell', cellClass: 'font-monospace text-xs text-secondary-amms d-none d-xl-table-cell' },
+          { key: 'actions', label: 'Actions', align: 'right', width: '110px', headerClass: 'pe-4', cellClass: 'pe-4' }
+        ]"
+        :items="paginatedItems"
+        :loading="loading"
+        emptyIcon="bi bi-person-lines-fill"
+        emptyTitle="No broadcast recipients match filters"
+        emptySubtitle="Try adjusting your search criteria or click 'Reset' above."
+      >
+        <template #cell-id="{ item }">
+          #{{ item.id }}
+        </template>
+        
+        <template #cell-recipient-member="{ item }">
+          <div class="d-flex align-items-center gap-2.5">
+            <MemberAvatar :member="getFullMember(item)" />
+            <div>
+              <div class="d-flex align-items-center gap-1.5 flex-wrap">
+                <span>{{ item.member ? `${item.member.first_name} ${item.member.last_name}` : getMemberName(item.member_id) }}</span>
+                <span v-if="getFullMember(item)?.location_id" class="badge bg-secondary bg-opacity-10 text-secondary-amms text-2xs rounded-pill d-lg-none">
+                  {{ getLocationName(getFullMember(item)?.location_id) }}
                 </span>
-              
-      </template>
-      <template #cell-assigned-date="{ item }">
+              </div>
+              <div class="d-flex align-items-center gap-2 mt-0.5">
+                <small v-if="getFullMember(item)?.gender" class="text-muted text-xs text-capitalize">
+                  <i :class="getFullMember(item)?.gender === 'female' ? 'bi bi-gender-female text-danger' : 'bi bi-gender-male text-primary'" class="me-0.5"></i>{{ getFullMember(item)?.gender }}
+                </small>
+                <span v-if="(getFullMember(item)?.member_status || 'active') !== 'active'" class="badge bg-warning bg-opacity-10 text-warning text-2xs text-capitalize">
+                  {{ getFullMember(item)?.member_status }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </template>
 
-                {{ formatDateDisplay(item.created_at) }}
-              
-      </template>
-      <template #cell-actions="{ item }">
+        <template #cell-phone-number="{ item }">
+          <div class="d-flex flex-column gap-0.5">
+            <div class="d-flex align-items-center gap-1.5">
+              <template v-if="getFullMember(item)?.phone && getFullMember(item)?.phone?.trim().length >= 9">
+                <i class="bi bi-telephone-fill text-success text-xs"></i>
+                <span class="font-monospace text-xs text-body">{{ getFullMember(item)?.phone }}</span>
+              </template>
+              <template v-else>
+                <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 rounded-pill px-2 py-0.5 text-xs font-monospace">
+                  <i class="bi bi-exclamation-circle-fill me-1"></i>No Phone
+                </span>
+              </template>
+            </div>
+            <small v-if="getFullMember(item)?.email" class="text-muted text-xs font-monospace text-truncate" style="max-width: 170px;">
+              <i class="bi bi-envelope text-muted me-1"></i>{{ getFullMember(item)?.email }}
+            </small>
+          </div>
+        </template>
 
-                <div class="d-flex align-items-center justify-content-end gap-1">
-                  <button 
-                    class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
-                    @click="openViewModal(item)"
-                    title="View Assignment Details"
-                  >
-                    <i class="bi bi-eye-fill text-primary"></i>
-                  </button>
-                  <button 
-                    class="btn btn-sm btn-light border-0 rounded-circle action-btn hover-danger" 
-                    @click="promptDelete(item)"
-                    title="Remove Recipient"
-                  >
-                    <i class="bi bi-trash-fill text-danger"></i>
-                  </button>
-                </div>
-              
-      </template>
-    </AppTable>
+        <template #cell-broadcast-campaign="{ item }">
+          <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-20 px-2.5 py-1 rounded-pill text-xs fw-semibold">
+            <i class="bi bi-send-fill me-1"></i>
+            {{ item.notification?.name || getNotificationTitle(item.notification_id) }}
+          </span>
+        </template>
+
+        <template #cell-status-branch="{ item }">
+          <div class="d-flex flex-column gap-0.5">
+            <span class="fw-semibold text-body">
+              <i class="bi bi-geo-alt text-muted me-1"></i>{{ getLocationName(getFullMember(item)?.location_id) }}
+            </span>
+            <div class="d-flex align-items-center gap-1.5 flex-wrap">
+              <span class="badge rounded-pill text-2xs"
+                :class="(getFullMember(item)?.member_status || 'active') === 'active' ? 'bg-success bg-opacity-10 text-success' : 'bg-secondary bg-opacity-10 text-secondary'">
+                {{ getFullMember(item)?.member_status || 'active' }}
+              </span>
+              <span v-if="isMemberOutstanding(getFullMember(item))" class="badge bg-warning bg-opacity-15 text-warning-emphasis text-2xs">
+                Fee Due
+              </span>
+              <span v-else-if="getFullMember(item)?.fee_exemption === 'yes'" class="badge bg-info bg-opacity-10 text-info text-2xs">
+                Exempted
+              </span>
+            </div>
+          </div>
+        </template>
+
+        <template #cell-assigned-date="{ item }">
+          {{ formatDateDisplay(item.created_at) }}
+        </template>
+
+        <template #cell-actions="{ item }">
+          <div class="d-flex align-items-center justify-content-end gap-1">
+            <button 
+              class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
+              @click="openViewModal(item)"
+              title="View Assignment Details"
+            >
+              <i class="bi bi-eye-fill text-primary"></i>
+            </button>
+            <button 
+              class="btn btn-sm btn-light border-0 rounded-circle action-btn hover-danger" 
+              @click="promptDelete(item)"
+              title="Remove Recipient"
+            >
+              <i class="bi bi-trash-fill text-danger"></i>
+            </button>
+          </div>
+        </template>
+      </AppTable>
 
       <!-- Pagination Footer -->
       <PaginationControl
@@ -719,6 +1045,21 @@ onMounted(() => {
           <div class="col-md-6">
             <span class="text-xs text-muted text-uppercase fw-semibold d-block">Phone Number</span>
             <span class="fw-semibold text-body font-monospace text-xs">{{ viewingItem ? (viewingItem.member?.phone || getMemberPhone(viewingItem.member_id)) : '—' }}</span>
+          </div>
+          <div class="col-md-6">
+            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Email Address</span>
+            <span class="fw-semibold text-body font-monospace text-xs">{{ viewingItem ? (getFullMember(viewingItem)?.email || '—') : '—' }}</span>
+          </div>
+          <div class="col-md-6">
+            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Location Branch</span>
+            <span class="fw-semibold text-body text-xs">{{ viewingItem ? getLocationName(getFullMember(viewingItem)?.location_id) : '—' }}</span>
+          </div>
+          <div class="col-md-6">
+            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Status & Exemption</span>
+            <span class="fw-semibold text-body text-xs text-capitalize">
+              {{ viewingItem ? (getFullMember(viewingItem)?.member_status || 'Active') : '—' }}
+              <span v-if="getFullMember(viewingItem)?.fee_exemption === 'yes'" class="badge bg-info bg-opacity-10 text-info ms-1">Exempted</span>
+            </span>
           </div>
           <div class="col-md-6">
             <span class="text-xs text-muted text-uppercase fw-semibold d-block">Assigned Broadcast</span>
