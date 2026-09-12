@@ -11,11 +11,16 @@ import { describe, it, expect } from 'vitest'
 
 // ─── 1. DATA NORMALISATION ────────────────────────────────────────────────────
 
-const toArray = (res: any): any[] => {
+const toArray = <T = unknown>(res: unknown): T[] => {
   if (!res) return []
-  if (Array.isArray(res)) return res
-  if (Array.isArray(res.data)) return res.data
-  if (res.data && Array.isArray(res.data.data)) return res.data.data
+  if (Array.isArray(res)) return res as T[]
+  if (typeof res === 'object' && res !== null) {
+    const obj = res as { data?: unknown }
+    if (Array.isArray(obj.data)) return obj.data as T[]
+    if (obj.data && typeof obj.data === 'object' && Array.isArray((obj.data as { data?: unknown }).data)) {
+      return (obj.data as { data: T[] }).data
+    }
+  }
   return []
 }
 
@@ -49,7 +54,7 @@ describe('[formatCurrency]', () => {
 
 // ─── 3. COMPACT AMOUNT FORMATTING (dashboard) ─────────────────────────────────
 
-const formatCompact = (val: number) => {
+const formatCompact = (val?: number | null) => {
   const n = val || 0
   if (n >= 1_000_000) return `TZS ${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000) return `TZS ${(n / 1_000).toFixed(0)}K`
@@ -63,7 +68,7 @@ describe('[formatCompact]', () => {
   it('formats 350000 as 350K', () => expect(formatCompact(350000)).toBe('TZS 350K'))
   it('formats 1000000 as 1.0M', () => expect(formatCompact(1000000)).toBe('TZS 1.0M'))
   it('formats 2500000 as 2.5M', () => expect(formatCompact(2500000)).toBe('TZS 2.5M'))
-  it('falls back to 0 for undefined/falsy', () => expect(formatCompact(undefined as any)).toBe('TZS 0'))
+  it('falls back to 0 for undefined/falsy', () => expect(formatCompact(undefined)).toBe('TZS 0'))
 })
 
 // ─── 4. DATE DISPLAY FORMATTING ───────────────────────────────────────────────
@@ -88,7 +93,7 @@ describe('[formatDateDisplay] fee-payments date reformatter', () => {
 })
 
 // From fee-payments.vue — formats Date object / string to YYYY-MM-DD
-const formatDateToYMD = (val: any) => {
+const formatDateToYMD = (val?: string | Date | null) => {
   if (!val) return new Date().toISOString().substring(0, 10)
   if (val instanceof Date) {
     const yyyy = val.getFullYear()
@@ -134,7 +139,19 @@ describe('[initials]', () => {
   it('handles empty object', () => expect(initials({})).toBe('?'))
 })
 
-const getMemberName = (mId: number | string, members: any[]) => {
+interface LookupItem {
+  id: number | string
+  name?: string
+  first_name?: string
+  last_name?: string
+  phone?: string
+  fee_exemption?: string
+  year?: number | string
+  fee_year?: number | string
+  amount?: number | string
+}
+
+const getMemberName = (mId: number | string, members: LookupItem[]) => {
   const found = members.find(m => Number(m.id) === Number(mId))
   return found ? `${found.first_name} ${found.last_name}` : `Member #${mId}`
 }
@@ -150,7 +167,7 @@ describe('[getMemberName]', () => {
   it('handles empty members array', () => expect(getMemberName(1, [])).toBe('Member #1'))
 })
 
-const getMemberPhone = (mId: number | string, members: any[]) => {
+const getMemberPhone = (mId: number | string, members: LookupItem[]) => {
   const found = members.find(m => Number(m.id) === Number(mId))
   return found?.phone || ''
 }
@@ -165,7 +182,7 @@ describe('[getMemberPhone]', () => {
   it('returns empty string when member not found', () => expect(getMemberPhone(99, members)).toBe(''))
 })
 
-const getPaymentModeName = (pmId: number | string, paymentModes: any[]) => {
+const getPaymentModeName = (pmId: number | string, paymentModes: LookupItem[]) => {
   const found = paymentModes.find(pm => Number(pm.id) === Number(pmId))
   return found ? found.name : `Mode #${pmId}`
 }
@@ -177,7 +194,7 @@ describe('[getPaymentModeName]', () => {
   it('handles string id', () => expect(getPaymentModeName('2', modes)).toBe('Mobile Money'))
 })
 
-const getLocationName = (locId: number | string, locations: any[]) => {
+const getLocationName = (locId: number | string, locations: LookupItem[]) => {
   const found = locations.find(l => Number(l.id) === Number(locId))
   return found ? found.name : `Branch #${locId}`
 }
@@ -190,7 +207,7 @@ describe('[getLocationName]', () => {
   it('handles empty locations list', () => expect(getLocationName(1, [])).toBe('Branch #1'))
 })
 
-const getAgeGroupName = (groupId: number | string, ageGroups: any[]) => {
+const getAgeGroupName = (groupId: number | string, ageGroups: LookupItem[]) => {
   const found = ageGroups.find(g => Number(g.id) === Number(groupId))
   return found ? found.name : `Bracket #${groupId}`
 }
@@ -202,7 +219,7 @@ describe('[getAgeGroupName]', () => {
   it('handles string id', () => expect(getAgeGroupName('2', groups)).toBe('Senior (60+)'))
 })
 
-const getFeeYear = (fItem: any, fees: any[]) => {
+const getFeeYear = (fItem: number | string | LookupItem, fees: LookupItem[]) => {
   if (typeof fItem === 'object' && fItem !== null) {
     return fItem.year || fItem.fee_year || '—'
   }
@@ -225,9 +242,25 @@ describe('[getFeeYear]', () => {
 
 // ─── 6. FEE PAYMENT BALANCE LOGIC ─────────────────────────────────────────────
 
-const getHistoricalRunningBalance = (p: any, allPayments: any[], fees: any[], members: any[]) => {
-  const getMemberExemption = (mId: any) => {
-    const m = members.find(m => Number(m.id) === Number(mId))
+interface TestPaymentItem {
+  id: number | string
+  member_id: number | string
+  fee_id: number | string
+  amount: number | string
+  date: string
+  fee_amount?: number | string
+  fee?: { amount?: number | string }
+  member?: { fee_exemption?: string }
+}
+
+const getHistoricalRunningBalance = (
+  p: TestPaymentItem,
+  allPayments: TestPaymentItem[],
+  fees: LookupItem[],
+  members: LookupItem[]
+) => {
+  const getMemberExemption = (mId: number | string) => {
+    const m = members.find(item => Number(item.id) === Number(mId))
     return m?.fee_exemption || 'no'
   }
   if (p.member?.fee_exemption === 'yes' || getMemberExemption(p.member_id) === 'yes') return 0
@@ -366,7 +399,25 @@ describe('[paymentBalance] (real-time form balance)', () => {
 
 // ─── 10. MEMBER SEARCH FILTER ─────────────────────────────────────────────────
 
-const filterMembers = (members: any[], query: string, locationId: string, status: string, gender: string) => {
+interface TestFilterMember {
+  id: number
+  first_name: string
+  last_name: string
+  phone?: string
+  fathers_name?: string
+  location_id?: number | string
+  member_status?: string
+  gender?: string
+  fee_exemption?: string
+}
+
+const filterMembers = (
+  members: TestFilterMember[],
+  query: string,
+  locationId: string,
+  status: string,
+  gender: string
+): TestFilterMember[] => {
   let result = [...members]
   if (query.trim()) {
     const q = query.toLowerCase()
@@ -384,7 +435,7 @@ const filterMembers = (members: any[], query: string, locationId: string, status
 }
 
 describe('[filterMembers]', () => {
-  const members = [
+  const members: TestFilterMember[] = [
     { id: 1, first_name: 'Aisha', last_name: 'Mohammed', phone: '255712345678', fathers_name: 'Ahmed', location_id: 1, member_status: 'active', gender: 'female' },
     { id: 2, first_name: 'Omar', last_name: 'Hassan', phone: '255787654321', fathers_name: 'Hassan', location_id: 2, member_status: 'inactive', gender: 'male' },
     { id: 3, first_name: 'Fatuma', last_name: 'Ali', phone: '255700000000', fathers_name: 'Ali', location_id: 1, member_status: 'active', gender: 'female' }
@@ -429,7 +480,23 @@ describe('[filterMembers]', () => {
 
 // ─── 11. PAYMENT SEARCH FILTER ────────────────────────────────────────────────
 
-const filterPayments = (payments: any[], query: string, paymentModeId: string, feeId: string) => {
+interface TestFilterPayment {
+  id: number
+  member_id: number | string
+  payment_mode_id?: number | string
+  fee_id?: number | string
+  amount: number
+  date?: string
+  created_at?: string
+  member?: { first_name?: string; last_name?: string }
+}
+
+const filterPayments = (
+  payments: TestFilterPayment[],
+  query: string,
+  paymentModeId: string,
+  feeId: string
+): TestFilterPayment[] => {
   let result = [...payments]
   if (query.trim()) {
     const q = query.toLowerCase()
@@ -444,7 +511,7 @@ const filterPayments = (payments: any[], query: string, paymentModeId: string, f
 }
 
 describe('[filterPayments]', () => {
-  const payments = [
+  const payments: TestFilterPayment[] = [
     { id: 1, member_id: 10, payment_mode_id: 1, fee_id: 1, amount: 20000, member: { first_name: 'Aisha', last_name: 'Mohammed' } },
     { id: 2, member_id: 11, payment_mode_id: 2, fee_id: 1, amount: 50000, member: { first_name: 'Omar', last_name: 'Hassan' } },
     { id: 3, member_id: 12, payment_mode_id: 1, fee_id: 2, amount: 30000, member: { first_name: 'Fatuma', last_name: 'Ali' } }
@@ -476,7 +543,7 @@ describe('[filterPayments]', () => {
 
 // ─── 12. MEMBER FILTER IN PAYMENT FORM ───────────────────────────────────────
 
-const filteredMemberOptions = (members: any[], query: string) => {
+const filteredMemberOptions = (members: TestFilterMember[], query: string): TestFilterMember[] => {
   if (!query.trim()) return members
   const q = query.toLowerCase()
   return members.filter(m =>
@@ -486,7 +553,7 @@ const filteredMemberOptions = (members: any[], query: string) => {
 }
 
 describe('[filteredMemberOptions]', () => {
-  const members = [
+  const members: TestFilterMember[] = [
     { id: 1, first_name: 'Aisha', last_name: 'Mohammed', phone: '255712345678' },
     { id: 2, first_name: 'Omar', last_name: 'Hassan', phone: '255787654321' }
   ]
@@ -500,7 +567,7 @@ describe('[filteredMemberOptions]', () => {
 
 // ─── 13. PAGINATION ───────────────────────────────────────────────────────────
 
-const paginateItems = (items: any[], page: number, perPage: number) =>
+const paginateItems = <T>(items: T[], page: number, perPage: number): T[] =>
   items.slice((page - 1) * perPage, page * perPage)
 
 const getTotalPages = (total: number, perPage: number) =>
@@ -549,7 +616,7 @@ describe('[calcComplianceRate]', () => {
 
 // ─── 15. MEMBER SUMMARY METRICS ───────────────────────────────────────────────
 
-const calcMemberStats = (members: any[]) => ({
+const calcMemberStats = (members: Array<{ member_status?: string; fee_exemption?: string }>) => ({
   total: members.length,
   active: members.filter(m => m.member_status === 'active').length,
   inactive: members.filter(m => m.member_status !== 'active').length,
@@ -578,12 +645,12 @@ describe('[calcMemberStats]', () => {
 
 // ─── 16. DASHBOARD REVENUE CALCULATION ───────────────────────────────────────
 
-const calcRevenueYTD = (payments: any[], year: number) =>
+const calcRevenueYTD = (payments: Array<{ date?: string; created_at?: string; amount: number | string }>, year: number) =>
   payments
     .filter(p => (p.date || p.created_at || '').startsWith(String(year)))
     .reduce((s, p) => s + (Number(p.amount) || 0), 0)
 
-const calcTotalRevenue = (payments: any[]) =>
+const calcTotalRevenue = (payments: Array<{ amount: number | string }>) =>
   payments.reduce((s, p) => s + (Number(p.amount) || 0), 0)
 
 describe('[calcRevenueYTD]', () => {
@@ -758,7 +825,14 @@ describe('[calculateAge]', () => {
   })
 })
 
-const findMatchingAgeGroup = (age: number, ageGroups: any[]): any | null => {
+interface TestAgeBracket {
+  id: number
+  name: string
+  from_age: number | string | null
+  to_age: number | string | null
+}
+
+const findMatchingAgeGroup = (age: number, ageGroups: TestAgeBracket[]): TestAgeBracket | null => {
   return ageGroups.find(g => {
     const min = g.from_age != null && g.from_age !== '' ? Number(g.from_age) : 0
     const max = g.to_age != null && g.to_age !== '' ? Number(g.to_age) : 999
@@ -767,7 +841,7 @@ const findMatchingAgeGroup = (age: number, ageGroups: any[]): any | null => {
 }
 
 describe('[findMatchingAgeGroup]', () => {
-  const groups = [
+  const groups: TestAgeBracket[] = [
     { id: 1, name: 'Youth', from_age: 18, to_age: 30 },
     { id: 2, name: 'Middle', from_age: 31, to_age: 59 },
     { id: 3, name: 'Senior', from_age: 60, to_age: 99 }
@@ -779,14 +853,18 @@ describe('[findMatchingAgeGroup]', () => {
   it('matches boundary age exactly (31)', () => expect(findMatchingAgeGroup(31, groups)?.name).toBe('Middle'))
   it('returns null for unmatched age (e.g. 100+)', () => expect(findMatchingAgeGroup(150, groups)).toBeNull())
   it('handles null from_age as 0', () => {
-    const g = [{ id: 1, name: 'Child', from_age: null, to_age: 17 }]
+    const g: TestAgeBracket[] = [{ id: 1, name: 'Child', from_age: null, to_age: 17 }]
     expect(findMatchingAgeGroup(5, g)?.name).toBe('Child')
   })
 })
 
 // ─── 23. OVERDUE MEMBER DETECTION ────────────────────────────────────────────
 
-const getOverdueMembers = (members: any[], payments: any[], year: number) => {
+const getOverdueMembers = (
+  members: Array<{ id: number | string; member_status?: string }>,
+  payments: Array<{ member_id: number | string; amount?: number; date?: string; created_at?: string }>,
+  year: number
+) => {
   const paidIds = new Set(
     payments
       .filter(p => (p.date || p.created_at || '').startsWith(String(year)))

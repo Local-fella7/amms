@@ -16,7 +16,7 @@ import ViewDetailModal from '../../app/components/ViewDetailModal.vue'
 
 // ─── AUDIT LOGS ───────────────────────────────────────────────────────────────
 
-const formatJsonPretty = (data?: string | object): string => {
+const formatJsonPretty = (data?: string | object | null): string => {
   if (!data) return 'None'
   if (typeof data === 'object') return JSON.stringify(data, null, 2)
   try {
@@ -28,7 +28,7 @@ const formatJsonPretty = (data?: string | object): string => {
 
 describe('[formatJsonPretty]', () => {
   it('returns "None" for falsy value', () => expect(formatJsonPretty(undefined)).toBe('None'))
-  it('returns "None" for null', () => expect(formatJsonPretty(null as any)).toBe('None'))
+  it('returns "None" for null', () => expect(formatJsonPretty(null)).toBe('None'))
   it('returns "None" for empty string', () => expect(formatJsonPretty('')).toBe('None'))
   it('pretty-prints an object', () => {
     const result = formatJsonPretty({ name: 'Aisha', age: 30 })
@@ -52,14 +52,20 @@ describe('[formatJsonPretty]', () => {
   })
 })
 
-const getUserName = (uId: number | string | undefined, users: any[]): string => {
+interface TestUser {
+  id: number | string
+  first_name: string
+  last_name: string
+}
+
+const getUserName = (uId: number | string | undefined, users: TestUser[]): string => {
   if (!uId) return 'System / General'
   const found = users.find(u => Number(u.id) === Number(uId))
   return found ? `${found.first_name} ${found.last_name}` : 'System / General'
 }
 
 describe('[getUserName] (audit logs)', () => {
-  const users = [
+  const users: TestUser[] = [
     { id: 1, first_name: 'Admin', last_name: 'User' },
     { id: 2, first_name: 'Omar', last_name: 'Hassan' }
   ]
@@ -69,20 +75,33 @@ describe('[getUserName] (audit logs)', () => {
   it('matches string id to number id', () => expect(getUserName('2', users)).toBe('Omar Hassan'))
 })
 
-const getFeatureName = (fId: number | string | undefined, features: any[]): string => {
+interface TestFeature {
+  id: number | string
+  name: string
+}
+
+const getFeatureName = (fId: number | string | undefined, features: TestFeature[]): string => {
   if (!fId) return 'General Operation'
   const found = features.find(f => Number(f.id) === Number(fId))
   return found ? found.name : 'General Operation'
 }
 
 describe('[getFeatureName] (audit logs)', () => {
-  const features = [{ id: 1, name: 'Members' }, { id: 2, name: 'Fee Payments' }]
+  const features: TestFeature[] = [{ id: 1, name: 'Members' }, { id: 2, name: 'Fee Payments' }]
   it('returns feature name', () => expect(getFeatureName(1, features)).toBe('Members'))
   it('returns General Operation when not found', () => expect(getFeatureName(99, features)).toBe('General Operation'))
   it('returns General Operation when fId is undefined', () => expect(getFeatureName(undefined, features)).toBe('General Operation'))
 })
 
-const filterAuditLogs = (logs: any[], query: string, userId: string) => {
+interface TestLog {
+  id: number
+  user_id: number | string
+  user_name?: string
+  feature_name?: string
+  action?: string
+}
+
+const filterAuditLogs = (logs: TestLog[], query: string, userId: string): TestLog[] => {
   let result = [...logs]
   if (query.trim()) {
     const q = query.toLowerCase()
@@ -149,7 +168,14 @@ describe('[calcSmsSegments]', () => {
   it('returns 3 for 321 chars', () => expect(calcSmsSegments('a'.repeat(321))).toBe(3))
 })
 
-const filterNotifications = (notifications: any[], query: string) => {
+interface TestNotification {
+  id: number
+  name?: string
+  content?: string
+  created_at?: string
+}
+
+const filterNotifications = (notifications: TestNotification[], query: string): TestNotification[] => {
   let result = [...notifications]
   if (query.trim()) {
     const q = query.toLowerCase()
@@ -163,7 +189,7 @@ const filterNotifications = (notifications: any[], query: string) => {
 }
 
 describe('[filterNotifications]', () => {
-  const notifications = [
+  const notifications: TestNotification[] = [
     { id: 1, name: 'Fee Reminder', content: 'Pay your fee', created_at: '2026-01-01' },
     { id: 2, name: 'General Announcement', content: 'Meeting tomorrow', created_at: '2026-02-01' },
     { id: 3, name: 'New Update Notice', content: 'Annual report ready', created_at: '2026-03-01' }
@@ -201,7 +227,13 @@ describe('[toggleMemberSelection]', () => {
   })
 })
 
-const getAssignedMemberIds = (notificationId: number, assignments: any[]): Set<number> =>
+interface TestAssignment {
+  id?: number
+  notification_id: number | string
+  member_id: number | string
+}
+
+const getAssignedMemberIds = (notificationId: number, assignments: TestAssignment[]): Set<number> =>
   new Set(
     assignments
       .filter(a => Number(a.notification_id) === notificationId)
