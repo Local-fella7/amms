@@ -683,7 +683,17 @@ onMounted(() => {
       
     <!-- Replaced by AppTable Component -->
     <AppTable
-      :columns="[{key: 'id', label: '# ID', width: '70px', headerClass: 'ps-4', cellClass: 'ps-4 font-monospace text-muted text-xs'}, {key: 'full-name-gender', label: 'Full Name & Gender', cellClass: 'fw-semibold text-primary'}, {key: 'contact-info', label: 'Contact Info', cellClass: 'text-xs text-body'}, {key: 'location-branch', label: 'Location Branch', cellClass: 'text-xs fw-medium text-body'}, {key: 'age-group', label: 'Age Group', cellClass: 'text-xs text-secondary-amms'}, {key: 'registration-date', label: 'Registration Date', cellClass: 'font-monospace text-xs text-body'}, {key: 'exemption', label: 'Exemption'}, {key: 'status', label: 'Status'}, {key: 'actions', label: 'Actions', align: 'right', width: '170px', headerClass: 'pe-4', cellClass: 'pe-4'}]"
+      :columns="[
+        { key: 'id', label: '# ID', width: '70px', headerClass: 'ps-4 d-none d-xl-table-cell', cellClass: 'ps-4 font-monospace text-muted text-xs d-none d-xl-table-cell' },
+        { key: 'full-name-gender', label: 'Full Name & Gender', cellClass: 'fw-semibold text-primary' },
+        { key: 'contact-info', label: 'Contact Info', headerClass: 'd-none d-md-table-cell', cellClass: 'text-xs text-body d-none d-md-table-cell' },
+        { key: 'location-branch', label: 'Location Branch', headerClass: 'd-none d-lg-table-cell', cellClass: 'text-xs fw-medium text-body d-none d-lg-table-cell' },
+        { key: 'age-group', label: 'Age Group', headerClass: 'd-none d-lg-table-cell', cellClass: 'text-xs text-secondary-amms d-none d-lg-table-cell' },
+        { key: 'registration-date', label: 'Registration Date', headerClass: 'd-none d-xl-table-cell', cellClass: 'font-monospace text-xs text-body d-none d-xl-table-cell' },
+        { key: 'exemption', label: 'Exemption', headerClass: 'd-none d-sm-table-cell', cellClass: 'd-none d-sm-table-cell' },
+        { key: 'status', label: 'Status' },
+        { key: 'actions', label: 'Actions', align: 'right', width: '130px', headerClass: 'pe-4', cellClass: 'pe-4' }
+      ]"
       :items="paginatedMembers"
       :loading="loading"
       emptyIcon="bi bi-person-x"

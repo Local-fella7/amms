@@ -212,7 +212,7 @@ const handleDispatchBatch = async () => {
     <!-- Modal Dialog -->
     <div class="modal fade show d-block" tabindex="-1" role="dialog" style="z-index: 1065;" @click.self="emit('close')">
       <div class="modal-dialog modal-dialog-centered modal-xl" style="max-width: 1140px;">
-        <div class="modal-content amms-surface border-0 shadow-lg rounded-4 overflow-hidden d-flex flex-column" style="height: 90vh; max-height: 820px;">
+        <div class="modal-content amms-surface border-0 shadow-lg rounded-4 overflow-hidden d-flex flex-column modal-studio-container">
           
           <!-- Modal Header Banner -->
           <div class="modal-header border-0 px-4 py-3 bg-danger text-white d-flex align-items-center justify-content-between flex-shrink-0">
@@ -242,11 +242,11 @@ const handleDispatchBatch = async () => {
           </div>
 
           <!-- Studio Body: 2-Column Responsive Split -->
-          <div class="modal-body p-0 overflow-hidden d-flex flex-column flex-grow-1">
-            <div class="row g-0 flex-grow-1 h-100">
+          <div class="modal-body p-0 overflow-y-auto overflow-x-hidden d-flex flex-column flex-grow-1">
+            <div class="row g-0 flex-grow-1">
               
               <!-- LEFT COLUMN: TARGET OVERDUE MEMBERS DIRECTORY -->
-              <div class="col-lg-6 border-end d-flex flex-column bg-body-tertiary bg-opacity-40 p-3 p-md-4 overflow-hidden h-100">
+              <div class="col-12 col-lg-6 border-bottom border-lg-bottom-0 border-lg-end d-flex flex-column bg-body-tertiary bg-opacity-40 p-3 p-md-4">
                 
                 <!-- Section Header with Select All / Clear -->
                 <div class="d-flex align-items-center justify-content-between mb-3 flex-shrink-0">
@@ -406,7 +406,7 @@ const handleDispatchBatch = async () => {
               </div>
 
               <!-- RIGHT COLUMN: CHANNEL SELECTION & MESSAGE COMPOSER -->
-              <div class="col-lg-6 d-flex flex-column bg-body p-3 p-md-4 overflow-y-auto h-100">
+              <div class="col-12 col-lg-6 d-flex flex-column bg-body p-3 p-md-4">
                 
                 <!-- STEP 2: CHANNEL SELECTION -->
                 <div class="mb-4">
@@ -421,7 +421,7 @@ const handleDispatchBatch = async () => {
                   </div>
 
                   <div class="row g-2">
-                    <div class="col-4">
+                    <div class="col-12 col-sm-4">
                       <div 
                         class="channel-card p-2.5 rounded-3 border text-center cursor-pointer transition-all"
                         :class="selectedChannel === 'email' ? 'active-channel-card border-danger shadow-xs' : 'bg-body border'"
@@ -433,7 +433,7 @@ const handleDispatchBatch = async () => {
                       </div>
                     </div>
 
-                    <div class="col-4">
+                    <div class="col-12 col-sm-4">
                       <div 
                         class="channel-card p-2.5 rounded-3 border text-center cursor-pointer transition-all"
                         :class="selectedChannel === 'sms' ? 'active-channel-card border-danger shadow-xs' : 'bg-body border'"
@@ -445,7 +445,7 @@ const handleDispatchBatch = async () => {
                       </div>
                     </div>
 
-                    <div class="col-4">
+                    <div class="col-12 col-sm-4">
                       <div 
                         class="channel-card p-2.5 rounded-3 border text-center cursor-pointer transition-all"
                         :class="selectedChannel === 'both' ? 'active-channel-card border-danger shadow-xs' : 'bg-body border'"
@@ -563,6 +563,18 @@ const handleDispatchBatch = async () => {
 
 .text-2xs { font-size: 0.7rem; }
 .shadow-2xs { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); }
+
+.modal-studio-container {
+  height: 90vh;
+  max-height: 820px;
+}
+
+@media (max-width: 991.98px) {
+  .modal-studio-container {
+    height: auto !important;
+    max-height: 92vh !important;
+  }
+}
 
 .spin { animation: sp2 1s linear infinite; }
 @keyframes sp2 { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }

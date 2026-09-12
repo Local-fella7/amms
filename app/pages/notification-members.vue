@@ -619,7 +619,14 @@ onMounted(() => {
       
     <!-- Replaced by AppTable Component -->
     <AppTable
-      :columns="[{key: 'id', label: '# ID', width: '80px', headerClass: 'ps-4', cellClass: 'ps-4 font-monospace text-muted text-xs'}, {key: 'recipient-member', label: 'Recipient Member', cellClass: 'fw-semibold text-primary'}, {key: 'phone-number', label: 'Phone Number', cellClass: 'font-monospace text-xs text-body'}, {key: 'broadcast-campaign', label: 'Broadcast Campaign'}, {key: 'assigned-date', label: 'Assigned Date', cellClass: 'font-monospace text-xs text-secondary-amms'}, {key: 'actions', label: 'Actions', align: 'right', width: '120px', headerClass: 'pe-4', cellClass: 'pe-4'}]"
+      :columns="[
+        { key: 'id', label: '# ID', width: '70px', headerClass: 'ps-4 d-none d-xl-table-cell', cellClass: 'ps-4 font-monospace text-muted text-xs d-none d-xl-table-cell' },
+        { key: 'recipient-member', label: 'Recipient Member', cellClass: 'fw-semibold text-primary' },
+        { key: 'phone-number', label: 'Phone Number', headerClass: 'd-none d-sm-table-cell', cellClass: 'font-monospace text-xs text-body d-none d-sm-table-cell' },
+        { key: 'broadcast-campaign', label: 'Broadcast Campaign', headerClass: 'd-none d-md-table-cell', cellClass: 'd-none d-md-table-cell' },
+        { key: 'assigned-date', label: 'Assigned Date', headerClass: 'd-none d-lg-table-cell', cellClass: 'font-monospace text-xs text-secondary-amms d-none d-lg-table-cell' },
+        { key: 'actions', label: 'Actions', align: 'right', width: '120px', headerClass: 'pe-4', cellClass: 'pe-4' }
+      ]"
       :items="paginatedItems"
       :loading="loading"
       emptyIcon="bi bi-person-lines-fill"

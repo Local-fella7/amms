@@ -256,7 +256,7 @@ const allOverdueMembers = computed(() =>
     <template v-else>
       <!-- KPI STRIP -->
       <div class="row g-3 mb-4">
-        <div class="col-6 col-sm-4 col-xl">
+        <div class="col-12 col-sm-6 col-md-4 col-xl">
           <div class="kpi kpi--teal">
             <div class="kpi__body">
               <div class="kpi__label">Total Members</div>
@@ -269,7 +269,7 @@ const allOverdueMembers = computed(() =>
             <div class="kpi__icon"><i class="bi bi-people-fill"></i></div>
           </div>
         </div>
-        <div class="col-6 col-sm-4 col-xl">
+        <div class="col-12 col-sm-6 col-md-4 col-xl">
           <div class="kpi kpi--gold">
             <div class="kpi__body">
               <div class="kpi__label">Revenue YTD</div>
@@ -279,7 +279,7 @@ const allOverdueMembers = computed(() =>
             <div class="kpi__icon kpi__icon--gold"><i class="bi bi-wallet2"></i></div>
           </div>
         </div>
-        <div class="col-6 col-sm-4 col-xl">
+        <div class="col-12 col-sm-6 col-md-4 col-xl">
           <div class="kpi kpi--brown">
             <div class="kpi__body">
               <div class="kpi__label">Fee Compliance</div>
@@ -290,7 +290,7 @@ const allOverdueMembers = computed(() =>
             <div class="kpi__icon kpi__icon--brown"><i class="bi bi-check2-circle"></i></div>
           </div>
         </div>
-        <div class="col-6 col-sm-4 col-xl">
+        <div class="col-12 col-sm-6 col-md-6 col-xl">
           <div class="kpi kpi--danger">
             <div class="kpi__body">
               <div class="kpi__label">Overdue Members</div>
@@ -303,7 +303,7 @@ const allOverdueMembers = computed(() =>
             <div class="kpi__icon kpi__icon--red"><i class="bi bi-exclamation-triangle-fill"></i></div>
           </div>
         </div>
-        <div class="col-6 col-sm-4 col-xl">
+        <div class="col-12 col-sm-12 col-md-6 col-xl">
           <div class="kpi kpi--neutral">
             <div class="kpi__body">
               <div class="kpi__label">Broadcasts Sent</div>
@@ -366,7 +366,7 @@ const allOverdueMembers = computed(() =>
 
       <!-- ANALYTICS ROW 2 -->
       <div class="row g-4 mb-4">
-        <div class="col-lg-4">
+        <div class="col-12 col-md-6 col-lg-4">
           <div class="ccrd">
             <div class="ccrd__hd"><div><div class="ccrd__ttl">Age Demographics</div><div class="ccrd__sub">Members by age group bracket</div></div></div>
             <div style="height:220px">
@@ -375,7 +375,7 @@ const allOverdueMembers = computed(() =>
             </div>
           </div>
         </div>
-        <div class="col-lg-4">
+        <div class="col-12 col-md-6 col-lg-4">
           <div class="ccrd">
             <div class="ccrd__hd"><div><div class="ccrd__ttl">Members by Branch</div><div class="ccrd__sub">Distribution across locations</div></div></div>
             <div style="height:220px">
@@ -384,7 +384,7 @@ const allOverdueMembers = computed(() =>
             </div>
           </div>
         </div>
-        <div class="col-lg-4">
+        <div class="col-12 col-md-12 col-lg-4">
           <div class="ccrd h-100">
             <div class="ccrd__hd mb-2"><div><div class="ccrd__ttl">Compliance Snapshot</div><div class="ccrd__sub">{{ currentYear }} fee payment status</div></div></div>
             <div class="ring-wrap mb-3">
@@ -414,7 +414,7 @@ const allOverdueMembers = computed(() =>
       <!-- ACTIVITY -->
       <div class="sec-lbl mb-3"><i class="bi bi-activity me-1" style="color:#B19470"></i> Activity</div>
       <div class="row g-4">
-        <div class="col-lg-4">
+        <div class="col-12 col-md-6 col-lg-4">
           <div class="acrd h-100">
             <div class="acrd__hd">
               <div class="d-flex align-items-center gap-2">
@@ -438,7 +438,7 @@ const allOverdueMembers = computed(() =>
             </div>
           </div>
         </div>
-        <div class="col-lg-4">
+        <div class="col-12 col-md-6 col-lg-4">
           <div class="acrd h-100">
             <div class="acrd__hd">
               <div class="d-flex align-items-center gap-2"><span class="adot adot--teal"></span><span class="acrd__ttl">Recent Payments</span></div>
@@ -456,7 +456,7 @@ const allOverdueMembers = computed(() =>
             </div>
           </div>
         </div>
-        <div class="col-lg-4">
+        <div class="col-12 col-md-12 col-lg-4">
           <div class="acrd h-100">
             <div class="acrd__hd">
               <div class="d-flex align-items-center gap-2"><span class="adot adot--gold"></span><span class="acrd__ttl">Recent Registrations</span></div>
@@ -537,13 +537,21 @@ const allOverdueMembers = computed(() =>
 .cbar{height:5px;border-radius:999px;background:rgba(0,0,0,.08);overflow:hidden}
 .cbar__fill{height:100%;border-radius:999px;background:var(--ct);transition:width .6s ease}
 .qpanel{background:var(--bs-body-bg,#fff);border:1px solid rgba(0,0,0,.06);border-radius:1rem;padding:1rem 1.25rem;box-shadow:0 1px 4px rgba(0,0,0,.04);display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap}
-.qgrid{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center}
+.qgrid{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;width:100%}
 .qa-divider{width:1px;height:52px;background:rgba(0,0,0,.08);margin:0 .35rem;flex-shrink:0}
 .qa{display:flex;flex-direction:column;align-items:center;gap:.45rem;width:84px;padding:.7rem .4rem;border-radius:.85rem;text-decoration:none;color:inherit;text-align:center;transition:transform var(--tr),background var(--tr)}
 .qa:hover{transform:translateY(-2px);background:rgba(0,0,0,.03)}
 .qa__icon{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.2rem;transition:transform var(--tr),box-shadow var(--tr)}
 .qa:hover .qa__icon{transform:scale(1.06);box-shadow:0 6px 16px rgba(0,0,0,.1)}
 .qa__lbl{font-size:.7rem;font-weight:600;line-height:1.2;color:#666}
+
+@media (max-width: 767.98px) {
+  .qpanel{flex-direction:column;align-items:flex-start;gap:.8rem;padding:.85rem 1rem}
+  .qgrid{display:grid;grid-template-columns:repeat(auto-fill, minmax(72px, 1fr));gap:.5rem;justify-items:center}
+  .qa-divider{display:none}
+  .qa{width:100%;max-width:85px;padding:.5rem .2rem}
+  .qa__icon{width:42px;height:42px;font-size:1.1rem}
+}
 .ccrd{background:var(--bs-body-bg,#fff);border:1px solid rgba(0,0,0,.06);border-radius:1rem;padding:1.25rem 1.25rem 1rem;box-shadow:0 2px 10px rgba(0,0,0,.04);height:100%}
 .ccrd__hd{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:1rem;gap:.75rem}
 .ccrd__ttl{font-size:.9rem;font-weight:700;color:#333}

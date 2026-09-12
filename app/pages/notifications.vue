@@ -286,7 +286,14 @@ onMounted(() => {
       
     <!-- Replaced by AppTable Component -->
     <AppTable
-      :columns="[{key: 'id', label: '# ID', width: '80px', headerClass: 'ps-4', cellClass: 'ps-4 font-monospace text-muted text-xs'}, {key: 'broadcast-title', label: 'Broadcast Title', cellClass: 'fw-semibold text-primary'}, {key: 'template-used', label: 'Template Used'}, {key: 'message-content-snippet', label: 'Message Content Snippet', cellClass: 'text-xs text-body text-truncate'}, {key: 'dispatch-date', label: 'Dispatch Date', cellClass: 'font-monospace text-xs text-body'}, {key: 'actions', label: 'Actions', align: 'right', width: '140px', headerClass: 'pe-4', cellClass: 'pe-4'}]"
+      :columns="[
+        { key: 'id', label: '# ID', width: '70px', headerClass: 'ps-4 d-none d-xl-table-cell', cellClass: 'ps-4 font-monospace text-muted text-xs d-none d-xl-table-cell' },
+        { key: 'broadcast-title', label: 'Broadcast Title', cellClass: 'fw-semibold text-primary' },
+        { key: 'template-used', label: 'Template Used', headerClass: 'd-none d-md-table-cell', cellClass: 'd-none d-md-table-cell' },
+        { key: 'message-content-snippet', label: 'Message Content Snippet', headerClass: 'd-none d-lg-table-cell', cellClass: 'text-xs text-body text-truncate d-none d-lg-table-cell' },
+        { key: 'dispatch-date', label: 'Dispatch Date', headerClass: 'd-none d-sm-table-cell', cellClass: 'font-monospace text-xs text-body d-none d-sm-table-cell' },
+        { key: 'actions', label: 'Actions', align: 'right', width: '120px', headerClass: 'pe-4', cellClass: 'pe-4' }
+      ]"
       :items="paginatedNotifications"
       :loading="loading"
       emptyIcon="bi bi-broadcast"

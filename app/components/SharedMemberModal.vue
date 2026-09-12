@@ -279,8 +279,8 @@ const handleSave = async () => {
               <h6 class="fw-bold text-primary text-uppercase text-xs tracking-wider mb-2">
                 <i class="bi bi-camera me-1"></i> Member Photograph (Optional)
               </h6>
-              <div class="d-flex align-items-center gap-3 p-3 bg-body-tertiary rounded-3 border mb-3">
-                <div class="position-relative" style="width: 64px; height: 64px;">
+              <div class="d-flex flex-column flex-sm-row align-items-center gap-3 p-3 bg-body-tertiary rounded-3 border mb-3 text-center text-sm-start">
+                <div class="position-relative flex-shrink-0" style="width: 64px; height: 64px;">
                   <img 
                     v-if="photoPreview" 
                     :src="photoPreview" 
@@ -292,7 +292,7 @@ const handleSave = async () => {
                     <i class="bi bi-person fs-3"></i>
                   </div>
                 </div>
-                <div class="flex-grow-1">
+                <div class="flex-grow-1 w-100">
                   <input
                     ref="photoFileInput"
                     type="file"
@@ -300,7 +300,7 @@ const handleSave = async () => {
                     class="form-control form-control-sm text-xs"
                     @change="onPhotoSelected"
                   />
-                  <div class="d-flex align-items-center justify-content-between mt-1">
+                  <div class="d-flex flex-column flex-sm-row align-items-center justify-content-between mt-1 gap-1">
                     <small class="text-muted text-xs">JPG, PNG or WebP (Max 5MB). Processed into WebP by backend.</small>
                     <button v-if="photoPreview" type="button" class="btn btn-link btn-xs text-danger text-decoration-none p-0" @click="clearPhoto">
                       Remove Photo
@@ -355,16 +355,14 @@ const handleSave = async () => {
                 </div>
                 <div class="col-md-4">
                   <label class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Gender *</label>
-                  <div class="d-flex align-items-stretch" style="gap: 12px; height: 38px;">
-                    <label class="flex-fill d-flex align-items-center justify-content-center gap-2 px-2 rounded-3 border cursor-pointer mb-0 transition-all select-none"
-                      :class="gender === 'male' ? 'border-primary bg-primary bg-opacity-10 text-primary fw-bold shadow-xs' : 'bg-body border-secondary border-opacity-25 text-muted fw-medium'"
-                      style="height: 100%;">
+                  <div class="d-flex align-items-stretch" style="gap: 12px; min-height: 38px;">
+                    <label class="flex-fill d-flex align-items-center justify-content-center gap-2 px-2 py-1.5 rounded-3 border cursor-pointer mb-0 transition-all select-none"
+                      :class="gender === 'male' ? 'border-primary bg-primary bg-opacity-10 text-primary fw-bold shadow-xs' : 'bg-body border-secondary border-opacity-25 text-muted fw-medium'">
                       <input v-model="gender" class="form-check-input m-0 cursor-pointer" type="radio" name="smGender" value="male" style="width: 1.15em; height: 1.15em;" required />
                       <i class="bi bi-gender-male fs-6"></i><span class="text-sm">Male</span>
                     </label>
-                    <label class="flex-fill d-flex align-items-center justify-content-center gap-2 px-2 rounded-3 border cursor-pointer mb-0 transition-all select-none"
-                      :class="gender === 'female' ? 'border-danger bg-danger bg-opacity-10 text-danger fw-bold shadow-xs' : 'bg-body border-secondary border-opacity-25 text-muted fw-medium'"
-                      style="height: 100%;">
+                    <label class="flex-fill d-flex align-items-center justify-content-center gap-2 px-2 py-1.5 rounded-3 border cursor-pointer mb-0 transition-all select-none"
+                      :class="gender === 'female' ? 'border-danger bg-danger bg-opacity-10 text-danger fw-bold shadow-xs' : 'bg-body border-secondary border-opacity-25 text-muted fw-medium'">
                       <input v-model="gender" class="form-check-input m-0 cursor-pointer" type="radio" name="smGender" value="female" style="width: 1.15em; height: 1.15em;" required />
                       <i class="bi bi-gender-female fs-6"></i><span class="text-sm">Female</span>
                     </label>
@@ -438,19 +436,19 @@ const handleSave = async () => {
               <div class="row g-3">
                 <div class="col-md-6">
                   <label class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Membership Status *</label>
-                  <div class="d-flex align-items-stretch" style="gap: 10px; height: 38px;">
-                    <label class="flex-fill d-flex align-items-center justify-content-center gap-1.5 px-2 rounded-3 border cursor-pointer mb-0 transition-all select-none text-nowrap"
-                      :class="memberStatus === 'active' ? 'border-primary bg-primary bg-opacity-10 text-primary fw-bold shadow-xs' : 'bg-body border-secondary border-opacity-25 text-muted fw-medium'" style="height: 100%;">
+                  <div class="d-flex flex-wrap flex-sm-nowrap align-items-stretch" style="gap: 8px; min-height: 38px;">
+                    <label class="flex-fill d-flex align-items-center justify-content-center gap-1.5 px-2 py-1.5 rounded-3 border cursor-pointer mb-0 transition-all select-none text-nowrap"
+                      :class="memberStatus === 'active' ? 'border-primary bg-primary bg-opacity-10 text-primary fw-bold shadow-xs' : 'bg-body border-secondary border-opacity-25 text-muted fw-medium'">
                       <input v-model="memberStatus" class="form-check-input m-0 cursor-pointer" type="radio" name="smStatus" value="active" style="width: 1.1em; height: 1.1em;" required />
                       <i class="bi bi-check-circle-fill fs-6 text-success"></i><span class="text-xs">Active</span>
                     </label>
-                    <label class="flex-fill d-flex align-items-center justify-content-center gap-1.5 px-2 rounded-3 border cursor-pointer mb-0 transition-all select-none text-nowrap"
-                      :class="memberStatus === 'inactive' ? 'border-secondary bg-secondary bg-opacity-10 text-secondary fw-bold shadow-xs' : 'bg-body border-secondary border-opacity-25 text-muted fw-medium'" style="height: 100%;">
+                    <label class="flex-fill d-flex align-items-center justify-content-center gap-1.5 px-2 py-1.5 rounded-3 border cursor-pointer mb-0 transition-all select-none text-nowrap"
+                      :class="memberStatus === 'inactive' ? 'border-secondary bg-secondary bg-opacity-10 text-secondary fw-bold shadow-xs' : 'bg-body border-secondary border-opacity-25 text-muted fw-medium'">
                       <input v-model="memberStatus" class="form-check-input m-0 cursor-pointer" type="radio" name="smStatus" value="inactive" style="width: 1.1em; height: 1.1em;" required />
                       <i class="bi bi-dash-circle-fill fs-6"></i><span class="text-xs">Inactive</span>
                     </label>
-                    <label class="flex-fill d-flex align-items-center justify-content-center gap-1.5 px-2 rounded-3 border cursor-pointer mb-0 transition-all select-none text-nowrap"
-                      :class="memberStatus === 'deceased' ? 'border-dark bg-dark bg-opacity-10 text-dark fw-bold shadow-xs' : 'bg-body border-secondary border-opacity-25 text-muted fw-medium'" style="height: 100%;">
+                    <label class="flex-fill d-flex align-items-center justify-content-center gap-1.5 px-2 py-1.5 rounded-3 border cursor-pointer mb-0 transition-all select-none text-nowrap"
+                      :class="memberStatus === 'deceased' ? 'border-dark bg-dark bg-opacity-10 text-dark fw-bold shadow-xs' : 'bg-body border-secondary border-opacity-25 text-muted fw-medium'">
                       <input v-model="memberStatus" class="form-check-input m-0 cursor-pointer" type="radio" name="smStatus" value="deceased" style="width: 1.1em; height: 1.1em;" required />
                       <i class="bi bi-slash-circle-fill fs-6"></i><span class="text-xs">Deceased</span>
                     </label>
@@ -458,14 +456,14 @@ const handleSave = async () => {
                 </div>
                 <div class="col-md-6">
                   <label class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Fee Exemption *</label>
-                  <div class="d-flex align-items-stretch" style="gap: 12px; height: 38px;">
-                    <label class="flex-fill d-flex align-items-center justify-content-center gap-2 px-2 rounded-3 border cursor-pointer mb-0 transition-all select-none"
-                      :class="feeExemption === 'no' ? 'border-primary bg-primary bg-opacity-10 text-primary fw-bold shadow-xs' : 'bg-body border-secondary border-opacity-25 text-muted fw-medium'" style="height: 100%;">
+                  <div class="d-flex align-items-stretch" style="gap: 12px; min-height: 38px;">
+                    <label class="flex-fill d-flex align-items-center justify-content-center gap-2 px-2 py-1.5 rounded-3 border cursor-pointer mb-0 transition-all select-none"
+                      :class="feeExemption === 'no' ? 'border-primary bg-primary bg-opacity-10 text-primary fw-bold shadow-xs' : 'bg-body border-secondary border-opacity-25 text-muted fw-medium'">
                       <input v-model="feeExemption" class="form-check-input m-0 cursor-pointer" type="radio" name="smExemption" value="no" style="width: 1.15em; height: 1.15em;" required />
                       <i class="bi bi-shield-check fs-6"></i><span class="text-sm">Standard (No)</span>
                     </label>
-                    <label class="flex-fill d-flex align-items-center justify-content-center gap-2 px-2 rounded-3 border cursor-pointer mb-0 transition-all select-none"
-                      :class="feeExemption === 'yes' ? 'border-warning bg-warning bg-opacity-10 text-warning fw-bold shadow-xs' : 'bg-body border-secondary border-opacity-25 text-muted fw-medium'" style="height: 100%;">
+                    <label class="flex-fill d-flex align-items-center justify-content-center gap-2 px-2 py-1.5 rounded-3 border cursor-pointer mb-0 transition-all select-none"
+                      :class="feeExemption === 'yes' ? 'border-warning bg-warning bg-opacity-10 text-warning fw-bold shadow-xs' : 'bg-body border-secondary border-opacity-25 text-muted fw-medium'">
                       <input v-model="feeExemption" class="form-check-input m-0 cursor-pointer" type="radio" name="smExemption" value="yes" style="width: 1.15em; height: 1.15em;" required />
                       <i class="bi bi-shield-slash fs-6"></i><span class="text-sm">Exempted (Yes)</span>
                     </label>

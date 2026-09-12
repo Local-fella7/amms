@@ -558,7 +558,16 @@ onMounted(() => {
       
     <!-- Replaced by AppTable Component -->
     <AppTable
-      :columns="[{key: 'id', label: '# ID', width: '70px', headerClass: 'ps-4', cellClass: 'ps-4 font-monospace text-muted text-xs'}, {key: 'member-name', label: 'Member Name', cellClass: 'fw-semibold text-primary'}, {key: 'fee-year', label: 'Fee Year'}, {key: 'payment-mode', label: 'Payment Mode', cellClass: 'text-xs fw-medium text-body'}, {key: 'amount-paid', label: 'Amount Paid', cellClass: 'fw-bold text-success font-monospace text-sm'}, {key: 'balance-due', label: 'Balance Due', cellClass: 'font-monospace text-xs'}, {key: 'payment-date', label: 'Payment Date', cellClass: 'font-monospace text-xs text-body'}, {key: 'actions', label: 'Actions', align: 'right', width: '140px', headerClass: 'pe-4', cellClass: 'pe-4'}]"
+      :columns="[
+        { key: 'id', label: '# ID', width: '70px', headerClass: 'ps-4 d-none d-xl-table-cell', cellClass: 'ps-4 font-monospace text-muted text-xs d-none d-xl-table-cell' },
+        { key: 'member-name', label: 'Member Name', cellClass: 'fw-semibold text-primary' },
+        { key: 'fee-year', label: 'Fee Year', headerClass: 'd-none d-lg-table-cell', cellClass: 'd-none d-lg-table-cell' },
+        { key: 'payment-mode', label: 'Payment Mode', headerClass: 'd-none d-md-table-cell', cellClass: 'text-xs fw-medium text-body d-none d-md-table-cell' },
+        { key: 'amount-paid', label: 'Amount Paid', cellClass: 'fw-bold text-success font-monospace text-sm' },
+        { key: 'balance-due', label: 'Balance Due', headerClass: 'd-none d-lg-table-cell', cellClass: 'font-monospace text-xs d-none d-lg-table-cell' },
+        { key: 'payment-date', label: 'Payment Date', headerClass: 'd-none d-sm-table-cell', cellClass: 'font-monospace text-xs text-body d-none d-sm-table-cell' },
+        { key: 'actions', label: 'Actions', align: 'right', width: '130px', headerClass: 'pe-4', cellClass: 'pe-4' }
+      ]"
       :items="paginatedPayments"
       :loading="loading"
       emptyIcon="bi bi-receipt-cutoff"

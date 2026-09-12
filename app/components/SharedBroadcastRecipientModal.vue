@@ -344,11 +344,11 @@ const handleSaveBatch = async (alsoBroadcast = false) => {
           </div>
 
           <!-- Studio Body: Two Balanced Columns -->
-          <div class="modal-body p-0 overflow-hidden d-flex flex-column flex-grow-1">
-            <div class="row g-0 flex-grow-1" style="min-height: 520px; max-height: calc(90vh - 145px);">
+          <div class="modal-body p-0 overflow-y-auto overflow-x-hidden d-flex flex-column flex-grow-1">
+            <div class="row g-0 flex-grow-1">
               
-              <!-- LEFT COLUMN (42%): TARGET RECIPIENTS DIRECTORY -->
-              <div class="col-lg-5 border-end d-flex flex-column bg-body-tertiary bg-opacity-40 p-3 p-md-4 overflow-hidden">
+              <!-- LEFT COLUMN: TARGET RECIPIENTS DIRECTORY -->
+              <div class="col-12 col-lg-5 border-bottom border-lg-bottom-0 border-lg-end d-flex flex-column bg-body-tertiary bg-opacity-40 p-3 p-md-4">
                 <div class="d-flex align-items-center justify-content-between mb-3">
                   <div class="d-flex align-items-center gap-2">
                     <span class="badge rounded-circle bg-primary text-white p-0 d-flex align-items-center justify-content-center" style="width: 22px; height: 22px; font-size: 0.75rem;">1</span>
@@ -570,8 +570,8 @@ const handleSaveBatch = async (alsoBroadcast = false) => {
 
               </div>
 
-              <!-- RIGHT COLUMN (58%): MESSAGE COMPOSER & LIVE PREVIEW -->
-              <div class="col-lg-7 d-flex flex-column bg-body p-3 p-md-4 overflow-y-auto">
+              <!-- RIGHT COLUMN: MESSAGE COMPOSER & LIVE PREVIEW -->
+              <div class="col-12 col-lg-7 d-flex flex-column bg-body p-3 p-md-4">
                 <div class="d-flex align-items-center justify-content-between mb-3">
                   <div class="d-flex align-items-center gap-2">
                     <span class="badge rounded-circle bg-primary text-white p-0 d-flex align-items-center justify-content-center" style="width: 22px; height: 22px; font-size: 0.75rem;">2</span>
@@ -672,7 +672,7 @@ const handleSaveBatch = async (alsoBroadcast = false) => {
                     <span class="badge bg-body-secondary text-secondary text-2xs font-monospace">Target Transport</span>
                   </div>
                   <div class="row g-2">
-                    <div class="col-4">
+                    <div class="col-12 col-sm-4">
                       <div 
                         class="channel-card p-2 rounded-3 border text-center cursor-pointer transition-all"
                         :class="broadcastChannel === 'email' ? 'active-channel-card border-primary shadow-2xs' : 'bg-body border'"
@@ -683,7 +683,7 @@ const handleSaveBatch = async (alsoBroadcast = false) => {
                         <small class="text-muted text-2xs">SendGrid SMTP</small>
                       </div>
                     </div>
-                    <div class="col-4">
+                    <div class="col-12 col-sm-4">
                       <div 
                         class="channel-card p-2 rounded-3 border text-center cursor-pointer transition-all"
                         :class="broadcastChannel === 'sms' ? 'active-channel-card border-primary shadow-2xs' : 'bg-body border'"
@@ -694,7 +694,7 @@ const handleSaveBatch = async (alsoBroadcast = false) => {
                         <small class="text-muted text-2xs">Beem Gateway</small>
                       </div>
                     </div>
-                    <div class="col-4">
+                    <div class="col-12 col-sm-4">
                       <div 
                         class="channel-card p-2 rounded-3 border text-center cursor-pointer transition-all"
                         :class="broadcastChannel === 'both' ? 'active-channel-card border-primary shadow-2xs' : 'bg-body border'"

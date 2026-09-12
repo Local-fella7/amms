@@ -24,9 +24,9 @@ const emit = defineEmits<{
       <p v-if="subtitle" class="text-secondary-amms mb-0 text-sm">{{ subtitle }}</p>
     </div>
 
-    <div class="d-flex align-items-center gap-2">
+    <div class="d-flex flex-wrap align-items-center gap-2 w-100 w-md-auto justify-content-start justify-content-md-end">
       <!-- Search Input -->
-      <div v-if="searchQuery !== undefined" class="input-group input-group-sm rounded-pill border overflow-hidden bg-body" style="width: 240px;">
+      <div v-if="searchQuery !== undefined" class="input-group input-group-sm rounded-pill border overflow-hidden bg-body flex-grow-1 flex-sm-grow-0" style="min-width: 180px; max-width: 260px;">
         <span class="input-group-text bg-transparent border-0 text-muted ps-3">
           <i class="bi bi-search"></i>
         </span>
@@ -42,7 +42,7 @@ const emit = defineEmits<{
       <!-- Refresh Button -->
       <button 
         v-if="!hideRefresh"
-        class="btn btn-outline-secondary btn-sm rounded-circle d-flex align-items-center justify-content-center" 
+        class="btn btn-outline-secondary btn-sm rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" 
         style="width: 32px; height: 32px;"
         :disabled="loading"
         @click="emit('refresh')"
@@ -54,7 +54,7 @@ const emit = defineEmits<{
       <!-- Add Button -->
       <button 
         v-if="showAddButton" 
-        class="btn btn-primary btn-sm rounded-pill px-3 fw-semibold d-flex align-items-center gap-1.5 shadow-sm"
+        class="btn btn-primary btn-sm rounded-pill px-3 fw-semibold d-flex align-items-center gap-1.5 shadow-sm flex-shrink-0"
         @click="emit('add')"
       >
         <i class="bi bi-plus-lg"></i>

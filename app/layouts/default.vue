@@ -7,9 +7,14 @@ const config = useRuntimeConfig()
 const authStore = useAuthStore()
 const { data: associationData, execute: fetchAssociation } = useApi<any>()
 const isSidebarCollapsed = ref(false)
+const isMobileNavOpen = ref(false)
 const isSettingsOpen = ref(false)
 const isProfileMenuOpen = ref(false)
 const currentTheme = ref('light')
+
+watch(() => route.fullPath, () => {
+  isMobileNavOpen.value = false
+})
 
 const associationName = ref('')
 const logoPath = ref<string | null>(null)
@@ -76,12 +81,23 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="app-layout d-flex" style="height: 100vh; width: 100vw; overflow: hidden;">
+  <div class="app-layout d-flex position-relative" style="height: 100vh; width: 100vw; overflow: hidden;">
 
-    <!-- 1. Full-Height Enterprise Sidebar (100vh) -->
+    <!-- Mobile Drawer Backdrop Overlay (d-lg-none) -->
+    <div 
+      v-if="isMobileNavOpen" 
+      class="mobile-backdrop position-fixed top-0 start-0 w-100 h-100 d-lg-none"
+      style="background: rgba(0, 0, 0, 0.45); z-index: 1040; backdrop-filter: blur(2px);"
+      @click="isMobileNavOpen = false"
+    ></div>
+
+    <!-- 1. Enterprise Sidebar (Static on Desktop >=992px, Offcanvas Drawer on Mobile/Tablet <992px) -->
     <aside 
       class="amms-sidebar d-flex flex-column justify-content-between border-end transition-all h-100 flex-shrink-0"
-      :class="{ 'collapsed': isSidebarCollapsed }"
+      :class="{ 
+        'collapsed': isSidebarCollapsed,
+        'mobile-open': isMobileNavOpen
+      }"
     >
       <!-- Single Unified Sidebar Brand Header (Always 57px) -->
       <div 
@@ -294,19 +310,34 @@ onMounted(() => {
     <div class="d-flex flex-column flex-grow-1 h-100 overflow-hidden" style="min-width: 0;">
 
       <!-- Top Workspace Navbar -->
-      <header class="workspace-header border-bottom bg-body px-4 py-2.5 d-flex align-items-center justify-content-between z-3 shadow-2xs flex-shrink-0" style="height: 57px;">
+      <header class="workspace-header border-bottom bg-body px-3 px-md-4 py-2.5 d-flex align-items-center justify-content-between z-3 shadow-2xs flex-shrink-0" style="height: 57px;">
         
-        <!-- Global Search Bar -->
-        <div class="header-search-container">
-          <div class="input-group input-group-sm rounded-pill border overflow-hidden">
-            <span class="input-group-text bg-transparent border-0 text-muted ps-3">
-              <i class="bi bi-search"></i>
-            </span>
-            <input 
-              type="search" 
-              class="form-control border-0 bg-transparent ps-1 text-xs shadow-none" 
-              placeholder="Search members or receipts..."
-            />
+        <!-- Left Section: Mobile Hamburger Toggle + Global Search Bar -->
+        <div class="d-flex align-items-center gap-2">
+          <!-- Mobile Hamburger Toggle (Visible on <992px) -->
+          <button 
+            type="button" 
+            class="btn btn-sm btn-outline-secondary rounded-circle d-flex align-items-center justify-content-center d-lg-none flex-shrink-0"
+            style="width: 36px; height: 36px;"
+            @click="isMobileNavOpen = !isMobileNavOpen"
+            title="Open navigation menu"
+            aria-label="Toggle navigation menu"
+          >
+            <i class="bi bi-list fs-5"></i>
+          </button>
+
+          <!-- Global Search Bar (Responsive: hides on narrow mobile <576px) -->
+          <div class="header-search-container d-none d-sm-block">
+            <div class="input-group input-group-sm rounded-pill border overflow-hidden">
+              <span class="input-group-text bg-transparent border-0 text-muted ps-3">
+                <i class="bi bi-search"></i>
+              </span>
+              <input 
+                type="search" 
+                class="form-control border-0 bg-transparent ps-1 text-xs shadow-none" 
+                placeholder="Search members or receipts..."
+              />
+            </div>
           </div>
         </div>
 
@@ -420,7 +451,25 @@ onMounted(() => {
   width: 250px;
   height: 100vh;
   overflow: hidden;
-  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Mobile & Tablet (< 992px) Offcanvas Drawer */
+@media (max-width: 991.98px) {
+  .amms-sidebar {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 1050;
+    width: 260px !important;
+    transform: translateX(-100%);
+    box-shadow: 0 0 24px rgba(0, 0, 0, 0.35);
+  }
+
+  .amms-sidebar.mobile-open {
+    transform: translateX(0) !important;
+  }
 }
 
 .btn-white-glass {
