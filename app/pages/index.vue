@@ -199,6 +199,17 @@ const sendReminder = async (m: any) => {
   } catch(e: any) { push.error(e?.data?.message || 'Failed to send reminder') }
   finally { sendingReminderId.value = null }
 }
+
+// Quick Action modal state
+const isMemberModalOpen    = ref(false)
+const isPaymentModalOpen   = ref(false)
+const isBroadcastModalOpen = ref(false)
+const isOverdueModalOpen   = ref(false)
+
+// All overdue members (for OverdueRemindersModal)
+const allOverdueMembers = computed(() =>
+  rawMembers.value.filter((m: any) => m.member_status === 'active' && !paidThisYear.value.has(Number(m.id)))
+)
 </script>
 
 <template>
@@ -308,15 +319,15 @@ const sendReminder = async (m: any) => {
       <div class="qpanel mb-4">
         <span class="sec-lbl"><i class="bi bi-lightning-charge-fill me-1" style="color:#B19470"></i> Quick Actions</span>
         <div class="qgrid">
-          <NuxtLink to="/members" class="qa"><span class="qa__icon" style="background:rgba(67,118,108,.12);color:#43766C"><i class="bi bi-person-plus-fill"></i></span><span class="qa__lbl">Register<br/>Member</span></NuxtLink>
+          <button class="qa bg-transparent border-0" @click="isMemberModalOpen = true"><span class="qa__icon" style="background:rgba(67,118,108,.12);color:#43766C"><i class="bi bi-person-plus-fill"></i></span><span class="qa__lbl">Register<br/>Member</span></button>
           <div class="qa-divider"></div>
-          <NuxtLink to="/fee-payments" class="qa"><span class="qa__icon" style="background:rgba(177,148,112,.15);color:#B19470"><i class="bi bi-credit-card-2-front-fill"></i></span><span class="qa__lbl">Record<br/>Payment</span></NuxtLink>
+          <button class="qa bg-transparent border-0" @click="isPaymentModalOpen = true"><span class="qa__icon" style="background:rgba(177,148,112,.15);color:#B19470"><i class="bi bi-credit-card-2-front-fill"></i></span><span class="qa__lbl">Record<br/>Payment</span></button>
           <div class="qa-divider"></div>
-          <NuxtLink to="/notifications" class="qa"><span class="qa__icon" style="background:rgba(118,69,59,.10);color:#76453B"><i class="bi bi-chat-dots-fill"></i></span><span class="qa__lbl">Send<br/>Broadcast</span></NuxtLink>
+          <button class="qa bg-transparent border-0" @click="isBroadcastModalOpen = true"><span class="qa__icon" style="background:rgba(118,69,59,.10);color:#76453B"><i class="bi bi-chat-dots-fill"></i></span><span class="qa__lbl">Send<br/>Broadcast</span></button>
           <div class="qa-divider"></div>
           <NuxtLink to="/reports" class="qa"><span class="qa__icon" style="background:rgba(67,118,108,.12);color:#43766C"><i class="bi bi-file-earmark-bar-graph-fill"></i></span><span class="qa__lbl">View<br/>Reports</span></NuxtLink>
           <div class="qa-divider"></div>
-          <NuxtLink to="/fee-payments" class="qa"><span class="qa__icon" style="background:rgba(220,53,69,.08);color:#dc3545"><i class="bi bi-bell-fill"></i></span><span class="qa__lbl">Remind<br/>Overdue</span></NuxtLink>
+          <button class="qa bg-transparent border-0" @click="isOverdueModalOpen = true"><span class="qa__icon" style="background:rgba(220,53,69,.08);color:#dc3545"><i class="bi bi-bell-fill"></i></span><span class="qa__lbl">Remind<br/>Overdue</span></button>
           <div class="qa-divider"></div>
           <NuxtLink to="/members" class="qa"><span class="qa__icon" style="background:rgba(67,118,108,.10);color:#43766C"><i class="bi bi-people"></i></span><span class="qa__lbl">View<br/>Members</span></NuxtLink>
           <div class="qa-divider"></div>
@@ -465,6 +476,31 @@ const sendReminder = async (m: any) => {
         </div>
       </div>
     </template>
+
+    <!-- Quick Action Modals -->
+    <SharedMemberModal
+      v-if="isMemberModalOpen"
+      :locations="locationList"
+      :age-groups="ageGroupList"
+      @close="isMemberModalOpen = false"
+      @saved="loadDashboard"
+    />
+    <SharedPaymentModal
+      v-if="isPaymentModalOpen"
+      @close="isPaymentModalOpen = false"
+      @saved="loadDashboard"
+    />
+    <SharedBroadcastRecipientModal
+      v-if="isBroadcastModalOpen"
+      @close="isBroadcastModalOpen = false"
+      @saved="loadDashboard"
+    />
+    <OverdueRemindersModal
+      v-if="isOverdueModalOpen"
+      :members="allOverdueMembers"
+      :locations="locationList"
+      @close="isOverdueModalOpen = false"
+    />
   </div>
 </template>
 

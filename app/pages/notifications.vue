@@ -410,117 +410,14 @@ onMounted(() => {
       @confirm="confirmDelete"
     />
 
-    <!-- Create / Edit Broadcast Single Column Modal -->
-    <div v-if="isModalOpen" class="modal-backdrop fade show"></div>
-    
-    <div 
-      v-if="isModalOpen" 
-      class="modal fade show d-block" 
-      tabindex="-1" 
-      role="dialog"
-      @click.self="closeModal"
-    >
-      <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content amms-surface border-0 shadow-lg rounded-4 overflow-hidden">
-          
-          <div class="modal-header border-bottom px-4 py-3 bg-body-tertiary position-relative justify-content-center">
-            <h5 class="modal-title fw-bold text-primary text-sm mb-0 text-center">
-              <i class="bi bi-broadcast me-1.5 amms-accent"></i>
-              <span>{{ editingNotification ? 'Edit Broadcast' : 'Create Broadcast' }}</span>
-            </h5>
-            <button 
-              type="button" 
-              class="btn-close position-absolute end-0 me-3" 
-              @click="closeModal"
-              aria-label="Close"
-            ></button>
-          </div>
 
-          <form @submit.prevent="handleSave">
-            <div class="modal-body p-4">
-              <div v-if="modalError" class="alert alert-danger py-2 px-3 mb-3 rounded-3 small">
-                <i class="bi bi-exclamation-triangle-fill me-1"></i> {{ modalError }}
-              </div>
-
-              <!-- Broadcast Title -->
-              <div class="mb-3">
-                <label for="bcTitle" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">
-                  Broadcast Title *
-                </label>
-                <input id="bcTitle" v-model="name" type="text" class="form-control py-2.5 text-sm" placeholder="e.g. Annual General Meeting Notice" required />
-              </div>
-
-              <!-- Template Selector -->
-              <div class="mb-3">
-                <label for="bcTmpl" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">
-                  Select Template (Optional)
-                </label>
-                <select id="bcTmpl" v-model="notificationTemplateId" class="form-select py-2.5 text-sm">
-                  <option value="">Custom Message (No Template)</option>
-                  <option v-for="t in templates" :key="t.id" :value="t.id">
-                    {{ t.name }}
-                  </option>
-                </select>
-              </div>
-
-              <!-- Message Content & Quick Placeholder Chips -->
-              <div class="mb-3">
-                <div class="d-flex align-items-center justify-content-between mb-1">
-                  <label for="bcContent" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase mb-0">
-                    Message Content *
-                  </label>
-                  <span class="text-xs text-muted">Click chip to insert placeholder:</span>
-                </div>
-
-                <!-- Interactive Placeholder Tag Chips -->
-                <div class="d-flex flex-wrap gap-1.5 mb-2">
-                  <button
-                    v-for="p in availablePlaceholders"
-                    :key="p.tag"
-                    type="button"
-                    class="btn btn-xs btn-outline-primary rounded-pill px-2.5 py-1 text-xs fw-semibold placeholder-chip d-flex align-items-center gap-1"
-                    @click="insertPlaceholder(p.tag)"
-                    :title="p.tooltip"
-                  >
-                    <i class="bi bi-plus-circle text-xs"></i>
-                    <span>{{ p.tag }}</span>
-                  </button>
-                </div>
-
-                <textarea
-                  id="bcContent"
-                  v-model="content"
-                  rows="4"
-                  class="form-control py-2 text-sm font-monospace"
-                  placeholder="Type broadcast announcement message..."
-                  required
-                ></textarea>
-              </div>
-
-            </div>
-
-            <div class="modal-footer border-top px-4 py-3 bg-body-tertiary">
-              <button 
-                type="button" 
-                class="btn btn-sm btn-outline-secondary rounded-pill px-3" 
-                @click="closeModal"
-              >
-                Cancel
-              </button>
-              <button 
-                type="submit" 
-                class="btn btn-sm btn-primary rounded-pill px-4 fw-semibold d-flex align-items-center gap-2 shadow-sm"
-                :disabled="isSubmitting"
-              >
-                <span v-if="isSubmitting" class="spinner-border spinner-border-sm" role="status"></span>
-                <span>{{ isSubmitting ? 'Dispatching...' : (editingNotification ? 'Update Broadcast' : 'Dispatch Broadcast') }}</span>
-              </button>
-            </div>
-          </form>
-
-        </div>
-      </div>
-    </div>
+    <!-- Shared Broadcast Modal Component -->
+    <SharedBroadcastModal
+      v-if="isModalOpen"
+      :editing-notification="editingNotification"
+      @close="closeModal"
+      @saved="loadData"
+    />
 
   </div>
 </template>
