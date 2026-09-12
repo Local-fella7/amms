@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useAuthStore } from '~/stores/useAuthStore'
+import type { Association } from '~/types'
 
 const route = useRoute()
 const config = useRuntimeConfig()
 const authStore = useAuthStore()
-const { data: associationData, execute: fetchAssociation } = useApi<any>()
+const { data: associationData, execute: fetchAssociation } = useApi<Association | Association[] | { data: Association | Association[] }>()
 const isSidebarCollapsed = ref(false)
 const isMobileNavOpen = ref(false)
 const isSettingsOpen = ref(false)

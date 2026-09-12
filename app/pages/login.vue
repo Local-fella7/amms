@@ -2,6 +2,22 @@
 import { ref, onMounted } from 'vue'
 import { z } from 'zod'
 import { useAuthStore } from '~/stores/useAuthStore'
+import type { User } from '~/types'
+
+interface LoginResponse {
+  data?: {
+    token?: string
+    jwt_token?: string
+    user?: User
+    requires_password_change?: boolean
+  }
+  token?: string
+  jwt_token?: string
+  user?: User
+  requires_password_change?: boolean
+  message?: string
+  error?: string
+}
 
 definePageMeta({
   layout: 'auth'
@@ -74,7 +90,7 @@ const handleLogin = async () => {
   try {
     console.log('Sending login request via proxy to: /api/auth/login')
     
-    const response: any = await $fetch('/api/auth/login', {
+    const response = await $fetch<LoginResponse>('/api/auth/login', {
       method: 'POST',
       body: {
         email: email.value,
@@ -100,9 +116,9 @@ const handleLogin = async () => {
     } else {
       errorMessage.value = response?.message || response?.error || 'Login failed. Please check your credentials.'
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Login submit error:', err)
-    errorMessage.value = err.data?.message || err.response?._data?.message || err.message || 'An error occurred during authentication.'
+    errorMessage.value = extractErrorMessage(err, 'An error occurred during authentication.')
   } finally {
     loading.value = false
   }
@@ -140,8 +156,8 @@ const submitPasswordChange = async () => {
 
     isChangePasswordModalOpen.value = false
     await navigateTo('/', { replace: true })
-  } catch (err: any) {
-    changePasswordError.value = err.data?.message || err.response?._data?.message || err.message || 'Failed to update password'
+  } catch (err: unknown) {
+    changePasswordError.value = extractErrorMessage(err, 'Failed to update password')
   } finally {
     isChangingPassword.value = false
   }

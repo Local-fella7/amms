@@ -21,7 +21,7 @@ interface NotificationTemplateOption {
   content: string
 }
 
-const { data: notificationsResponse, loading, error, execute: fetchNotifications, fetchWithAuth } = useApi<any>()
+const { data: notificationsResponse, loading, error, execute: fetchNotifications, fetchWithAuth } = useApi<NotificationItem[] | { data: NotificationItem[] }>()
 const { data: templates, execute: fetchTemplates } = useApi<NotificationTemplateOption[]>()
 
 const searchQuery = ref('')
@@ -171,7 +171,11 @@ const formatDateDisplay = (val?: string) => {
 
 const handleSave = async () => {
   modalError.value = ''
-  const payload: any = {
+  const payload: {
+    name: string
+    content: string
+    notification_template_id?: number
+  } = {
     name: name.value.trim().replace(/\{\{fee_year\}\}/g, String(new Date().getFullYear())),
     content: content.value.trim().replace(/\{\{fee_year\}\}/g, String(new Date().getFullYear()))
   }
@@ -205,9 +209,8 @@ const handleSave = async () => {
     
     closeModal()
     await loadData()
-  } catch (err: any) {
-    const serverErrors = err?.data?.errors ? Object.values(err.data.errors).flat().join(', ') : null
-    modalError.value = serverErrors || err?.data?.message || err?.message || 'Failed to save broadcast notification'
+  } catch (err: unknown) {
+    modalError.value = extractErrorMessage(err, 'Failed to save broadcast notification')
     push.error(modalError.value)
   } finally {
     isSubmitting.value = false

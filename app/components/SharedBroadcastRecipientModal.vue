@@ -98,7 +98,7 @@ const loadData = async () => {
 
 onMounted(loadData)
 
-const rawNotificationMembers = computed<any[]>(() => {
+const rawNotificationMembers = computed<NotificationMember[]>(() => {
   if (!notificationMembersResponse.value) return []
   const res = notificationMembersResponse.value
   if (Array.isArray(res)) return res

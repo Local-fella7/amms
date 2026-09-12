@@ -27,7 +27,7 @@ interface PaymentModeOption {
   name: string
 }
 
-const { data: paymentsResponse, execute: fetchPayments, fetchWithAuth } = useApi<any>()
+const { data: paymentsResponse, execute: fetchPayments, fetchWithAuth } = useApi<FeePayment[] | { data: FeePayment[] }>()
 const { data: members, execute: fetchMembers } = useApi<MemberOption[]>()
 const { data: fees, execute: fetchFees } = useApi<FeeOption[]>()
 const { data: paymentModes, execute: fetchPaymentModes } = useApi<PaymentModeOption[]>()

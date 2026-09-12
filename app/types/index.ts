@@ -4,6 +4,72 @@ export interface User {
   id: number | string
   name: string
   email?: string
+  role_id?: number | string
+  role?: Role
+  status?: 'active' | 'inactive' | string
+  created_at?: string
+  updated_at?: string
+}
+
+export interface Association {
+  id?: number
+  name?: string
+  abbreviation?: string
+  logo?: string
+  email?: string
+  phone?: string
+  address?: string
+  created_at?: string
+  updated_at?: string
+}
+
+export interface AuditLog {
+  id: number
+  user_id?: number | string
+  action?: string
+  description?: string
+  ip_address?: string
+  user_agent?: string
+  created_at?: string
+  updated_at?: string
+  user?: Partial<User>
+}
+
+export interface Role {
+  id: number
+  name: string
+  description?: string
+  created_at?: string
+  updated_at?: string
+}
+
+export interface Feature {
+  id: number
+  name: string
+  features_group_id?: number | string
+  feature_group_id?: number | string
+  featuresGroupId?: number | string
+  description?: string
+  created_at?: string
+  updated_at?: string
+}
+
+export interface FeatureGroup {
+  id: number
+  name: string
+  description?: string
+  created_at?: string
+  updated_at?: string
+}
+
+export interface RoleFeature {
+  id?: number
+  role_id?: number | string
+  roleId?: number | string
+  feature_id?: number | string
+  featureId?: number | string
+  created_at?: string
+  updated_at?: string
 }
 
 export interface Location {

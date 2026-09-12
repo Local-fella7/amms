@@ -1,9 +1,9 @@
-<script setup lang="ts">
+<script setup lang="ts" generic="T = Record<string, unknown>">
 import { computed } from 'vue'
 
 const props = defineProps<{
   columns: { key: string, label: string, width?: string, align?: 'left' | 'center' | 'right', headerClass?: string, cellClass?: string }[]
-  items: any[]
+  items: T[]
   loading?: boolean
   emptyIcon?: string
   emptyTitle?: string

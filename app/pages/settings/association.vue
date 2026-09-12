@@ -15,7 +15,7 @@ interface Association {
   updated_at?: string
 }
 
-const { data: associationData, loading, error, execute: fetchAssociation, fetchWithAuth } = useApi<any>()
+const { data: associationData, loading, error, execute: fetchAssociation, fetchWithAuth } = useApi<AssociationRecord | AssociationRecord[] | { data: AssociationRecord | AssociationRecord[] }>()
 const config = useRuntimeConfig()
 const backendBase = computed(() => {
   const api = (config.public?.apiBase as string) || ''
@@ -181,10 +181,9 @@ const handleSave = async () => {
     logoTimestamp.value = Date.now()
     push.success('Association profile updated successfully!')
     await loadData()
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Save association error:', err)
-    const serverErrors = err?.data?.errors ? Object.values(err.data.errors).flat().join(', ') : null
-    formError.value = serverErrors || err?.data?.message || err?.message || 'Failed to save association profile'
+    formError.value = extractErrorMessage(err, 'Failed to save association profile')
     push.error(formError.value)
   } finally {
     isSaving.value = false

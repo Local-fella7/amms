@@ -14,7 +14,7 @@ const emit = defineEmits<{
   (e: 'saved'): void
 }>()
 
-const { fetchWithAuth } = useApi<any>()
+const { fetchWithAuth } = useApi<Member>()
 const config = useRuntimeConfig()
 const backendBase = computed(() => {
   const api = (config.public?.apiBase as string) || ''

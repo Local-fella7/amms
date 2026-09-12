@@ -8,7 +8,7 @@ interface FeatureGroup {
   updated_at?: string
 }
 
-const { data: featureGroupsResponse, loading, error, execute: fetchFeatureGroups } = useApi<any>()
+const { data: featureGroupsResponse, loading, error, execute: fetchFeatureGroups } = useApi<FeatureGroup[] | { data: FeatureGroup[] }>()
 
 const searchQuery = ref('')
 

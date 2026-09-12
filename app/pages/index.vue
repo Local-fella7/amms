@@ -17,17 +17,19 @@ import {
   Filler
 } from 'chart.js'
 
+import type { Member, FeePayment, NotificationItem, Location, AgeGroup, Fee } from '~/types'
+
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Title, Tooltip, Legend, Filler)
 
 const authStore = useAuthStore()
 if (!authStore.isAuthenticated) await navigateTo('/login')
 
-const { data: membersResponse,       execute: fetchMembers,       fetchWithAuth } = useApi<any>()
-const { data: paymentsResponse,      execute: fetchPayments     } = useApi<any>()
-const { data: notificationsResponse, execute: fetchNotifications } = useApi<any>()
-const { data: locations,             execute: fetchLocations     } = useApi<any[]>()
-const { data: ageGroups,             execute: fetchAgeGroups     } = useApi<any[]>()
-const { data: fees,                  execute: fetchFees          } = useApi<any[]>()
+const { data: membersResponse,       execute: fetchMembers,       fetchWithAuth } = useApi<Member[] | { data: Member[] }>()
+const { data: paymentsResponse,      execute: fetchPayments     } = useApi<FeePayment[] | { data: FeePayment[] }>()
+const { data: notificationsResponse, execute: fetchNotifications } = useApi<NotificationItem[] | { data: NotificationItem[] }>()
+const { data: locations,             execute: fetchLocations     } = useApi<Location[] | { data: Location[] }>()
+const { data: ageGroups,             execute: fetchAgeGroups     } = useApi<AgeGroup[] | { data: AgeGroup[] }>()
+const { data: fees,                  execute: fetchFees          } = useApi<Fee[] | { data: Fee[] }>()
 
 const loading = ref(true)
 const error   = ref<string | null>(null)
@@ -44,28 +46,33 @@ const loadDashboard = async () => {
       fetchAgeGroups    ((api) => api('/api/age-groups')).catch(() => null),
       fetchFees         ((api) => api('/api/fees')).catch(() => null),
     ])
-  } catch (e: any) {
-    error.value = e?.message || 'Failed to load dashboard data'
+  } catch (e: unknown) {
+    error.value = extractErrorMessage(e, 'Failed to load dashboard data')
   } finally {
     loading.value = false
   }
 }
 onMounted(loadDashboard)
 
-const toArray = (res: any): any[] => {
+function toArray<T>(res: unknown): T[] {
   if (!res) return []
-  if (Array.isArray(res)) return res
-  if (Array.isArray(res.data)) return res.data
-  if (res.data && Array.isArray(res.data.data)) return res.data.data
+  if (Array.isArray(res)) return res as T[]
+  if (typeof res === 'object' && res !== null) {
+    const obj = res as Record<string, unknown>
+    if (Array.isArray(obj.data)) return obj.data as T[]
+    if (obj.data && typeof obj.data === 'object' && Array.isArray((obj.data as Record<string, unknown>).data)) {
+      return (obj.data as Record<string, unknown>).data as T[]
+    }
+  }
   return []
 }
 
-const rawMembers       = computed(() => toArray(membersResponse.value))
-const rawPayments      = computed(() => toArray(paymentsResponse.value))
-const rawNotifications = computed(() => toArray(notificationsResponse.value))
-const locationList     = computed(() => toArray(locations.value))
-const ageGroupList     = computed(() => toArray(ageGroups.value))
-const feeList          = computed(() => toArray(fees.value))
+const rawMembers       = computed<Member[]>(() => toArray<Member>(membersResponse.value))
+const rawPayments      = computed<FeePayment[]>(() => toArray<FeePayment>(paymentsResponse.value))
+const rawNotifications = computed<NotificationItem[]>(() => toArray<NotificationItem>(notificationsResponse.value))
+const locationList     = computed<Location[]>(() => toArray<Location>(locations.value))
+const ageGroupList     = computed<AgeGroup[]>(() => toArray<AgeGroup>(ageGroups.value))
+const feeList          = computed<Fee[]>(() => toArray<Fee>(fees.value))
 
 const formatCompact = (val: number) => {
   const n = val || 0
@@ -78,48 +85,48 @@ const formatDate = (val?: string) => {
   const d = new Date(val)
   return isNaN(d.getTime()) ? val : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 }
-const getLocationName = (id: any) => locationList.value.find((l: any) => Number(l.id) === Number(id))?.name ?? '\u2014'
-const getAgeGroupName = (id: any) => ageGroupList.value.find((g: any) => Number(g.id) === Number(id))?.name ?? '\u2014'
-const initials = (m: any) => `${(m.first_name || '?')[0]}${(m.last_name || '')[0] || ''}`.toUpperCase()
+const getLocationName = (id?: number | string) => locationList.value.find((l: Location) => Number(l.id) === Number(id))?.name ?? '\u2014'
+const getAgeGroupName = (id?: number | string) => ageGroupList.value.find((g: AgeGroup) => Number(g.id) === Number(id))?.name ?? '\u2014'
+const initials = (m: Partial<Member>) => `${(m.first_name || '?')[0]}${(m.last_name || '')[0] || ''}`.toUpperCase()
 
 const currentYear = new Date().getFullYear()
 
 const totalMembers    = computed(() => rawMembers.value.length)
-const activeMembers   = computed(() => rawMembers.value.filter((m: any) => m.member_status === 'active').length)
+const activeMembers   = computed(() => rawMembers.value.filter((m: Member) => m.member_status === 'active').length)
 const inactiveMembers = computed(() => totalMembers.value - activeMembers.value)
-const exemptedMembers = computed(() => rawMembers.value.filter((m: any) => m.fee_exemption === 'yes').length)
+const exemptedMembers = computed(() => rawMembers.value.filter((m: Member) => m.fee_exemption === 'yes').length)
 const activeRate      = computed(() => totalMembers.value ? Math.round((activeMembers.value / totalMembers.value) * 100) : 0)
 const broadcastCount  = computed(() => rawNotifications.value.length)
 
 const revenueYTD = computed(() =>
   rawPayments.value
-    .filter((p: any) => (p.date || p.created_at || '').startsWith(String(currentYear)))
-    .reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0)
+    .filter((p: FeePayment) => (p.date || p.created_at || '').startsWith(String(currentYear)))
+    .reduce((s: number, p: FeePayment) => s + (Number(p.amount) || 0), 0)
 )
-const totalRevenue = computed(() => rawPayments.value.reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0))
+const totalRevenue = computed(() => rawPayments.value.reduce((s: number, p: FeePayment) => s + (Number(p.amount) || 0), 0))
 
 const paidThisYear = computed(() => {
   const ids = new Set<number>()
-  rawPayments.value.forEach((p: any) => {
+  rawPayments.value.forEach((p: FeePayment) => {
     if ((p.date || p.created_at || '').startsWith(String(currentYear))) ids.add(Number(p.member_id))
   })
   return ids
 })
-const overdueCount   = computed(() => rawMembers.value.filter((m: any) => m.member_status === 'active' && !paidThisYear.value.has(Number(m.id))).length)
-const overdueMembers = computed(() => rawMembers.value.filter((m: any) => m.member_status === 'active' && !paidThisYear.value.has(Number(m.id))).slice(0, 6))
+const overdueCount   = computed(() => rawMembers.value.filter((m: Member) => m.member_status === 'active' && !paidThisYear.value.has(Number(m.id))).length)
+const overdueMembers = computed(() => rawMembers.value.filter((m: Member) => m.member_status === 'active' && !paidThisYear.value.has(Number(m.id))).slice(0, 6))
 const complianceRate = computed(() => activeMembers.value ? Math.round((paidThisYear.value.size / activeMembers.value) * 100) : 0)
 
-const recentMembers    = computed(() => [...rawMembers.value].sort((a: any, b: any) => new Date(b.registration_date||b.created_at||0).getTime()-new Date(a.registration_date||a.created_at||0).getTime()).slice(0,5))
-const recentPayments   = computed(() => [...rawPayments.value].sort((a: any, b: any) => new Date(b.date||b.created_at||0).getTime()-new Date(a.date||a.created_at||0).getTime()).slice(0,5))
-const recentBroadcasts = computed(() => [...rawNotifications.value].sort((a: any, b: any) => new Date(b.created_at||0).getTime()-new Date(a.created_at||0).getTime()).slice(0,4))
+const recentMembers    = computed(() => [...rawMembers.value].sort((a: Member, b: Member) => new Date(b.registration_date||b.created_at||0).getTime()-new Date(a.registration_date||a.created_at||0).getTime()).slice(0,5))
+const recentPayments   = computed(() => [...rawPayments.value].sort((a: FeePayment, b: FeePayment) => new Date(b.date||b.created_at||0).getTime()-new Date(a.date||a.created_at||0).getTime()).slice(0,5))
+const recentBroadcasts = computed(() => [...rawNotifications.value].sort((a: NotificationItem, b: NotificationItem) => new Date(b.created_at||0).getTime()-new Date(a.created_at||0).getTime()).slice(0,4))
 
-const getMemberName = (p: any) => {
+const getMemberName = (p: FeePayment) => {
   if (p.member) return `${p.member.first_name} ${p.member.last_name}`
-  const m = rawMembers.value.find((m: any) => Number(m.id) === Number(p.member_id))
+  const m = rawMembers.value.find((m: Member) => Number(m.id) === Number(p.member_id))
   return m ? `${m.first_name} ${m.last_name}` : `Member #${p.member_id}`
 }
-const getFullMember = (p: any) => rawMembers.value.find((m: any) => Number(m.id) === Number(p.member_id)) || p.member
-const getMemberInitials = (p: any) => { const parts = getMemberName(p).split(' '); return `${(parts[0]||'?')[0]}${(parts[1]||'')[0]||''}`.toUpperCase() }
+const getFullMember = (p: FeePayment) => rawMembers.value.find((m: Member) => Number(m.id) === Number(p.member_id)) || p.member
+const getMemberInitials = (p: FeePayment) => { const parts = getMemberName(p).split(' '); return `${(parts[0]||'?')[0]}${(parts[1]||'')[0]||''}`.toUpperCase() }
 
 const PALETTE = ['#43766C','#B19470','#76453B','#6B9E8C','#C4A882','#9E6358']
 
@@ -129,7 +136,7 @@ const revenueChartData = computed<ChartData<'line'>>(() => {
     const d = new Date(now.getFullYear(), now.getMonth()-i, 1)
     const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
     months.push(d.toLocaleString('en',{month:'short'}))
-    totals.push(rawPayments.value.filter((p: any)=>(p.date||p.created_at||'').startsWith(key)).reduce((s: number,p: any)=>s+(Number(p.amount)||0),0))
+    totals.push(rawPayments.value.filter((p: FeePayment)=>(p.date||p.created_at||'').startsWith(key)).reduce((s: number, p: FeePayment)=>s+(Number(p.amount)||0),0))
   }
   return {
     labels: months,
@@ -153,9 +160,9 @@ const growthChartData = computed<ChartData<'bar'>>(() => {
     const d = new Date(now.getFullYear(), now.getMonth()-i, 1)
     const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
     months.push(d.toLocaleString('en',{month:'short'}))
-    counts.push(rawMembers.value.filter((m: any)=>(m.registration_date||m.created_at||'').startsWith(key)).length)
+    counts.push(rawMembers.value.filter((m: Member)=>(m.registration_date||m.created_at||'').startsWith(key)).length)
   }
-  return { labels: months, datasets: [{ label: 'New Members', data: counts, backgroundColor: PALETTE, borderRadius: 7, borderSkipped: false as any }] }
+  return { labels: months, datasets: [{ label: 'New Members', data: counts, backgroundColor: PALETTE, borderRadius: 7, borderSkipped: false }] }
 })
 const growthChartOptions: ChartOptions<'bar'> = {
   responsive: true, maintainAspectRatio: false,
@@ -165,7 +172,7 @@ const growthChartOptions: ChartOptions<'bar'> = {
 
 const ageChartData = computed<ChartData<'doughnut'>>(() => {
   const counts: Record<string,number> = {}
-  rawMembers.value.forEach((m: any) => { const n=getAgeGroupName(m.age_group_id); counts[n]=(counts[n]||0)+1 })
+  rawMembers.value.forEach((m: Member) => { const n=getAgeGroupName(m.age_group_id); counts[n]=(counts[n]||0)+1 })
   return { labels: Object.keys(counts), datasets: [{ data: Object.values(counts), backgroundColor: PALETTE, borderWidth: 2, borderColor: '#fff', hoverOffset: 6 }] }
 })
 const doughnutOptions: ChartOptions<'doughnut'> = {
@@ -176,10 +183,10 @@ const doughnutOptions: ChartOptions<'doughnut'> = {
 
 const locationChartData = computed<ChartData<'bar'>>(() => {
   const counts: Record<string,number> = {}
-  locationList.value.forEach((l: any) => { counts[l.name] = 0 })
-  rawMembers.value.forEach((m: any) => { const n=getLocationName(m.location_id); counts[n]=(counts[n]||0)+1 })
+  locationList.value.forEach((l: Location) => { counts[l.name] = 0 })
+  rawMembers.value.forEach((m: Member) => { const n=getLocationName(m.location_id); counts[n]=(counts[n]||0)+1 })
   const entries = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,7)
-  return { labels: entries.map(e=>e[0]), datasets: [{ label: 'Members', data: entries.map(e=>e[1]), backgroundColor: PALETTE, borderRadius: 7, borderSkipped: false as any }] }
+  return { labels: entries.map(e=>e[0]), datasets: [{ label: 'Members', data: entries.map(e=>e[1]), backgroundColor: PALETTE, borderRadius: 7, borderSkipped: false }] }
 })
 const locationChartOptions: ChartOptions<'bar'> = {
   responsive: true, maintainAspectRatio: false,
@@ -191,12 +198,12 @@ const locationChartOptions: ChartOptions<'bar'> = {
 }
 
 const sendingReminderId = ref<number|null>(null)
-const sendReminder = async (m: any) => {
+const sendReminder = async (m: Member) => {
   sendingReminderId.value = m.id
   try {
     await fetchWithAuth('/api/notifications', { method: 'POST', body: { name: `Fee Reminder \u2014 ${m.first_name} ${m.last_name}`, content: `Dear ${m.first_name}, your annual membership fee for ${currentYear} is still outstanding. Kindly settle it at your earliest convenience.` } })
     push.success(`Reminder queued for ${m.first_name} ${m.last_name}`)
-  } catch(e: any) { push.error(e?.data?.message || 'Failed to send reminder') }
+  } catch(e: unknown) { push.error(extractErrorMessage(e, 'Failed to send reminder')) }
   finally { sendingReminderId.value = null }
 }
 
@@ -207,8 +214,8 @@ const isBroadcastModalOpen = ref(false)
 const isOverdueModalOpen   = ref(false)
 
 // All overdue members (for OverdueRemindersModal)
-const allOverdueMembers = computed(() =>
-  rawMembers.value.filter((m: any) => m.member_status === 'active' && !paidThisYear.value.has(Number(m.id)))
+const allOverdueMembers = computed<Member[]>(() =>
+  rawMembers.value.filter((m: Member) => m.member_status === 'active' && !paidThisYear.value.has(Number(m.id)))
 )
 </script>
 

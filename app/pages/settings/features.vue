@@ -18,7 +18,7 @@ interface FeatureGroupOption {
   name: string
 }
 
-const { data: featuresResponse, loading, error, execute: fetchFeatures } = useApi<any>()
+const { data: featuresResponse, loading, error, execute: fetchFeatures } = useApi<Feature[] | { data: Feature[] }>()
 const { data: featureGroups, execute: fetchGroups } = useApi<FeatureGroupOption[]>()
 
 const searchQuery = ref('')

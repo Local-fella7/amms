@@ -138,10 +138,9 @@ const handleSave = async () => {
     
     closeModal()
     await loadData()
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Save template error:', err)
-    const serverErrors = err?.data?.errors ? Object.values(err.data.errors).flat().join(', ') : null
-    modalError.value = serverErrors || err?.data?.message || err?.message || 'Failed to save template'
+    modalError.value = extractErrorMessage(err, 'Failed to save template')
     push.error(modalError.value)
   } finally {
     isSubmitting.value = false

@@ -104,8 +104,8 @@ const handleSave = async () => {
     
     closeModal()
     await loadData()
-  } catch (err: any) {
-    modalError.value = err?.data?.message || err?.message || 'Failed to save location'
+  } catch (err: unknown) {
+    modalError.value = extractErrorMessage(err, 'Failed to save location')
     push.error(modalError.value)
   } finally {
     isSubmitting.value = false

@@ -23,7 +23,7 @@ interface RoleOption {
   name: string
 }
 
-const { data: usersResponse, loading, error, execute: fetchUsers, fetchWithAuth } = useApi<any>()
+const { data: usersResponse, loading, error, execute: fetchUsers, fetchWithAuth } = useApi<UserItem[] | { data: UserItem[] }>()
 const { data: roles, execute: fetchRoles } = useApi<RoleOption[]>()
 
 const searchQuery = ref('')
@@ -143,7 +143,7 @@ const openEditModal = (u: UserItem) => {
   lastName.value = u.last_name
   email.value = u.email
   phone.value = u.phone || ''
-  status.value = (u.status as any) || 'active'
+  status.value = u.status === 'inactive' ? 'inactive' : 'active'
   password.value = ''
   roleId.value = u.role_id
   modalError.value = ''
@@ -166,7 +166,15 @@ const closeModal = () => {
 
 const handleSave = async () => {
   modalError.value = ''
-  const payload: any = {
+  const payload: {
+    first_name: string
+    last_name: string
+    email: string
+    phone?: string
+    status: 'active' | 'inactive'
+    role_id: number
+    password?: string
+  } = {
     first_name: firstName.value.trim(),
     last_name: lastName.value.trim(),
     email: email.value.trim(),
@@ -208,9 +216,8 @@ const handleSave = async () => {
     
     closeModal()
     await loadData()
-  } catch (err: any) {
-    const serverErrors = err?.data?.errors ? Object.values(err.data.errors).flat().join(', ') : null
-    modalError.value = serverErrors || err?.data?.message || err?.message || 'Failed to save system user'
+  } catch (err: unknown) {
+    modalError.value = extractErrorMessage(err, 'Failed to save system user')
     push.error(modalError.value)
   } finally {
     isSubmitting.value = false

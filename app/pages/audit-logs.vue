@@ -33,7 +33,7 @@ interface FeatureOption {
   name: string
 }
 
-const { data: logsResponse, loading, error, execute: fetchLogs, fetchWithAuth } = useApi<any>()
+const { data: logsResponse, loading, error, execute: fetchLogs, fetchWithAuth } = useApi<AuditLogItem[] | { data: AuditLogItem[] }>()
 const { data: users, execute: fetchUsers } = useApi<UserOption[]>()
 const { data: features, execute: fetchFeatures } = useApi<FeatureOption[]>()
 

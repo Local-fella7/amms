@@ -12,7 +12,9 @@ interface Role {
 interface Feature {
   id: number
   name: string
-  features_group_id?: number
+  features_group_id?: number | string
+  feature_group_id?: number | string
+  featuresGroupId?: number | string
 }
 
 interface FeatureGroup {
@@ -21,9 +23,11 @@ interface FeatureGroup {
 }
 
 interface RoleFeature {
-  id: number
-  role_id: number
-  feature_id: number
+  id?: number | string
+  role_id?: number | string
+  roleId?: number | string
+  feature_id?: number | string
+  featureId?: number | string
 }
 
 const { data: roles, loading: loadingRoles, error: rolesError, execute: fetchRoles, fetchWithAuth } = useApi<Role[]>()
@@ -122,10 +126,11 @@ const getGroupIconStyle = (name: string) => {
 
 const getAssignedCount = (roleId: number) => {
   if (!roleFeatures.value) return 0
-  const records = Array.isArray(roleFeatures.value) 
-    ? roleFeatures.value 
-    : ((roleFeatures.value as any)?.data || [])
-  return records.filter((rf: any) => Number(rf.role_id || rf.roleId) === Number(roleId)).length
+  const raw = roleFeatures.value as unknown
+  const records: RoleFeature[] = Array.isArray(raw) 
+    ? raw 
+    : ((raw as { data?: RoleFeature[] })?.data || [])
+  return records.filter((rf: RoleFeature) => Number(rf.role_id || rf.roleId) === Number(roleId)).length
 }
 
 // Grouped features calculation
@@ -136,7 +141,7 @@ const groupedFeatures = computed(() => {
   const ungrouped: Feature[] = []
 
   for (const f of features.value) {
-    const gId = Number(f.features_group_id || (f as any).feature_group_id || (f as any).featuresGroupId)
+    const gId = Number(f.features_group_id || f.feature_group_id || f.featuresGroupId)
     if (gId) {
       if (!map.has(gId)) map.set(gId, [])
       map.get(gId)!.push(f)
@@ -280,14 +285,26 @@ const handleSaveRole = async () => {
     
     closeRoleModal()
     await loadData()
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Save role error:', err)
-    const serverErrors = err?.data?.errors ? Object.values(err.data.errors).flat().join(', ') : null
-    modalError.value = serverErrors || err?.data?.message || err?.message || 'Failed to save role'
+    modalError.value = extractErrorMessage(err, 'Failed to save role')
     push.error(modalError.value)
   } finally {
     isSubmitting.value = false
   }
+}
+
+interface RoleFeatureResponseItem {
+  id?: number | string
+  feature_id?: number | string
+  role_id?: number | string
+  roleId?: number | string
+  featureId?: number | string
+}
+
+interface RoleFeaturesResponsePayload {
+  data?: RoleFeatureResponseItem[] | { feature_ids?: (number | string)[] }
+  feature_ids?: (number | string)[]
 }
 
 const openPermsDrawer = async (role: Role) => {
@@ -300,21 +317,29 @@ const openPermsDrawer = async (role: Role) => {
   
   try {
     // 1. Direct role features endpoint: GET /api/roles/{id}/features
-    const res: any = await fetchWithAuth(`/api/roles/${role.id}/features`).catch(() => null)
+    const res = await fetchWithAuth<RoleFeatureResponseItem[] | RoleFeaturesResponsePayload | number[]>(`/api/roles/${role.id}/features`).catch(() => null)
     
     let ids: number[] = []
     if (Array.isArray(res)) {
-      ids = res.map((x: any) => typeof x === 'number' ? x : Number(x.id || x.feature_id))
-    } else if (Array.isArray(res?.data)) {
-      ids = res.data.map((x: any) => typeof x === 'number' ? x : Number(x.id || x.feature_id))
-    } else if (Array.isArray(res?.data?.feature_ids)) {
-      ids = res.data.feature_ids.map(Number)
-    } else {
+      ids = res.map((x: number | RoleFeatureResponseItem) => typeof x === 'number' ? x : Number(x.id || x.feature_id))
+    } else if (res && typeof res === 'object') {
+      const obj = res as RoleFeaturesResponsePayload
+      if (Array.isArray(obj.data)) {
+        ids = obj.data.map((x: RoleFeatureResponseItem | number) => typeof x === 'number' ? x : Number(x.id || x.feature_id))
+      } else if (obj.data && typeof obj.data === 'object' && Array.isArray((obj.data as { feature_ids?: (number | string)[] }).feature_ids)) {
+        ids = ((obj.data as { feature_ids?: (number | string)[] }).feature_ids || []).map(Number)
+      } else if (Array.isArray(obj.feature_ids)) {
+        ids = obj.feature_ids.map(Number)
+      }
+    }
+    
+    if (ids.length === 0) {
       // Fallback: global roleFeatures filter
-      const allRf = Array.isArray(roleFeatures.value) ? roleFeatures.value : ((roleFeatures.value as any)?.data || [])
+      const raw = roleFeatures.value as unknown
+      const allRf: RoleFeature[] = Array.isArray(raw) ? (raw as RoleFeature[]) : ((raw as { data?: RoleFeature[] })?.data || [])
       ids = allRf
-        .filter((rf: any) => Number(rf.role_id || rf.roleId) === Number(role.id))
-        .map((rf: any) => Number(rf.feature_id || rf.featureId || rf.id))
+        .filter((rf: RoleFeature) => Number(rf.role_id || rf.roleId) === Number(role.id))
+        .map((rf: RoleFeature) => Number(rf.feature_id || rf.featureId || rf.id))
     }
 
     selectedFeatureIds.value = ids.filter(id => Boolean(id) && !isNaN(id))
@@ -364,9 +389,8 @@ const handleSavePermissions = async () => {
     push.success(`Permissions for role "${selectedRoleForPerms.value.name}" saved successfully!`)
     closePermsDrawer()
     await loadData()
-  } catch (err: any) {
-    const msg = err?.data?.message || err?.message || 'Failed to update permissions matrix'
-    push.error(msg)
+  } catch (err: unknown) {
+    push.error(extractErrorMessage(err, 'Failed to update permissions matrix'))
   } finally {
     isSavingPerms.value = false
   }

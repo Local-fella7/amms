@@ -98,8 +98,8 @@ const filteredReports = computed(() => {
   return list
 })
 
-const selectCategory = (catId: string) => {
-  activeCategory.value = activeCategory.value === catId ? 'all' : catId as any
+const selectCategory = (catId: 'finance' | 'roster' | 'demographics' | 'member') => {
+  activeCategory.value = activeCategory.value === catId ? 'all' : catId
 }
 
 // Action Dispatcher
@@ -146,7 +146,7 @@ const executeAction = (report: ReportDef, action: 'preview' | 'download' | 'tab'
   else if (action === 'tab') handleOpenInNewTab(report)
 }
 
-const formatDateToYMD = (val: any) => {
+const formatDateToYMD = (val: string | Date | null | undefined): string => {
   if (!val) return ''
   if (typeof val === 'string') return val.substring(0, 10)
   if (val instanceof Date) {
@@ -182,8 +182,8 @@ const handleOpenInNewTab = async (report: ReportDef) => {
     activeReportKey.value = report.id
     await openPdfInNewTab(buildReportUrl(report, false))
     push.success(`Opened "${report.title}" in new tab`)
-  } catch (err: any) {
-    push.error(err?.message || 'Failed to open report')
+  } catch (err: unknown) {
+    push.error(extractErrorMessage(err, 'Failed to open report'))
   } finally { activeReportKey.value = null }
 }
 
@@ -192,8 +192,8 @@ const handleDownloadReport = async (report: ReportDef) => {
     activeReportKey.value = report.id
     await downloadPdf(buildReportUrl(report, true), `${report.id}-${new Date().toISOString().substring(0, 10)}.pdf`)
     push.success(`"${report.title}" downloaded!`)
-  } catch (err: any) {
-    push.error(err?.message || 'Failed to download report')
+  } catch (err: unknown) {
+    push.error(extractErrorMessage(err, 'Failed to download report'))
   } finally { activeReportKey.value = null }
 }
 
@@ -204,8 +204,8 @@ const handlePreviewReport = async (report: ReportDef) => {
     isPreviewLoading.value = true
     isPreviewModalOpen.value = true
     previewPdfUrl.value = await getPdfBlobUrl(buildReportUrl(report, false))
-  } catch (err: any) {
-    push.error(err?.message || 'Failed to preview report')
+  } catch (err: unknown) {
+    push.error(extractErrorMessage(err, 'Failed to preview report'))
     closePreviewModal()
   } finally {
     isPreviewLoading.value = false

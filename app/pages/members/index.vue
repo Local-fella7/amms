@@ -3,11 +3,16 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { z } from 'zod'
 import { useReportPdf } from '~/composables/useReportPdf'
 
+type Gender = 'male' | 'female'
+type MemberStatus = 'active' | 'inactive' | 'deceased'
+type MaritalStatus = 'single' | 'married' | 'divorced' | 'widowed'
+type FeeExemption = 'yes' | 'no'
+
 interface Member {
   id: number
   first_name: string
   last_name: string
-  gender: 'male' | 'female' | string
+  gender: Gender | string
   fathers_name?: string
   mothers_name?: string
   location_id: number | string
@@ -15,12 +20,13 @@ interface Member {
   photo?: string
   photo_url?: string
   avatar?: string
+  image?: string
   email?: string
   date_of_birth: string
-  member_status: 'active' | 'inactive' | 'deceased' | string
-  marital_status: 'single' | 'married' | 'divorced' | 'widowed' | string
+  member_status: MemberStatus | string
+  marital_status: MaritalStatus | string
   phone: string
-  fee_exemption: 'yes' | 'no' | string
+  fee_exemption: FeeExemption | string
   age_group_id: number | string
   registration_date: string
   location?: { id: number; name: string }
@@ -41,7 +47,7 @@ interface AgeGroupItem {
   to_age?: number | string
 }
 
-const { data: membersResponse, loading, error, execute: fetchMembers, fetchWithAuth } = useApi<any>()
+const { data: membersResponse, loading, error, execute: fetchMembers, fetchWithAuth } = useApi<Member[] | { data: Member[] }>()
 const { data: locations, execute: fetchLocations } = useApi<LocationItem[]>()
 const { data: ageGroups, execute: fetchAgeGroups } = useApi<AgeGroupItem[]>()
 const { downloadPdf, openPdfInNewTab, isGenerating: isDownloadingPdf } = useReportPdf()
@@ -324,7 +330,7 @@ const clearPhoto = () => {
 
 const getMemberPhotoPath = (m?: Member | null): string => {
   if (!m) return ''
-  return m.photo || m.picture || (m as any).photo_url || (m as any).avatar || (m as any).image || ''
+  return m.photo || m.picture || m.photo_url || m.avatar || m.image || ''
 }
 
 const getMemberPhotoUrl = (pic?: string) => {
@@ -360,7 +366,7 @@ const openEditModal = (m: Member) => {
   editingMember.value = m
   firstName.value = m.first_name
   lastName.value = m.last_name
-  gender.value = (m.gender as any) || 'male'
+  gender.value = m.gender === 'female' ? 'female' : 'male'
   fathersName.value = m.fathers_name || ''
   mothersName.value = m.mothers_name || ''
   locationId.value = m.location_id
@@ -368,9 +374,9 @@ const openEditModal = (m: Member) => {
   dateOfBirth.value = m.date_of_birth
   phone.value = m.phone
   email.value = m.email || ''
-  memberStatus.value = (m.member_status as any) || 'active'
-  maritalStatus.value = (m.marital_status as any) || 'single'
-  feeExemption.value = (m.fee_exemption as any) || 'no'
+  memberStatus.value = (m.member_status === 'inactive' || m.member_status === 'deceased') ? m.member_status : 'active'
+  maritalStatus.value = (m.marital_status === 'married' || m.marital_status === 'divorced' || m.marital_status === 'widowed') ? m.marital_status : 'single'
+  feeExemption.value = m.fee_exemption === 'yes' ? 'yes' : 'no'
   registrationDate.value = m.registration_date || new Date().toISOString().substring(0, 10)
   clearPhoto()
   const existingPhoto = getMemberPhotoPath(m)

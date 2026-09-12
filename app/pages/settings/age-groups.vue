@@ -127,8 +127,8 @@ const handleSave = async () => {
     
     closeModal()
     await loadData()
-  } catch (err: any) {
-    modalError.value = err?.data?.message || err?.message || 'Failed to save age group'
+  } catch (err: unknown) {
+    modalError.value = extractErrorMessage(err, 'Failed to save age group')
     push.error(modalError.value)
   } finally {
     isSubmitting.value = false

@@ -127,7 +127,13 @@ const handleSave = async () => {
   const descText = description.value.trim() || `Annual Fee ${feeYear.value}`
   
   // Backend expects name, description, year, and fee_year
-  const payload: any = {
+  const payload: {
+    name: string
+    description: string
+    year: number
+    fee_year: number
+    amount: number
+  } = {
     name: descText,
     description: descText,
     year: Number(feeYear.value),
@@ -173,10 +179,9 @@ const handleSave = async () => {
     
     closeModal()
     await loadData()
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Save fee schedule error:', err)
-    const serverErrors = err?.data?.errors ? Object.values(err.data.errors).flat().join(', ') : null
-    modalError.value = serverErrors || err?.data?.message || err?.message || 'Failed to save fee schedule'
+    modalError.value = extractErrorMessage(err, 'Failed to save fee schedule')
     push.error(modalError.value)
   } finally {
     isSubmitting.value = false
