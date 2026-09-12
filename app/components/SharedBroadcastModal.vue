@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { z } from 'zod'
+import type { NotificationItem, NotificationTemplate } from '~/types'
 
 const props = defineProps<{
-  editingNotification?: any | null
+  editingNotification?: NotificationItem | null
 }>()
 
 const emit = defineEmits<{
@@ -11,14 +12,8 @@ const emit = defineEmits<{
   (e: 'saved'): void
 }>()
 
-interface NotificationTemplateOption {
-  id: number
-  name: string
-  content: string
-}
-
-const { fetchWithAuth } = useApi<any>()
-const { data: templates, execute: fetchTemplates } = useApi<NotificationTemplateOption[]>()
+const { fetchWithAuth } = useApi<unknown>()
+const { data: templates, execute: fetchTemplates } = useApi<NotificationTemplate[]>()
 
 const isSubmitting = ref(false)
 const modalError = ref('')
@@ -70,12 +65,16 @@ watch(() => props.editingNotification, (n) => {
 }, { immediate: true })
 
 onMounted(async () => {
-  await fetchTemplates((api: any) => api('/api/notification-templates')).catch(() => [])
+  await fetchTemplates((api) => api('/api/notification-templates')).catch(() => [])
 })
 
 const handleSave = async () => {
   modalError.value = ''
-  const payload: any = {
+  const payload: {
+    name: string
+    content: string
+    notification_template_id?: number
+  } = {
     name: name.value.trim().replace(/\{\{fee_year\}\}/g, String(new Date().getFullYear())),
     content: content.value.trim().replace(/\{\{fee_year\}\}/g, String(new Date().getFullYear()))
   }
@@ -101,9 +100,8 @@ const handleSave = async () => {
     }
     emit('saved')
     emit('close')
-  } catch (err: any) {
-    const serverErrors = err?.data?.errors ? Object.values(err.data.errors).flat().join(', ') : null
-    modalError.value = serverErrors || err?.data?.message || err?.message || 'Failed to save broadcast notification'
+  } catch (err: unknown) {
+    modalError.value = extractErrorMessage(err, 'Failed to save broadcast notification')
     push.error(modalError.value)
   } finally {
     isSubmitting.value = false

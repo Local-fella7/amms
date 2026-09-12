@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { z } from 'zod'
+import type { Member, Location, AgeGroup } from '~/types'
 
 const props = defineProps<{
-  locations: any[]
-  ageGroups: any[]
-  editingMember?: any | null
+  locations: Location[]
+  ageGroups: AgeGroup[]
+  editingMember?: Member | null
 }>()
 
 const emit = defineEmits<{
@@ -132,7 +133,7 @@ const updateAgeGroupFromDob = () => {
   calculatedAge.value = age >= 0 ? age : 0
 
   if (props.ageGroups && props.ageGroups.length > 0 && calculatedAge.value !== null) {
-    const matched = props.ageGroups.find((g: any) => {
+    const matched = props.ageGroups.find((g: AgeGroup) => {
       const min = g.from_age !== undefined && g.from_age !== null && g.from_age !== '' ? Number(g.from_age) : 0
       const max = g.to_age !== undefined && g.to_age !== null && g.to_age !== '' ? Number(g.to_age) : 999
       return calculatedAge.value! >= min && calculatedAge.value! <= max
@@ -146,7 +147,7 @@ watch(() => props.ageGroups, updateAgeGroupFromDob)
 
 const currentMatchedAgeGroupName = computed(() => {
   if (!ageGroupId.value || !props.ageGroups) return 'Auto-assigned from Age'
-  const matched = props.ageGroups.find((g: any) => Number(g.id) === Number(ageGroupId.value))
+  const matched = props.ageGroups.find((g: AgeGroup) => Number(g.id) === Number(ageGroupId.value))
   return matched ? matched.name : 'Auto-assigned from Age'
 })
 
@@ -175,7 +176,7 @@ const clearPhoto = () => {
   if (photoFileInput.value) { photoFileInput.value.value = '' }
 }
 
-const formatDateToYMD = (val: any) => {
+const formatDateToYMD = (val: string | Date | null | undefined): string => {
   if (!val) return new Date().toISOString().substring(0, 10)
   if (val instanceof Date) {
     const yyyy = val.getFullYear()
@@ -228,7 +229,7 @@ const handleSave = async () => {
       }
       push.success(`Member "${firstName.value} ${lastName.value}" updated successfully!`)
     } else {
-      let requestBody: any = payload
+      let requestBody: Record<string, unknown> | FormData = payload
       if (selectedPhotoFile.value) {
         const formData = new FormData()
         Object.entries(payload).forEach(([k, v]) => { if (v !== undefined) formData.append(k, String(v)) })
@@ -244,9 +245,8 @@ const handleSave = async () => {
     }
     emit('saved')
     emit('close')
-  } catch (err: any) {
-    const serverErrors = err?.data?.errors ? Object.values(err.data.errors).flat().join(', ') : null
-    modalError.value = serverErrors || err?.data?.message || err?.message || 'Failed to save member details'
+  } catch (err: unknown) {
+    modalError.value = extractErrorMessage(err, 'Failed to save member details')
     push.error(modalError.value)
   } finally {
     isSubmitting.value = false

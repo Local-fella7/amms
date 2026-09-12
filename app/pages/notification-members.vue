@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
+import type { FeePayment, Member } from '~/types'
 
 interface NotificationMemberItem {
   id: number
@@ -63,12 +64,12 @@ interface LocationOption {
   name: string
 }
 
-const { data: notificationMembersResponse, loading, error, execute: fetchNotificationMembers, fetchWithAuth } = useApi<any>()
+const { data: notificationMembersResponse, loading, error, execute: fetchNotificationMembers, fetchWithAuth } = useApi<NotificationMemberItem[] | { data: NotificationMemberItem[] }>()
 const { data: notifications, execute: fetchNotifications } = useApi<NotificationOption[]>()
 const { data: templates, execute: fetchTemplates } = useApi<NotificationTemplateOption[]>()
 const { data: members, execute: fetchMembers } = useApi<MemberOption[]>()
 const { data: locations, execute: fetchLocations } = useApi<LocationOption[]>()
-const { data: payments, execute: fetchPayments } = useApi<any[]>()
+const { data: payments, execute: fetchPayments } = useApi<FeePayment[] | { data: FeePayment[] }>()
 
 const searchQuery = ref('')
 const selectedNotificationFilter = ref<string>('')
@@ -186,7 +187,7 @@ const getNotificationTitle = (nId: number | string) => {
   return found ? found.name : `Broadcast #${nId}`
 }
 
-const getFullMember = (item: any) => {
+const getFullMember = (item: NotificationMemberItem): MemberOption | NotificationMemberItem['member'] | undefined => {
   if (members.value) {
     const found = members.value.find(m => Number(m.id) === Number(item.member_id))
     if (found) return found
@@ -217,7 +218,7 @@ const currentYear = new Date().getFullYear()
 const paidMemberIds = computed(() => {
   const ids = new Set<number>()
   const list = Array.isArray(payments.value) ? payments.value : (payments.value?.data || [])
-  list.forEach((p: any) => {
+  list.forEach((p: FeePayment) => {
     if ((p.date || p.created_at || '').startsWith(String(currentYear))) {
       ids.add(Number(p.member_id))
     }
@@ -225,15 +226,15 @@ const paidMemberIds = computed(() => {
   return ids
 })
 
-const isMemberOutstanding = (m?: MemberOption | any) => {
+const isMemberOutstanding = (m?: MemberOption | Partial<Member>) => {
   if (!m) return false
   return (m.member_status || 'active') === 'active' && m.fee_exemption !== 'yes' && !paidMemberIds.value.has(Number(m.id))
 }
 
-const checkReachability = (member: any, mode: string) => {
-  if (mode === 'all') return true
-  const phone = (member?.phone || '').trim().replace(/\D/g, '')
-  const email = (member?.email || '').trim().toLowerCase()
+const checkReachability = (member: MemberOption | Partial<Member> | null | undefined, mode: string) => {
+  if (!member || mode === 'all') return true
+  const phone = (member.phone || '').trim().replace(/\D/g, '')
+  const email = (member.email || '').trim().toLowerCase()
   const hasPhone = phone.length >= 9
   const hasEmail = email.includes('@') && email.includes('.')
 
@@ -244,11 +245,11 @@ const checkReachability = (member: any, mode: string) => {
   return true
 }
 
-const checkPaymentStatus = (member: any, mode: string) => {
-  if (mode === 'all') return true
+const checkPaymentStatus = (member: MemberOption | Partial<Member> | null | undefined, mode: string) => {
+  if (!member || mode === 'all') return true
   if (mode === 'outstanding') return isMemberOutstanding(member)
-  if (mode === 'paid') return paidMemberIds.value.has(Number(member?.id))
-  if (mode === 'exempted') return member?.fee_exemption === 'yes'
+  if (mode === 'paid') return paidMemberIds.value.has(Number(member.id))
+  if (mode === 'exempted') return member.fee_exemption === 'yes'
   return true
 }
 
@@ -582,7 +583,7 @@ const handleSaveBatch = async (alsoBroadcast = false) => {
 
     // 3. If requested, trigger broadcast dispatch (Step 3: POST /api/notifications/{id}/broadcast)
     if (alsoBroadcast) {
-      const res: any = await fetchWithAuth(`/api/notifications/${notificationId.value}/broadcast`, {
+      const res = await fetchWithAuth<{ data?: { sent?: number; failed?: number } }>(`/api/notifications/${notificationId.value}/broadcast`, {
         method: 'POST',
         body: {
           channel: broadcastChannel.value
@@ -604,9 +605,8 @@ const handleSaveBatch = async (alsoBroadcast = false) => {
 
     closeModal()
     await loadData()
-  } catch (err: any) {
-    const serverErrors = err?.data?.errors ? Object.values(err.data.errors).flat().join(', ') : null
-    modalError.value = serverErrors || err?.data?.message || err?.message || 'Failed to complete broadcast operation'
+  } catch (err: unknown) {
+    modalError.value = extractErrorMessage(err, 'Failed to complete broadcast operation')
     push.error(modalError.value)
   } finally {
     isSubmitting.value = false
@@ -639,7 +639,7 @@ const executeDirectDispatch = async () => {
   if (!directDispatchNotifId.value) return
   isBroadcasting.value = true
   try {
-    const res: any = await fetchWithAuth(`/api/notifications/${directDispatchNotifId.value}/broadcast`, {
+    const res = await fetchWithAuth<{ data?: { sent?: number; failed?: number } }>(`/api/notifications/${directDispatchNotifId.value}/broadcast`, {
       method: 'POST',
       body: {
         channel: directDispatchChannel.value
@@ -658,8 +658,8 @@ const executeDirectDispatch = async () => {
     isSummaryModalOpen.value = true
     push.success(`Broadcast "${notifName}" dispatched via ${directDispatchChannel.value.toUpperCase()}!`)
     await loadData()
-  } catch (err: any) {
-    const msg = err?.data?.message || err?.message || 'Failed to dispatch broadcast'
+  } catch (err: unknown) {
+    const msg = extractErrorMessage(err, 'Failed to dispatch broadcast')
     push.error(msg)
   } finally {
     isBroadcasting.value = false

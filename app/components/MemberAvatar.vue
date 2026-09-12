@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import type { Member } from '~/types'
 
 const props = defineProps<{
-  member: any
+  member?: Partial<Member> | null
 }>()
 
 const config = useRuntimeConfig()
@@ -13,9 +14,9 @@ const backendBase = computed(() => {
 
 const photoError = ref(false)
 
-const getMemberPhotoPath = (m?: any): string => {
+const getMemberPhotoPath = (m?: Partial<Member> | null): string => {
   if (!m) return ''
-  return m.photo || m.picture || m.photo_url || m.avatar || m.image || ''
+  return m.photo || m.picture || m.photo_url || m.avatar || ''
 }
 
 const getMemberPhotoUrl = (pic?: string) => {

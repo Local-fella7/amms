@@ -396,7 +396,7 @@ const closeModal = () => {
   isModalOpen.value = false
 }
 
-const formatDateToYMD = (val: any) => {
+const formatDateToYMD = (val: string | Date | null | undefined): string => {
   if (!val) return new Date().toISOString().substring(0, 10)
   if (val instanceof Date) {
     const yyyy = val.getFullYear()
@@ -472,7 +472,7 @@ const handleSave = async () => {
 
       push.success(`Member "${firstName.value} ${lastName.value}" updated successfully!`)
     } else {
-      let requestBody: any = payload
+      let requestBody: Record<string, unknown> | FormData = payload
 
       if (selectedPhotoFile.value) {
         const formData = new FormData()
@@ -509,10 +509,9 @@ const handleSave = async () => {
     
     closeModal()
     await loadData()
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Save member error:', err)
-    const serverErrors = err?.data?.errors ? Object.values(err.data.errors).flat().join(', ') : null
-    modalError.value = serverErrors || err?.data?.message || err?.message || 'Failed to save member details'
+    modalError.value = extractErrorMessage(err, 'Failed to save member details')
     push.error(modalError.value)
   } finally {
     isSubmitting.value = false

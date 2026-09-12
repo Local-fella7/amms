@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
+import type { FeePayment, NotificationMember } from '~/types'
 
 const emit = defineEmits<{
   (e: 'close'): void
@@ -39,13 +40,13 @@ interface LocationOption {
   name: string
 }
 
-const { fetchWithAuth } = useApi<any>()
+const { fetchWithAuth } = useApi<unknown>()
 const { data: notifications, execute: fetchNotifications } = useApi<NotificationOption[]>()
 const { data: templates, execute: fetchTemplates } = useApi<NotificationTemplateOption[]>()
 const { data: members, execute: fetchMembers } = useApi<MemberOption[]>()
 const { data: locations, execute: fetchLocations } = useApi<LocationOption[]>()
-const { data: payments, execute: fetchPayments } = useApi<any[]>()
-const { data: notificationMembersResponse, execute: fetchNotificationMembers } = useApi<any>()
+const { data: payments, execute: fetchPayments } = useApi<FeePayment[] | { data: FeePayment[] }>()
+const { data: notificationMembersResponse, execute: fetchNotificationMembers } = useApi<NotificationMember[] | { data: NotificationMember[] }>()
 
 const isSubmitting = ref(false)
 const isBroadcasting = ref(false)
@@ -123,7 +124,7 @@ const currentYear = new Date().getFullYear()
 const paidMemberIds = computed(() => {
   const ids = new Set<number>()
   const list = Array.isArray(payments.value) ? payments.value : (payments.value?.data || [])
-  list.forEach((p: any) => {
+  list.forEach((p: FeePayment) => {
     if ((p.date || p.created_at || '').startsWith(String(currentYear))) {
       ids.add(Number(p.member_id))
     }
@@ -283,7 +284,7 @@ const handleSaveBatch = async (alsoBroadcast = false) => {
 
     // 3. If requested, trigger broadcast dispatch
     if (alsoBroadcast) {
-      const res: any = await fetchWithAuth(`/api/notifications/${notificationId.value}/broadcast`, {
+      const res = await fetchWithAuth<{ data?: { sent?: number; failed?: number } }>(`/api/notifications/${notificationId.value}/broadcast`, {
         method: 'POST',
         body: {
           channel: broadcastChannel.value
@@ -298,9 +299,8 @@ const handleSaveBatch = async (alsoBroadcast = false) => {
 
     emit('saved')
     emit('close')
-  } catch (err: any) {
-    const serverErrors = err?.data?.errors ? Object.values(err.data.errors).flat().join(', ') : null
-    modalError.value = serverErrors || err?.data?.message || err?.message || 'Failed to complete broadcast operation'
+  } catch (err: unknown) {
+    modalError.value = extractErrorMessage(err, 'Failed to complete broadcast operation')
     push.error(modalError.value)
   } finally {
     isSubmitting.value = false

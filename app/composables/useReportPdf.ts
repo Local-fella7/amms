@@ -14,7 +14,7 @@ export function useReportPdf() {
       const blob = await $fetch<Blob>(url, {
         method: 'GET',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
-        responseType: 'blob' as any
+        responseType: 'blob' as const
       })
       
       const blobUrl = window.URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }))
@@ -26,8 +26,8 @@ export function useReportPdf() {
       document.body.removeChild(link)
       setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000)
       return true
-    } catch (err: any) {
-      const msg = err?.data?.message || err?.message || 'Failed to download PDF report'
+    } catch (err: unknown) {
+      const msg = extractErrorMessage(err, 'Failed to download PDF report')
       reportError.value = msg
       console.error('PDF download error:', err)
       throw err
@@ -44,11 +44,11 @@ export function useReportPdf() {
       const blob = await $fetch<Blob>(url, {
         method: 'GET',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
-        responseType: 'blob' as any
+        responseType: 'blob' as const
       })
       return window.URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }))
-    } catch (err: any) {
-      const msg = err?.data?.message || err?.message || 'Failed to preview PDF report'
+    } catch (err: unknown) {
+      const msg = extractErrorMessage(err, 'Failed to preview PDF report')
       reportError.value = msg
       console.error('PDF preview error:', err)
       throw err
@@ -67,14 +67,14 @@ export function useReportPdf() {
       const blob = await $fetch<Blob>(cleanUrl, {
         method: 'GET',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
-        responseType: 'blob' as any
+        responseType: 'blob' as const
       })
       
       const blobUrl = window.URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }))
       window.open(blobUrl, '_blank')
       return true
-    } catch (err: any) {
-      const msg = err?.data?.message || err?.message || 'Failed to open PDF report'
+    } catch (err: unknown) {
+      const msg = extractErrorMessage(err, 'Failed to open PDF report')
       reportError.value = msg
       console.error('PDF open error:', err)
       throw err

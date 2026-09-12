@@ -192,7 +192,7 @@ const rawPaymentsList = computed<FeePayment[]>(() => {
   return []
 })
 
-const getFullMember = (item: any) => {
+const getFullMember = (item: FeePayment) => {
   if (members.value) {
     const found = members.value.find(m => Number(m.id) === Number(item.member_id))
     if (found) return found
@@ -238,7 +238,7 @@ const getMemberExemption = (mId: number | string) => {
   return found?.fee_exemption || 'no'
 }
 
-const getHistoricalRunningBalance = (p: any) => {
+const getHistoricalRunningBalance = (p: FeePayment) => {
   if (p.member?.fee_exemption === 'yes' || getMemberExemption(p.member_id) === 'yes') {
     return 0
   }
@@ -275,7 +275,7 @@ const getHistoricalRunningBalance = (p: any) => {
   return Math.max(0, feeAmt - cumulativePaid)
 }
 
-const getPaymentBalance = (p: any) => {
+const getPaymentBalance = (p: FeePayment) => {
   return getHistoricalRunningBalance(p)
 }
 
@@ -353,7 +353,7 @@ const closeModal = () => {
   isModalOpen.value = false
 }
 
-const formatDateToYMD = (val: any) => {
+const formatDateToYMD = (val: string | Date | null | undefined): string => {
   if (!val) return new Date().toISOString().substring(0, 10)
   if (val instanceof Date) {
     const yyyy = val.getFullYear()
@@ -401,10 +401,9 @@ const handleSave = async () => {
     
     closeModal()
     await loadData()
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Save payment error:', err)
-    const serverErrors = err?.data?.errors ? Object.values(err.data.errors).flat().join(', ') : null
-    modalError.value = serverErrors || err?.data?.message || err?.message || 'Failed to save fee payment'
+    modalError.value = extractErrorMessage(err, 'Failed to save fee payment')
     push.error(modalError.value)
   } finally {
     isSubmitting.value = false

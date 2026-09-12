@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { z } from 'zod'
+import type { FeePayment } from '~/types'
 
 const emit = defineEmits<{
   (e: 'close'): void
@@ -91,8 +92,8 @@ const requiredAmount = computed(() => Number(selectedFeeSchedule.value?.amount |
 const memberPriorPaymentsForFee = computed(() => {
   if (!memberId.value || !feeId.value) return 0
   return rawPaymentsList.value
-    .filter((p: any) => Number(p.member_id) === Number(memberId.value) && Number(p.fee_id) === Number(feeId.value))
-    .reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0)
+    .filter((p: FeePayment) => Number(p.member_id) === Number(memberId.value) && Number(p.fee_id) === Number(feeId.value))
+    .reduce((sum: number, p: FeePayment) => sum + (Number(p.amount) || 0), 0)
 })
 
 const remainingSuggestedAmount = computed(() => {
@@ -124,7 +125,7 @@ watch([feeId, memberId], () => {
 
 const getFeeYear = (f: FeeOption) => f.year || f.fee_year || '—'
 const formatCurrency = (val?: number) => `TZS ${Number(val || 0).toLocaleString('en-US')}`
-const formatDateToYMD = (val: any) => {
+const formatDateToYMD = (val: string | Date | null | undefined): string => {
   if (!val) return new Date().toISOString().substring(0, 10)
   if (val instanceof Date) {
     return `${val.getFullYear()}-${String(val.getMonth()+1).padStart(2,'0')}-${String(val.getDate()).padStart(2,'0')}`
@@ -134,10 +135,10 @@ const formatDateToYMD = (val: any) => {
 
 const loadOptions = async () => {
   await Promise.all([
-    fetchPayments((api: any) => api('/api/fee-payments')).catch(() => null),
-    fetchMembers((api: any) => api('/api/members')).catch(() => null),
-    fetchFees((api: any) => api('/api/fees')).catch(() => null),
-    fetchPaymentModes((api: any) => api('/api/payment-modes')).catch(() => null),
+    fetchPayments((api) => api('/api/fee-payments')).catch(() => null),
+    fetchMembers((api) => api('/api/members')).catch(() => null),
+    fetchFees((api) => api('/api/fees')).catch(() => null),
+    fetchPaymentModes((api) => api('/api/payment-modes')).catch(() => null),
   ])
   // Set defaults
   if (members.value?.length) {
@@ -178,9 +179,8 @@ const handleSave = async () => {
     push.success('Fee payment transaction recorded successfully!')
     emit('saved')
     emit('close')
-  } catch (err: any) {
-    const serverErrors = err?.data?.errors ? Object.values(err.data.errors).flat().join(', ') : null
-    modalError.value = serverErrors || err?.data?.message || err?.message || 'Failed to save fee payment'
+  } catch (err: unknown) {
+    modalError.value = extractErrorMessage(err, 'Failed to save fee payment')
     push.error(modalError.value)
   } finally {
     isSubmitting.value = false

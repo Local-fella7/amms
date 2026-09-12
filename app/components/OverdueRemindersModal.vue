@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import type { Member, Location } from '~/types'
 
 const props = defineProps<{
-  members: any[]
-  locations: any[]
+  members: Member[]
+  locations: Location[]
 }>()
 
 const emit = defineEmits<{
@@ -11,7 +12,7 @@ const emit = defineEmits<{
   (e: 'dispatched'): void
 }>()
 
-const { fetchWithAuth } = useApi<any>()
+const { fetchWithAuth } = useApi<unknown>()
 
 const sendingReminderId = ref<number | null>(null)
 const isBroadcastingAll = ref(false)
@@ -35,7 +36,7 @@ const selectedMemberIds = ref<number[]>([])
 const currentPage = ref(1)
 const itemsPerPage = ref(8)
 
-const getLocationName = (id: any) => props.locations.find((l: any) => Number(l.id) === Number(id))?.name ?? '—'
+const getLocationName = (id?: number | string) => props.locations.find((l: Location) => Number(l.id) === Number(id))?.name ?? '—'
 
 const filteredMembers = computed(() => {
   return props.members.filter(m => {
@@ -103,14 +104,14 @@ const previewMessage = (name = 'Member') => {
 }
 
 // Send reminder to a single member
-const handleRemindSingle = async (m: any) => {
+const handleRemindSingle = async (m: Member) => {
   sendingReminderId.value = m.id
   modalError.value = ''
   try {
     const personalizedContent = reminderMessage.value.replace(/\{\{first_name\}\}/g, m.first_name || 'Member')
     
     // 1. Create notification record
-    const notifRes: any = await fetchWithAuth('/api/notifications', {
+    const notifRes = await fetchWithAuth<{ data?: { id?: number }; id?: number }>('/api/notifications', {
       method: 'POST',
       body: {
         name: `Fee Reminder — ${m.first_name} ${m.last_name} (${currentYear})`,
@@ -140,8 +141,8 @@ const handleRemindSingle = async (m: any) => {
 
     push.success(`Reminder sent to ${m.first_name} ${m.last_name} via ${selectedChannel.value.toUpperCase()}!`)
     emit('dispatched')
-  } catch (err: any) {
-    const msg = err?.data?.message || err?.message || 'Failed to send reminder'
+  } catch (err: unknown) {
+    const msg = extractErrorMessage(err, 'Failed to send reminder')
     modalError.value = msg
     push.error(msg)
   } finally {
@@ -158,7 +159,7 @@ const handleDispatchBatch = async () => {
 
   try {
     // 1. Create broadcast notification campaign
-    const campaignRes: any = await fetchWithAuth('/api/notifications', {
+    const campaignRes = await fetchWithAuth<{ data?: { id?: number }; id?: number }>('/api/notifications', {
       method: 'POST',
       body: {
         name: `Overdue Fee Reminder — ${currentYear} (${targets.length} Members)`,
@@ -183,19 +184,19 @@ const handleDispatchBatch = async () => {
     }
 
     // 3. Dispatch broadcast via selected channel
-    const broadcastRes: any = await fetchWithAuth(`/api/notifications/${campaignId}/broadcast`, {
+    const broadcastRes = await fetchWithAuth<{ data?: { sent?: number; failed?: number } }>(`/api/notifications/${campaignId}/broadcast`, {
       method: 'POST',
       body: {
         channel: selectedChannel.value
       }
-    }).catch(() => ({}))
+    }).catch(() => ({} as { data?: { sent?: number; failed?: number } }))
 
     const sentCount = broadcastRes?.data?.sent ?? linkedCount
     push.success(`Reminders dispatched to ${sentCount} members via ${selectedChannel.value.toUpperCase()}!`)
     emit('dispatched')
     emit('close')
-  } catch (err: any) {
-    const msg = err?.data?.message || err?.message || 'Failed to dispatch reminders'
+  } catch (err: unknown) {
+    const msg = extractErrorMessage(err, 'Failed to dispatch reminders')
     modalError.value = msg
     push.error(msg)
   } finally {
