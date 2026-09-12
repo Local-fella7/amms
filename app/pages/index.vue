@@ -500,6 +500,7 @@ const allOverdueMembers = computed(() =>
       :members="allOverdueMembers"
       :locations="locationList"
       @close="isOverdueModalOpen = false"
+      @dispatched="loadDashboard"
     />
   </div>
 </template>
