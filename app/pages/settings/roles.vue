@@ -627,70 +627,59 @@ onMounted(() => {
       style="z-index: 1065;"
       @click.self="closePermsDrawer"
     >
-      <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
-        <div class="modal-content amms-surface border-0 shadow-lg rounded-4 overflow-hidden" style="max-height: 90vh;">
+      <div class="modal-dialog modal-dialog-centered modal-xl" style="max-width: 1240px; height: 90vh;">
+        <div class="modal-content amms-surface border-0 shadow-lg rounded-4 overflow-hidden d-flex flex-column h-100">
 
-          <!-- Executive Modal Header -->
-          <div class="modal-header border-bottom px-4 py-3 bg-body-tertiary flex-column align-items-stretch flex-shrink-0">
-            <div class="d-flex align-items-center justify-content-between mb-3">
-              <div class="d-flex align-items-center gap-3">
-                <div class="role-icon-badge rounded-3 d-flex align-items-center justify-content-center flex-shrink-0 shadow-2xs" style="width: 44px; height: 44px; background-color: var(--amms-primary); color: #FFFFFF;">
-                  <i class="bi bi-shield-lock-fill fs-4"></i>
-                </div>
-                <div>
-                  <div class="d-flex align-items-center gap-2 mb-1">
-                    <span class="badge rounded-pill text-uppercase px-2.5 py-1 text-xs fw-bold tracking-wider shadow-2xs" style="background-color: var(--amms-primary); color: #fff;">
-                      {{ selectedRoleForPerms?.name }}
-                    </span>
-                    <span class="text-xs text-muted font-monospace">ID #{{ selectedRoleForPerms?.id }}</span>
-                  </div>
-                  <h4 class="fw-bold mb-0 text-primary fs-5">
+          <!-- Executive Modal Header (Compact) -->
+          <div class="modal-header border-bottom px-4 py-2.5 bg-body-tertiary flex-shrink-0 d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center gap-3">
+              <div class="role-icon-badge rounded-3 d-flex align-items-center justify-content-center flex-shrink-0 shadow-2xs" style="width: 38px; height: 38px; background-color: var(--amms-primary); color: #FFFFFF;">
+                <i class="bi bi-shield-lock-fill fs-5"></i>
+              </div>
+              <div>
+                <div class="d-flex align-items-center gap-2">
+                  <h5 class="fw-bold mb-0 text-primary text-sm">
                     Role Permissions &mdash; {{ selectedRoleForPerms?.name }}
-                  </h4>
+                  </h5>
+                  <span class="badge rounded-pill text-uppercase px-2 py-0.5 text-2xs fw-bold tracking-wider" style="background-color: var(--amms-primary); color: #fff;">
+                    {{ selectedRoleForPerms?.name }}
+                  </span>
+                  <span class="text-2xs text-muted font-monospace">ID #{{ selectedRoleForPerms?.id }}</span>
+                </div>
+                <div class="d-flex align-items-center gap-2.5 mt-0.5">
+                  <span class="text-xs text-secondary-amms">
+                    Coverage: <strong class="text-primary">{{ grantedCount }}</strong> of {{ totalFeaturesCount }} granted ({{ grantedPercentage }}%)
+                  </span>
+                  <div class="progress-bar-track flex-grow-0" style="width: 130px; height: 6px;">
+                    <div class="progress-bar-fill" :style="{ width: `${grantedPercentage}%` }"></div>
+                  </div>
                 </div>
               </div>
-
-              <button 
-                type="button" 
-                class="btn-close" 
-                @click="closePermsDrawer" 
-                aria-label="Close"
-              ></button>
             </div>
 
-            <!-- Coverage Progress Bar & Metric -->
-            <div class="coverage-bar-container bg-body rounded-3 p-3 border shadow-2xs">
-              <div class="d-flex align-items-center justify-content-between mb-2">
-                <span class="text-xs fw-semibold text-body d-flex align-items-center gap-2">
-                  <i class="bi bi-shield-check text-primary fs-6"></i>
-                  <span>System Capability Coverage:</span> 
-                  <strong class="text-primary">{{ grantedCount }}</strong> of {{ totalFeaturesCount }} Granted
-                </span>
-                <span class="badge rounded-pill fw-bold text-xs px-2.5 py-1" :class="grantedPercentage > 0 ? 'bg-primary text-white' : 'bg-body-secondary text-muted'">
-                  {{ grantedPercentage }}% Active
-                </span>
-              </div>
-              <div class="progress-bar-track" style="height: 7px;">
-                <div class="progress-bar-fill" :style="{ width: `${grantedPercentage}%` }"></div>
-              </div>
-            </div>
+            <button 
+              type="button" 
+              class="btn-close" 
+              @click="closePermsDrawer" 
+              aria-label="Close"
+            ></button>
           </div>
 
           <!-- Modal Body: Two-Sided Master-Detail Split Layout -->
-          <div class="modal-body p-0 d-flex flex-row overflow-hidden" style="height: 70vh; min-height: 580px;">
+          <div class="modal-body p-0 d-flex flex-row flex-grow-1 overflow-hidden" style="min-height: 0;">
             
             <!-- Left Side: Modules & Categories Sidebar -->
-            <div class="category-sidebar d-flex flex-column border-end bg-body-tertiary flex-shrink-0" style="width: 330px;">
+            <div class="category-sidebar d-flex flex-column border-end bg-body-tertiary flex-shrink-0" style="width: 260px;">
               <!-- Search Box -->
-              <div class="p-3 border-bottom bg-body">
+              <div class="px-3 py-3 border-bottom bg-body">
                 <div class="input-group input-group-sm rounded-pill border overflow-hidden bg-body shadow-2xs">
                   <span class="input-group-text bg-transparent border-0 text-muted ps-3">
-                    <i class="bi bi-search"></i>
+                    <i class="bi bi-search text-xs"></i>
                   </span>
                   <input 
                     v-model="permsSearchQuery" 
                     type="search" 
-                    class="form-control border-0 bg-transparent ps-1 text-xs shadow-none py-1.5" 
+                    class="form-control border-0 bg-transparent ps-1 pe-2 text-xs shadow-none py-2" 
                     placeholder="Filter capabilities..." 
                   />
                   <button 
@@ -708,28 +697,28 @@ onMounted(() => {
                 <!-- All Categories Option -->
                 <button
                   type="button"
-                  class="category-nav-item w-100 text-start border-0 rounded-3 px-3.5 py-3 mb-2 d-flex align-items-center justify-content-between transition-all"
+                  class="category-nav-item w-100 text-start border-0 rounded-2 px-3 py-2 mb-1 d-flex align-items-center justify-content-between transition-all"
                   :class="{ 'active-category': selectedGroupId === 'all' }"
                   @click="selectedGroupId = 'all'"
                 >
-                  <div class="d-flex align-items-center gap-3 overflow-hidden">
-                    <div class="category-icon-box" style="background-color: rgba(67, 118, 108, 0.12); color: #43766C;">
-                      <i class="bi bi-grid-fill fs-6"></i>
+                  <div class="d-flex align-items-center gap-2.5 overflow-hidden">
+                    <div class="category-icon-box" style="background-color: rgba(67, 118, 108, 0.12); color: #43766C; width: 28px; height: 28px;">
+                      <i class="bi bi-grid-fill text-xs"></i>
                     </div>
                     <div class="text-truncate">
-                      <div class="fw-bold text-xs mb-0.5">All Categories</div>
-                      <div class="text-xs opacity-75">{{ totalFeaturesCount }} capabilities</div>
+                      <div class="fw-bold text-xs mb-0">All Categories</div>
+                      <div class="text-2xs opacity-75">{{ totalFeaturesCount }} capabilities</div>
                     </div>
                   </div>
                   <span 
-                    class="badge rounded-pill font-monospace text-xs px-2.5 py-1" 
+                    class="badge rounded-pill font-monospace text-2xs px-2 py-0.5" 
                     :class="selectedGroupId === 'all' ? 'bg-white text-primary fw-bold' : 'bg-body border text-muted'"
                   >
                     {{ grantedCount }}/{{ totalFeaturesCount }}
                   </span>
                 </button>
 
-                <div class="px-2 my-2.5 text-uppercase text-xs fw-bold tracking-wider text-muted opacity-75" style="font-size: 0.68rem;">
+                <div class="px-2 my-1.5 text-uppercase text-2xs fw-bold tracking-wider text-muted opacity-75">
                   Feature Modules
                 </div>
 
@@ -738,21 +727,21 @@ onMounted(() => {
                   v-for="grp in filteredGroupedFeatures"
                   :key="grp.id"
                   type="button"
-                  class="category-nav-item w-100 text-start border-0 rounded-3 px-3.5 py-3 mb-2 d-flex align-items-center justify-content-between transition-all"
+                  class="category-nav-item w-100 text-start border-0 rounded-2 px-3 py-2 mb-1 d-flex align-items-center justify-content-between transition-all"
                   :class="{ 'active-category': selectedGroupId === grp.id }"
                   @click="selectedGroupId = grp.id"
                 >
-                  <div class="d-flex align-items-center gap-3 overflow-hidden pe-1">
-                    <div class="category-icon-box" :style="getGroupIconStyle(grp.name)">
-                      <i :class="`bi ${getGroupIcon(grp.name)} fs-6`"></i>
+                  <div class="d-flex align-items-center gap-2.5 overflow-hidden pe-1">
+                    <div class="category-icon-box" :style="getGroupIconStyle(grp.name)" style="width: 28px; height: 28px;">
+                      <i :class="`bi ${getGroupIcon(grp.name)} text-xs`"></i>
                     </div>
                     <div class="text-truncate">
-                      <div class="fw-bold text-xs text-truncate mb-0.5">{{ grp.name }}</div>
-                      <div class="text-xs opacity-75">{{ grp.features.length }} capabilities</div>
+                      <div class="fw-bold text-xs text-truncate mb-0">{{ grp.name }}</div>
+                      <div class="text-2xs opacity-75">{{ grp.features.length }} capabilities</div>
                     </div>
                   </div>
                   <span 
-                    class="badge rounded-pill font-monospace text-xs flex-shrink-0 px-2.5 py-1"
+                    class="badge rounded-pill font-monospace text-2xs flex-shrink-0 px-2 py-0.5"
                     :class="selectedGroupId === grp.id ? 'bg-white text-primary fw-bold' : (getGroupGrantedCount(grp) > 0 ? 'bg-primary-subtle text-primary fw-semibold' : 'bg-body border text-muted')"
                   >
                     {{ getGroupGrantedCount(grp) }}/{{ grp.features.length }}
@@ -761,17 +750,17 @@ onMounted(() => {
               </div>
 
               <!-- Quick Bulk Actions in Sidebar -->
-              <div class="p-3 border-top bg-body d-flex align-items-center gap-2.5">
+              <div class="p-2 border-top bg-body d-flex align-items-center gap-2">
                 <button 
                   type="button" 
-                  class="btn btn-sm btn-outline-primary rounded-pill flex-fill py-1.5 text-xs fw-semibold shadow-2xs d-flex align-items-center justify-content-center gap-1.5"
+                  class="btn btn-xs btn-outline-primary rounded-pill flex-fill py-1 text-xs fw-semibold d-flex align-items-center justify-content-center gap-1"
                   @click="selectAllFeatures"
                 >
                   <i class="bi bi-check2-all"></i> Grant All
                 </button>
                 <button 
                   type="button" 
-                  class="btn btn-sm btn-outline-secondary rounded-pill flex-fill py-1.5 text-xs fw-semibold d-flex align-items-center justify-content-center gap-1.5"
+                  class="btn btn-xs btn-outline-secondary rounded-pill flex-fill py-1 text-xs fw-semibold d-flex align-items-center justify-content-center gap-1"
                   @click="deselectAllFeatures"
                 >
                   <i class="bi bi-x-circle"></i> Clear All
@@ -779,12 +768,12 @@ onMounted(() => {
               </div>
             </div>
 
-            <!-- Right Side: Capabilities Detail Panel -->
-            <div class="capabilities-detail flex-grow-1 bg-body overflow-y-auto p-4 p-xl-5">
+            <!-- Right Side: Capabilities Detail Panel (Optimized High-Density) -->
+            <div class="capabilities-detail flex-grow-1 bg-body overflow-y-auto p-3 p-lg-4">
               
               <!-- Loading State -->
               <div v-if="isLoadingRolePerms" class="text-center py-5">
-                <div class="spinner-border text-primary" role="status" style="width: 2.5rem; height: 2.5rem;">
+                <div class="spinner-border text-primary" role="status" style="width: 2.2rem; height: 2.2rem;">
                   <span class="visually-hidden">Loading role permissions...</span>
                 </div>
                 <p class="text-xs fw-semibold text-primary mt-2.5 mb-0">Fetching role permissions matrix...</p>
@@ -799,21 +788,21 @@ onMounted(() => {
               </div>
 
               <!-- Active Categories & Capabilities -->
-              <div v-else class="d-flex flex-column gap-4">
+              <div v-else class="d-flex flex-column gap-3">
                 <div 
                   v-for="grp in activeGroupsToDisplay" 
                   :key="grp.id"
-                  class="category-detail-section bg-body rounded-4 border p-4 shadow-2xs mb-4"
+                  class="category-detail-section bg-body rounded-3 border p-3 shadow-2xs"
                 >
                   <!-- Section Header with Group Info & Master Switch -->
-                  <div class="d-flex align-items-center justify-content-between pb-3 mb-4 border-bottom">
-                    <div class="d-flex align-items-center gap-3">
-                      <div class="category-icon-box" :style="getGroupIconStyle(grp.name)" style="width: 40px; height: 40px;">
-                        <i :class="`bi ${getGroupIcon(grp.name)} fs-5`"></i>
+                  <div class="d-flex align-items-center justify-content-between pb-2 mb-3 border-bottom">
+                    <div class="d-flex align-items-center gap-2.5">
+                      <div class="category-icon-box" :style="getGroupIconStyle(grp.name)" style="width: 32px; height: 32px;">
+                        <i :class="`bi ${getGroupIcon(grp.name)} fs-6`"></i>
                       </div>
                       <div>
-                        <h5 class="fw-bold fs-6 mb-1 text-primary">{{ grp.name }}</h5>
-                        <span class="text-xs text-secondary-amms font-monospace">
+                        <h6 class="fw-bold mb-0 text-primary text-xs">{{ grp.name }}</h6>
+                        <span class="text-2xs text-secondary-amms font-monospace">
                           {{ getGroupGrantedCount(grp) }} of {{ grp.features.length }} capabilities granted
                         </span>
                       </div>
@@ -827,45 +816,35 @@ onMounted(() => {
                         :id="`group-switch-${grp.id}`"
                         :checked="isGroupAllSelected(grp)"
                         @change="toggleGroupSelection(grp)"
-                        style="width: 2.25rem; height: 1.25rem;"
+                        style="width: 2rem; height: 1.1rem;"
                       />
                       <label 
                         :for="`group-switch-${grp.id}`" 
-                        class="form-check-label text-xs fw-semibold text-secondary-amms cursor-pointer user-select-none"
+                        class="form-check-label text-2xs fw-semibold text-secondary-amms cursor-pointer user-select-none"
                       >
                         {{ isGroupAllSelected(grp) ? 'All Enabled' : (isGroupPartiallySelected(grp) ? 'Partial' : 'Enable All') }}
                       </label>
                     </div>
                   </div>
 
-                  <!-- Spacious 2-Column Capability Grid -->
-                  <div class="row gy-3 gx-3" style="row-gap: 14px;">
+                  <!-- Optimized 3-Column Capability Grid -->
+                  <div class="row g-2">
                     <div 
                       v-for="feat in grp.features" 
                       :key="feat.id"
-                      class="col-12 col-xl-6"
+                      class="col-12 col-md-6 col-xl-4"
                     >
                       <div 
-                        class="capability-tile px-3.5 py-3 rounded-3 border d-flex align-items-center justify-content-between cursor-pointer transition-all"
+                        class="capability-tile border d-flex align-items-center cursor-pointer transition-all"
                         :class="{ 'active-tile': isFeatureSelected(feat.id) }"
                         @click="toggleFeaturePerm(feat.id)"
-                        style="min-height: 64px;"
                       >
-                        <div class="d-flex align-items-center gap-3 overflow-hidden pe-2">
-                          <i 
-                            :class="isFeatureSelected(feat.id) ? 'bi bi-check-circle-fill text-primary fs-4' : 'bi bi-circle text-muted fs-4 opacity-50'"
-                          ></i>
-                          <div class="overflow-hidden">
-                            <span class="fw-medium text-sm text-body text-truncate d-block" :title="feat.name">
-                              {{ feat.name }}
-                            </span>
-                          </div>
-                        </div>
-                        <span 
-                          class="badge rounded-pill font-monospace text-xs flex-shrink-0 px-2.5 py-1"
-                          :class="isFeatureSelected(feat.id) ? 'bg-primary text-white' : 'bg-body-secondary text-muted border'"
-                        >
-                          #{{ feat.id }}
+                        <i 
+                          :class="isFeatureSelected(feat.id) ? 'bi bi-check-circle-fill text-primary' : 'bi bi-circle text-muted opacity-40'"
+                          class="fs-5 flex-shrink-0"
+                        ></i>
+                        <span class="fw-semibold text-xs text-body text-truncate" :title="feat.name">
+                          {{ feat.name }}
                         </span>
                       </div>
                     </div>
@@ -879,7 +858,7 @@ onMounted(() => {
           </div>
 
           <!-- Sticky Modal Footer -->
-          <div class="modal-footer border-top px-4 py-3 bg-body-tertiary d-flex align-items-center justify-content-between flex-shrink-0">
+          <div class="modal-footer border-top px-4 py-2.5 bg-body-tertiary d-flex align-items-center justify-content-between flex-shrink-0" style="z-index: 10;">
             <div class="text-xs text-secondary-amms">
               <i class="bi bi-info-circle text-primary me-1"></i>
               Changes take effect immediately upon saving.
@@ -888,7 +867,7 @@ onMounted(() => {
             <div class="d-flex align-items-center gap-2">
               <button 
                 type="button" 
-                class="btn btn-sm btn-outline-secondary rounded-pill px-3.5" 
+                class="btn btn-sm btn-outline-secondary rounded-pill px-3.5 fw-semibold" 
                 @click="closePermsDrawer"
                 :disabled="isSavingPerms"
               >
@@ -1025,6 +1004,10 @@ onMounted(() => {
 .capability-tile {
   background-color: var(--bs-body-bg);
   border: 1px solid rgba(0, 0, 0, 0.09) !important;
+  padding: 10px 16px !important;
+  gap: 12px;
+  border-radius: 8px;
+  min-height: 46px;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   user-select: none;
 }

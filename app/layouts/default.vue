@@ -1,25 +1,127 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, onBeforeUnmount, ref, computed, watch } from 'vue'
 import { useAuthStore } from '~/stores/useAuthStore'
 import type { Association } from '~/types'
 
 const route = useRoute()
 const config = useRuntimeConfig()
 const authStore = useAuthStore()
-const { data: associationData, execute: fetchAssociation } = useApi<Association | Association[] | { data: Association | Association[] }>()
+const { execute: fetchAssociation, fetchWithAuth } = useApi<Association | Association[] | { data: Association | Association[] }>()
+
 const isSidebarCollapsed = ref(false)
 const isMobileNavOpen = ref(false)
-const isSettingsOpen = ref(false)
 const isProfileMenuOpen = ref(false)
+const isSettingsModalOpen = ref(false)
 const currentTheme = ref('light')
 
 watch(() => route.fullPath, () => {
   isMobileNavOpen.value = false
+  isSearchDropdownOpen.value = false
 })
 
 const associationName = ref('')
 const logoPath = ref<string | null>(null)
 const logoLoadError = ref(false)
+
+// Global Search State
+const globalSearchQuery = ref('')
+const isSearchDropdownOpen = ref(false)
+const isSearching = ref(false)
+const matchedMembers = ref<any[]>([])
+const matchedPayments = ref<any[]>([])
+let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
+
+const performGlobalSearch = async () => {
+  const q = globalSearchQuery.value.trim().toLowerCase()
+  if (!q) {
+    matchedMembers.value = []
+    matchedPayments.value = []
+    isSearchDropdownOpen.value = false
+    return
+  }
+
+  isSearching.value = true
+  isSearchDropdownOpen.value = true
+
+  try {
+    const [membersRes, paymentsRes] = await Promise.allSettled([
+      fetchWithAuth<any>('/api/members'),
+      fetchWithAuth<any>('/api/fee-payments')
+    ])
+
+    const rawMembers: any[] = membersRes.status === 'fulfilled'
+      ? (Array.isArray(membersRes.value) ? membersRes.value : (membersRes.value?.data || []))
+      : []
+
+    const rawPayments: any[] = paymentsRes.status === 'fulfilled'
+      ? (Array.isArray(paymentsRes.value) ? paymentsRes.value : (paymentsRes.value?.data || []))
+      : []
+
+    matchedMembers.value = rawMembers.filter(m => {
+      const fullName = `${m.first_name || ''} ${m.last_name || ''}`.toLowerCase()
+      const phone = (m.phone || '').toLowerCase()
+      const email = (m.email || '').toLowerCase()
+      return fullName.includes(q) || phone.includes(q) || email.includes(q)
+    }).slice(0, 5)
+
+    matchedPayments.value = rawPayments.filter(p => {
+      const receipt = (p.receipt_number || '').toLowerCase()
+      const memberName = p.member ? `${p.member.first_name || ''} ${p.member.last_name || ''}`.toLowerCase() : ''
+      return receipt.includes(q) || memberName.includes(q)
+    }).slice(0, 5)
+  } catch (err) {
+    console.error('Global search fetch error:', err)
+  } finally {
+    isSearching.value = false
+  }
+}
+
+const onSearchInput = () => {
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
+  if (!globalSearchQuery.value.trim()) {
+    isSearchDropdownOpen.value = false
+    matchedMembers.value = []
+    matchedPayments.value = []
+    return
+  }
+  searchDebounceTimer = setTimeout(() => {
+    performGlobalSearch()
+  }, 220)
+}
+
+const handleSearchEnter = async () => {
+  if (!globalSearchQuery.value.trim()) return
+  const q = globalSearchQuery.value.trim()
+  isSearchDropdownOpen.value = false
+  await navigateTo({ path: '/members', query: { search: q } })
+}
+
+const selectMember = async (member: any) => {
+  isSearchDropdownOpen.value = false
+  const q = `${member.first_name || ''} ${member.last_name || ''}`.trim()
+  globalSearchQuery.value = q
+  await navigateTo({ path: '/members', query: { search: q } })
+}
+
+const selectPayment = async (payment: any) => {
+  isSearchDropdownOpen.value = false
+  const q = payment.receipt_number || (payment.member ? `${payment.member.first_name || ''} ${payment.member.last_name || ''}`.trim() : '') || String(payment.id)
+  globalSearchQuery.value = q
+  await navigateTo({ path: '/fee-payments', query: { search: q } })
+}
+
+const onSearchFocus = () => {
+  if (globalSearchQuery.value.trim()) {
+    isSearchDropdownOpen.value = true
+  }
+}
+
+const clearSearch = () => {
+  globalSearchQuery.value = ''
+  isSearchDropdownOpen.value = false
+  matchedMembers.value = []
+  matchedPayments.value = []
+}
 
 const backendBase = computed(() => {
   const api = (config.public?.apiBase as string) || ''
@@ -36,10 +138,6 @@ const logoUrl = computed(() => {
 
 const toggleSidebar = () => {
   isSidebarCollapsed.value = !isSidebarCollapsed.value
-}
-
-const toggleSettings = () => {
-  isSettingsOpen.value = !isSettingsOpen.value
 }
 
 const toggleProfileMenu = () => {
@@ -69,15 +167,31 @@ const loadAssociation = async () => {
   }
 }
 
+const handleDocumentClick = (e: MouseEvent) => {
+  const target = e.target as HTMLElement | null
+  if (target && !target.closest('.header-search-container')) {
+    isSearchDropdownOpen.value = false
+  }
+  if (target && !target.closest('.dropdown')) {
+    isProfileMenuOpen.value = false
+  }
+}
+
 onMounted(() => {
   const savedTheme = import.meta.client ? localStorage.getItem('amms_theme') : null
   const theme = savedTheme || document.documentElement.getAttribute('data-bs-theme') || 'light'
   currentTheme.value = theme
   document.documentElement.setAttribute('data-bs-theme', theme)
-  if (route.path.startsWith('/settings')) {
-    isSettingsOpen.value = true
-  }
   loadAssociation()
+  if (import.meta.client) {
+    document.addEventListener('click', handleDocumentClick)
+  }
+})
+
+onBeforeUnmount(() => {
+  if (import.meta.client) {
+    document.removeEventListener('click', handleDocumentClick)
+  }
 })
 </script>
 
@@ -192,15 +306,9 @@ onMounted(() => {
             </NuxtLink>
           </li>
           <li class="nav-item">
-            <NuxtLink to="/notifications" class="nav-link d-flex align-items-center gap-3 px-3 py-2.5 rounded-3" active-class="active">
+            <NuxtLink to="/notification-members" class="nav-link d-flex align-items-center gap-3 px-3 py-2.5 rounded-3" active-class="active">
               <i class="bi bi-send-fill fs-5"></i>
               <span v-if="!isSidebarCollapsed" class="fw-medium text-sm">Broadcasts</span>
-            </NuxtLink>
-          </li>
-          <li class="nav-item">
-            <NuxtLink to="/notification-members" class="nav-link d-flex align-items-center gap-3 px-3 py-2.5 rounded-3" active-class="active">
-              <i class="bi bi-person-lines-fill fs-5"></i>
-              <span v-if="!isSidebarCollapsed" class="fw-medium text-sm">Broadcast Recipients</span>
             </NuxtLink>
           </li>
           <li class="nav-item">
@@ -208,70 +316,6 @@ onMounted(() => {
               <i class="bi bi-file-earmark-pdf-fill fs-5"></i>
               <span v-if="!isSidebarCollapsed" class="fw-medium text-sm">Reports Center</span>
             </NuxtLink>
-          </li>
-        </ul>
-
-        <!-- System Settings Accordion -->
-        <div class="nav-section-title text-uppercase text-xs fw-semibold px-2 mb-2 text-white-50" v-if="!isSidebarCollapsed">
-          Configuration
-        </div>
-
-        <ul class="nav nav-pills flex-column gap-1">
-          <li class="nav-item mb-2">
-            <div 
-              class="nav-link w-100 d-flex align-items-center justify-content-between px-3 py-2.5 rounded-3 cursor-pointer"
-              @click="toggleSettings"
-            >
-              <div class="d-flex align-items-center gap-3">
-                <i class="bi bi-gear-fill fs-5 me-1"></i>
-                <span v-if="!isSidebarCollapsed" class="fw-medium text-sm">Settings</span>
-              </div>
-              <i v-if="!isSidebarCollapsed" class="bi bi-chevron-down text-xs transition-transform" :class="{ 'rotate-180': isSettingsOpen }"></i>
-            </div>
-
-            <!-- Collapsable Submenu -->
-            <div v-if="isSettingsOpen && !isSidebarCollapsed" class="sub-menu-box ps-3 mt-1.5 d-flex flex-column gap-1.5 border-start border-white border-opacity-20 ms-3 py-1">
-              <NuxtLink to="/settings/users" class="nav-link d-flex align-items-center gap-3 px-3 py-2 rounded-2 text-xs" active-class="active">
-                <i class="bi bi-person-badge fs-6 text-white-50 flex-shrink-0"></i>
-                <span>System Users</span>
-              </NuxtLink>
-              <NuxtLink to="/settings/association" class="nav-link d-flex align-items-center gap-3 px-3 py-2 rounded-2 text-xs" active-class="active">
-                <i class="bi bi-building fs-6 text-white-50 flex-shrink-0"></i>
-                <span>Association Profile</span>
-              </NuxtLink>
-              <NuxtLink to="/settings/roles" class="nav-link d-flex align-items-center gap-3 px-3 py-2 rounded-2 text-xs" active-class="active">
-                <i class="bi bi-shield-lock fs-6 text-white-50 flex-shrink-0"></i>
-                <span>Roles & Permissions</span>
-              </NuxtLink>
-              <NuxtLink to="/settings/feature-groups" class="nav-link d-flex align-items-center gap-3 px-3 py-2 rounded-2 text-xs" active-class="active">
-                <i class="bi bi-folder fs-6 text-white-50 flex-shrink-0"></i>
-                <span>Feature Groups</span>
-              </NuxtLink>
-              <NuxtLink to="/settings/features" class="nav-link d-flex align-items-center gap-3 px-3 py-2 rounded-2 text-xs" active-class="active">
-                <i class="bi bi-key fs-6 text-white-50 flex-shrink-0"></i>
-                <span>System Features</span>
-              </NuxtLink>
-              <NuxtLink to="/settings/locations" class="nav-link d-flex align-items-center gap-3 px-3 py-2 rounded-2 text-xs" active-class="active">
-                <i class="bi bi-geo-alt fs-6 text-white-50 flex-shrink-0"></i>
-                <span>Locations & Regions</span>
-              </NuxtLink>
-              <NuxtLink to="/settings/age-groups" class="nav-link d-flex align-items-center gap-3 px-3 py-2 rounded-2 text-xs" active-class="active">
-                <i class="bi bi-people fs-6 text-white-50 flex-shrink-0"></i>
-                <span>Age Groups</span>
-              </NuxtLink>
-              <NuxtLink to="/settings/fees" class="nav-link d-flex align-items-center gap-3 px-3 py-2 rounded-2 text-xs" active-class="active">
-                <i class="bi bi-receipt fs-6 text-white-50 flex-shrink-0"></i>
-                <span>Fee Schedules</span>
-              </NuxtLink>
-              <NuxtLink to="/settings/payment-modes" class="nav-link d-flex align-items-center gap-3 px-3 py-2 rounded-2 text-xs" active-class="active">
-                <i class="bi bi-credit-card fs-6 text-white-50 flex-shrink-0"></i>
-                <span>Payment Modes</span>
-              </NuxtLink>
-              <NuxtLink to="/settings/notification-templates" class="nav-link d-flex align-items-center gap-3 px-3 py-2 rounded-2 text-xs" active-class="active">
-                <i class="bi bi-file-text fs-6 text-white-50 flex-shrink-0"></i>
-                <span>SMS / Email Templates</span>
-              </NuxtLink>
-            </div>
           </li>
         </ul>
       </div>
@@ -297,7 +341,7 @@ onMounted(() => {
               :title="isSidebarCollapsed ? 'Sign Out' : ''"
             >
               <i class="bi bi-box-arrow-right fs-5 flex-shrink-0"></i>
-              <span v-if="!isSidebarCollapsed" class="fw-medium text-sm">Log Out</span>
+              <span v-if="!isSidebarCollapsed" class="fw-medium text-sm">Sign Out</span>
             </button>
           </li>
         </ul>
@@ -327,17 +371,117 @@ onMounted(() => {
             <i class="bi bi-list fs-5"></i>
           </button>
 
-          <!-- Global Search Bar (Responsive: hides on narrow mobile <576px) -->
-          <div class="header-search-container d-none d-sm-block">
-            <div class="input-group input-group-sm rounded-pill border overflow-hidden">
+          <!-- Global Search Bar with Live Results Dropdown -->
+          <div class="header-search-container position-relative d-none d-sm-block">
+            <div class="input-group input-group-sm rounded-pill border overflow-hidden bg-body">
               <span class="input-group-text bg-transparent border-0 text-muted ps-3">
-                <i class="bi bi-search"></i>
+                <i class="bi" :class="isSearching ? 'bi-hourglass-split spin text-primary' : 'bi-search'"></i>
               </span>
               <input 
+                v-model="globalSearchQuery"
                 type="search" 
                 class="form-control border-0 bg-transparent ps-1 text-xs shadow-none" 
                 placeholder="Search members or receipts..."
+                @input="onSearchInput"
+                @focus="onSearchFocus"
+                @keydown.enter="handleSearchEnter"
+                @keydown.esc="isSearchDropdownOpen = false"
               />
+              <button 
+                v-if="globalSearchQuery" 
+                type="button" 
+                class="btn btn-sm btn-link text-muted border-0 pe-2.5 py-0 text-decoration-none"
+                @click="clearSearch"
+                title="Clear search"
+              >
+                <i class="bi bi-x-circle-fill text-xs"></i>
+              </button>
+            </div>
+
+            <!-- Live Search Dropdown Menu -->
+            <div 
+              v-if="isSearchDropdownOpen && globalSearchQuery.trim()" 
+              class="dropdown-menu show shadow-lg rounded-3 border p-0 mt-1.5 position-absolute start-0 w-100 overflow-hidden"
+              style="min-width: 320px; max-width: 420px; z-index: 1075;"
+            >
+              <!-- Loading spinner -->
+              <div v-if="isSearching" class="p-3 text-center text-muted text-xs">
+                <span class="spinner-border spinner-border-sm me-1.5 text-primary" role="status"></span>
+                Searching registry...
+              </div>
+
+              <template v-else>
+                <!-- Empty State -->
+                <div v-if="matchedMembers.length === 0 && matchedPayments.length === 0" class="p-3 text-center text-muted text-xs">
+                  No matching members or receipts found for "<strong>{{ globalSearchQuery }}</strong>"
+                </div>
+
+                <!-- Matched Members Section -->
+                <div v-if="matchedMembers.length > 0">
+                  <div class="px-3 py-1.5 bg-body-tertiary border-bottom d-flex align-items-center justify-content-between">
+                    <span class="text-2xs fw-bold text-uppercase text-secondary-amms font-monospace">Members ({{ matchedMembers.length }})</span>
+                    <small class="text-2xs text-muted">Click to view</small>
+                  </div>
+                  <ul class="list-unstyled mb-0 py-1">
+                    <li 
+                      v-for="m in matchedMembers" 
+                      :key="m.id" 
+                      class="dropdown-item px-3 py-2 cursor-pointer d-flex align-items-center justify-content-between"
+                      @click="selectMember(m)"
+                    >
+                      <div class="d-flex align-items-center gap-2 overflow-hidden">
+                        <div class="search-avatar rounded-circle d-flex align-items-center justify-content-center text-white fw-bold text-2xs flex-shrink-0" style="width: 26px; height: 26px; background-color: #43766C;">
+                          {{ m.first_name ? m.first_name[0] : 'M' }}
+                        </div>
+                        <div class="overflow-hidden">
+                          <p class="mb-0 text-xs fw-semibold text-body text-truncate">{{ m.first_name }} {{ m.last_name }}</p>
+                          <small class="text-2xs text-muted text-truncate d-block">{{ m.phone || m.email || 'No contact' }}</small>
+                        </div>
+                      </div>
+                      <i class="bi bi-arrow-right-short text-muted fs-5"></i>
+                    </li>
+                  </ul>
+                </div>
+
+                <!-- Matched Fee Payments Section -->
+                <div v-if="matchedPayments.length > 0" class="border-top">
+                  <div class="px-3 py-1.5 bg-body-tertiary border-bottom d-flex align-items-center justify-content-between">
+                    <span class="text-2xs fw-bold text-uppercase text-secondary-amms font-monospace">Fee Receipts ({{ matchedPayments.length }})</span>
+                    <small class="text-2xs text-muted">Click to view</small>
+                  </div>
+                  <ul class="list-unstyled mb-0 py-1">
+                    <li 
+                      v-for="p in matchedPayments" 
+                      :key="p.id" 
+                      class="dropdown-item px-3 py-2 cursor-pointer d-flex align-items-center justify-content-between"
+                      @click="selectPayment(p)"
+                    >
+                      <div class="overflow-hidden">
+                        <p class="mb-0 text-xs fw-semibold text-body font-monospace text-truncate">
+                          <i class="bi bi-receipt me-1 text-primary"></i>{{ p.receipt_number || ('PAY-' + p.id) }}
+                        </p>
+                        <small class="text-2xs text-muted d-block text-truncate">
+                          {{ p.member ? (p.member.first_name + ' ' + p.member.last_name) : 'Member payment' }}
+                        </small>
+                      </div>
+                      <span class="badge rounded-pill bg-light text-body border text-2xs fw-bold ms-2 flex-shrink-0">
+                        {{ Number(p.amount).toLocaleString() }}
+                      </span>
+                    </li>
+                  </ul>
+                </div>
+
+                <!-- Search Footer: Press Enter -->
+                <div class="px-3 py-1.5 bg-body-tertiary border-top text-center">
+                  <button 
+                    type="button" 
+                    class="btn btn-link btn-sm p-0 text-2xs text-decoration-none text-primary fw-semibold"
+                    @click="handleSearchEnter"
+                  >
+                    Press <kbd class="text-2xs">Enter</kbd> to see all member results &rarr;
+                  </button>
+                </div>
+              </template>
             </div>
           </div>
         </div>
@@ -353,6 +497,17 @@ onMounted(() => {
             :title="`Switch to ${currentTheme === 'light' ? 'Dark' : 'Light'} Mode`"
           >
             <i :class="currentTheme === 'light' ? 'bi bi-moon-stars' : 'bi bi-sun'"></i>
+          </button>
+
+          <!-- Settings Cog Icon Button -->
+          <button 
+            type="button" 
+            class="btn btn-sm btn-outline-secondary rounded-circle theme-btn d-flex align-items-center justify-content-center"
+            @click="isSettingsModalOpen = true"
+            title="System Settings"
+            aria-label="Open System Settings"
+          >
+            <i class="bi bi-gear-fill"></i>
           </button>
 
           <!-- Profile Dropdown -->
@@ -377,9 +532,13 @@ onMounted(() => {
                 <small class="text-muted d-block text-truncate font-monospace text-xs">{{ authStore.user?.email || 'admin@amms.local' }}</small>
               </li>
               <li>
-                <NuxtLink to="/settings/association" class="dropdown-item d-flex align-items-center gap-2 py-2 text-xs fw-medium" @click="isProfileMenuOpen = false">
+                <button 
+                  type="button"
+                  class="dropdown-item d-flex align-items-center gap-2 py-2 text-xs fw-medium border-0 bg-transparent w-100 text-start" 
+                  @click="isProfileMenuOpen = false; isSettingsModalOpen = true"
+                >
                   <i class="bi bi-gear text-primary"></i> System Settings
-                </NuxtLink>
+                </button>
               </li>
               <li><hr class="dropdown-divider my-1"></li>
               <li>
@@ -400,6 +559,8 @@ onMounted(() => {
 
     </div>
 
+    <!-- Settings Navigation Modal -->
+    <SettingsModal :show="isSettingsModalOpen" @close="isSettingsModalOpen = false" />
   </div>
 </template>
 
@@ -504,8 +665,21 @@ onMounted(() => {
   transform: rotate(180deg);
 }
 
+.text-2xs {
+  font-size: 0.7rem;
+}
+
 .text-xs {
   font-size: 0.775rem;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .text-sm {

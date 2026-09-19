@@ -66,6 +66,9 @@ const memberFilterSearch = ref('')
 const memberFilterLocation = ref<string>('')
 const audienceFilter = ref<'all' | 'active' | 'inactive' | 'deceased' | 'outstanding'>('all')
 
+// '__manual__' is the sentinel value used when "Write Manually" is selected in the dropdown
+const isManualMode = computed(() => notificationId.value === '__manual__')
+
 const availablePlaceholders = [
   { tag: '{{first_name}}', label: 'First Name' },
   { tag: '{{last_name}}', label: 'Last Name' },
@@ -85,12 +88,9 @@ const loadData = async () => {
       fetchNotificationMembers((api) => api('/api/notification-members')).catch(() => [])
     ])
 
-    if (notifications.value && notifications.value.length > 0) {
-      notificationId.value = notifications.value[0].id
-      if (notifications.value[0].content) {
-        messageContent.value = notifications.value[0].content.replace(/\{\{fee_year\}\}/g, String(new Date().getFullYear()))
-      }
-    }
+    notificationId.value = '__manual__'
+    messageContent.value = ''
+    selectedMemberIds.value = []
   } catch (err) {
     // handled
   }
@@ -108,6 +108,7 @@ const rawNotificationMembers = computed<NotificationMember[]>(() => {
 })
 
 const getNotificationTitle = (nId: number | string) => {
+  if (nId === '__manual__') return 'Write Manually'
   if (!notifications.value) return `Broadcast #${nId}`
   const found = notifications.value.find(n => Number(n.id) === Number(nId))
   return found ? found.name : `Broadcast #${nId}`
@@ -164,7 +165,7 @@ const availableFilteredMembers = computed(() => {
 
 // Members assigned to the currently selected broadcast
 const assignedMemberIdsForCurrentBroadcast = computed(() => {
-  if (!notificationId.value) return new Set<number>()
+  if (!notificationId.value || isManualMode.value) return new Set<number>()
   return new Set(
     rawNotificationMembers.value
       .filter(item => Number(item.notification_id) === Number(notificationId.value))
@@ -209,19 +210,23 @@ const previewSampleMessage = computed(() => {
 const smsCharCount = computed(() => messageContent.value.length)
 const smsSegmentCount = computed(() => Math.ceil(messageContent.value.length / 160) || 1)
 
-// Auto-fill message content when broadcast or template changes
-watch(notificationId, (newNotifId) => {
-  if (!newNotifId || !notifications.value) return
-  const found = notifications.value.find(n => Number(n.id) === Number(newNotifId))
-  if (found && found.content && !messageContent.value) {
-    messageContent.value = found.content.replace(/\{\{fee_year\}\}/g, String(new Date().getFullYear()))
+// React to campaign dropdown change
+watch(notificationId, (newId) => {
+  if (newId === '__manual__') {
+    // When selecting Write Manually, reset member selection and message content
+    selectedMemberIds.value = []
+    messageContent.value = ''
+    selectedTemplateId.value = ''
+    return
   }
-})
 
-watch(selectedTemplateId, (newTmplId) => {
-  if (!newTmplId || !templates.value) return
-  const found = templates.value.find(t => Number(t.id) === Number(newTmplId))
-  if (found && found.content) {
+  if (!newId || !notifications.value) return
+  const found = notifications.value.find(n => Number(n.id) === Number(newId))
+  if (!found) return
+
+  // Auto-fill template id & message content from the campaign
+  selectedTemplateId.value = found.notification_template_id ?? ''
+  if (found.content) {
     messageContent.value = found.content.replace(/\{\{fee_year\}\}/g, String(new Date().getFullYear()))
   }
 })
@@ -235,7 +240,7 @@ const handleSaveBatch = async (alsoBroadcast = false) => {
   modalError.value = ''
   
   if (!notificationId.value) {
-    modalError.value = 'Please select a broadcast campaign'
+    modalError.value = 'Please select a broadcast campaign or Write Manually'
     push.error(modalError.value)
     return
   }
@@ -246,35 +251,66 @@ const handleSaveBatch = async (alsoBroadcast = false) => {
     return
   }
 
+  if (!messageContent.value.trim()) {
+    modalError.value = 'Message content is required'
+    push.error(modalError.value)
+    return
+  }
+
   isSubmitting.value = true
   if (alsoBroadcast) isBroadcasting.value = true
 
   try {
-    // 1. If message content was edited or selected from template, update broadcast content
-    if (notificationId.value && messageContent.value.trim()) {
-      const currentNotif = notifications.value?.find(n => Number(n.id) === Number(notificationId.value))
+    let targetNotifId: number
+
+    // If "Write Manually", create a notification record on the fly
+    if (notificationId.value === '__manual__') {
       const sanitizedContent = messageContent.value.trim().replace(/\{\{fee_year\}\}/g, String(new Date().getFullYear()))
-      if (currentNotif && currentNotif.content !== sanitizedContent) {
-        await fetchWithAuth(`/api/notifications/${notificationId.value}`, {
-          method: 'PUT',
-          body: {
-            name: currentNotif.name ? currentNotif.name.replace(/\{\{fee_year\}\}/g, String(new Date().getFullYear())) : `Broadcast #${notificationId.value}`,
-            content: sanitizedContent,
-            notification_template_id: selectedTemplateId.value || currentNotif.notification_template_id
-          }
-        }).catch(() => {})
+      const defaultName = `Broadcast - ${new Date().toLocaleDateString('en-GB')}`
+      
+      const createRes = await fetchWithAuth<{ data?: { id: number }; id?: number }>('/api/notifications', {
+        method: 'POST',
+        body: {
+          name: defaultName,
+          content: sanitizedContent
+        }
+      })
+      const newId = createRes?.data?.id || createRes?.id
+      if (!newId) {
+        throw new Error('Failed to create manual broadcast')
+      }
+      targetNotifId = Number(newId)
+    } else {
+      targetNotifId = Number(notificationId.value)
+      // 1. If message content was edited from template, update broadcast content
+      if (messageContent.value.trim()) {
+        const currentNotif = notifications.value?.find(n => Number(n.id) === targetNotifId)
+        const sanitizedContent = messageContent.value.trim().replace(/\{\{fee_year\}\}/g, String(new Date().getFullYear()))
+        if (currentNotif && currentNotif.content !== sanitizedContent) {
+          await fetchWithAuth(`/api/notifications/${targetNotifId}`, {
+            method: 'PUT',
+            body: {
+              name: currentNotif.name ? currentNotif.name.replace(/\{\{fee_year\}\}/g, String(new Date().getFullYear())) : `Broadcast #${targetNotifId}`,
+              content: sanitizedContent,
+              notification_template_id: selectedTemplateId.value || currentNotif.notification_template_id
+            }
+          }).catch(() => {})
+        }
       }
     }
 
-    // 2. Link unassigned members
-    const toAssign = selectedMemberIds.value.filter(id => !assignedMemberIdsForCurrentBroadcast.value.has(id))
+    // 2. Link selected members
+    const toAssign = notificationId.value === '__manual__'
+      ? selectedMemberIds.value
+      : selectedMemberIds.value.filter(id => !assignedMemberIdsForCurrentBroadcast.value.has(id))
+      
     let successCount = 0
     if (toAssign.length > 0) {
       for (const mId of toAssign) {
         await fetchWithAuth('/api/notification-members', {
           method: 'POST',
           body: {
-            notification_id: Number(notificationId.value),
+            notification_id: targetNotifId,
             member_id: Number(mId)
           }
         })
@@ -284,15 +320,14 @@ const handleSaveBatch = async (alsoBroadcast = false) => {
 
     // 3. If requested, trigger broadcast dispatch
     if (alsoBroadcast) {
-      const res = await fetchWithAuth<{ data?: { sent?: number; failed?: number } }>(`/api/notifications/${notificationId.value}/broadcast`, {
+      const res = await fetchWithAuth<{ data?: { sent?: number; failed?: number } }>(`/api/notifications/${targetNotifId}/broadcast`, {
         method: 'POST',
         body: {
           channel: broadcastChannel.value
         }
       })
 
-      const sentCount = res?.data?.sent ?? (successCount > 0 ? successCount : selectedMemberIds.value.length)
-      push.success(`Broadcast successfully dispatched via ${broadcastChannel.value.toUpperCase()}! ${sentCount} delivered.`)
+      push.success(`Broadcast successfully dispatched via ${broadcastChannel.value.toUpperCase()}!`)
     } else {
       push.success(`Successfully assigned ${successCount} recipient(s) to the broadcast campaign!`)
     }
@@ -584,61 +619,46 @@ const handleSaveBatch = async (alsoBroadcast = false) => {
                   </span>
                 </div>
 
-                <!-- Campaign & Template Selector Row -->
-                <div class="row g-2 mb-3">
-                  <div class="col-md-6">
-                    <label for="scNotifId" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase mb-1">
-                      Target Campaign *
-                    </label>
-                    <div class="input-group input-group-sm">
-                      <span class="input-group-text bg-transparent border-end-0 text-muted">
-                        <i class="bi bi-megaphone"></i>
-                      </span>
-                      <select
-                        id="scNotifId"
-                        v-model="notificationId"
-                        class="form-select border-start-0 ps-1 py-2 text-xs"
-                        required
-                      >
-                        <option v-for="n in notifications" :key="n.id" :value="n.id">
-                          {{ n.name }}
-                        </option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div class="col-md-6">
-                    <div class="d-flex align-items-center justify-content-between mb-1">
-                      <label for="scTmplId" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase mb-0">
-                        Load Template
-                      </label>
-                      <small class="text-muted text-2xs">Auto-populates</small>
-                    </div>
-                    <div class="input-group input-group-sm">
-                      <span class="input-group-text bg-transparent border-end-0 text-muted">
-                        <i class="bi bi-file-earmark-text"></i>
-                      </span>
-                      <select
-                        id="scTmplId"
-                        v-model="selectedTemplateId"
-                        class="form-select border-start-0 ps-1 py-2 text-xs"
-                      >
-                        <option value="">Choose a template...</option>
-                        <option v-for="t in templates" :key="t.id" :value="t.id">
-                          {{ t.name }}
-                        </option>
-                      </select>
-                    </div>
+                <!-- Target Campaign Selector with Write Manually option -->
+                <div class="mb-3">
+                  <label for="scNotifId" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase mb-1">
+                    Target Campaign *
+                  </label>
+                  <div class="input-group input-group-sm">
+                    <span class="input-group-text bg-transparent border-end-0 text-muted">
+                      <i class="bi bi-megaphone"></i>
+                    </span>
+                    <select
+                      id="scNotifId"
+                      v-model="notificationId"
+                      class="form-select border-start-0 ps-1 py-2 text-xs"
+                      required
+                    >
+                      <option value="__manual__">Write Manually</option>
+                      <option v-for="n in notifications" :key="n.id" :value="n.id">
+                        {{ n.name }}
+                      </option>
+                    </select>
                   </div>
                 </div>
 
                 <!-- Message Content & Placeholder Chips -->
                 <div class="mb-3">
-                  <label for="scMsg" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase mb-1">
-                    Message Content *
-                  </label>
-                  
-                  <!-- Tag Chips -->
+                  <div class="d-flex align-items-center justify-content-between mb-1">
+                    <label for="scMsg" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase mb-0">
+                      Message Content *
+                    </label>
+                    <button
+                      v-if="messageContent"
+                      type="button"
+                      class="btn btn-link p-0 text-2xs text-danger text-decoration-none"
+                      @click="messageContent = ''"
+                    >
+                      <i class="bi bi-x-circle me-1"></i>Clear
+                    </button>
+                  </div>
+
+                  <!-- Placeholder Chips -->
                   <div class="d-flex flex-wrap gap-1 mb-2">
                     <button
                       v-for="ph in availablePlaceholders"
@@ -658,7 +678,7 @@ const handleSaveBatch = async (alsoBroadcast = false) => {
                     v-model="messageContent"
                     rows="4"
                     class="form-control text-xs font-monospace py-2"
-                    placeholder="Type broadcast announcement message..."
+                    :placeholder="isManualMode ? 'Write your broadcast message here...' : 'Auto-filled from campaign or type to override...'"
                     required
                   ></textarea>
                 </div>

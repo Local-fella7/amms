@@ -67,7 +67,16 @@ const hasValidMemberPhoto = (m?: Member | null): boolean => {
 }
 const viewingPhotoError = ref(false)
 
-const searchQuery = ref('')
+// Pagination State
+const currentPage = ref(1)
+const itemsPerPage = ref(10)
+
+const route = useRoute()
+const searchQuery = ref(typeof route.query.search === 'string' ? route.query.search : '')
+watch(() => route.query.search, (val) => {
+  searchQuery.value = typeof val === 'string' ? val : ''
+  currentPage.value = 1
+}, { immediate: true })
 const selectedLocationFilter = ref<string>('')
 const selectedStatusFilter = ref<string>('')
 const selectedGenderFilter = ref<string>('')
@@ -111,10 +120,6 @@ const isViewModalOpen = ref(false)
 const itemToDelete = ref<Member | null>(null)
 const isDeleteModalOpen = ref(false)
 const isDeleting = ref(false)
-
-// Pagination State
-const currentPage = ref(1)
-const itemsPerPage = ref(10)
 
 const schema = z.object({
   first_name: z.string().min(2, 'First name is required'),
@@ -187,14 +192,28 @@ const filteredMembers = computed(() => {
   let result = [...rawMembersList.value]
 
   if (searchQuery.value.trim()) {
-    const q = searchQuery.value.toLowerCase()
-    result = result.filter(m => 
-      m.first_name.toLowerCase().includes(q) ||
-      m.last_name.toLowerCase().includes(q) ||
-      (m.phone && m.phone.includes(q)) ||
-      (m.email && m.email.toLowerCase().includes(q)) ||
-      (m.fathers_name && m.fathers_name.toLowerCase().includes(q))
-    )
+    const q = searchQuery.value.trim().toLowerCase()
+    result = result.filter(m => {
+      const fn = (m.first_name || '').toLowerCase()
+      const ln = (m.last_name || '').toLowerCase()
+      const fullName = `${fn} ${ln}`.trim()
+      const reverseFullName = `${ln} ${fn}`.trim()
+      const phone = (m.phone || '').toLowerCase()
+      const email = (m.email || '').toLowerCase()
+      const fathers = (m.fathers_name || '').toLowerCase()
+      const mothers = (m.mothers_name || '').toLowerCase()
+      const idStr = String(m.id)
+
+      return fullName.includes(q) ||
+        reverseFullName.includes(q) ||
+        fn.includes(q) ||
+        ln.includes(q) ||
+        phone.includes(q) ||
+        email.includes(q) ||
+        fathers.includes(q) ||
+        mothers.includes(q) ||
+        idStr === q
+    })
   }
 
   if (selectedLocationFilter.value) {
@@ -211,6 +230,10 @@ const filteredMembers = computed(() => {
 
   // Descending sort by Member ID
   return result.sort((a, b) => b.id - a.id)
+})
+
+watch([searchQuery, selectedLocationFilter, selectedStatusFilter, selectedGenderFilter], () => {
+  currentPage.value = 1
 })
 
 // Pagination Slicing
@@ -750,8 +773,8 @@ onMounted(() => {
       <template #cell-exemption="{ item }">
 
                 <span 
-                  class="badge px-2 py-0.8 rounded-pill text-xs"
-                  :class="item.fee_exemption === 'yes' ? 'bg-warning bg-opacity-15 text-warning border border-warning border-opacity-25' : 'bg-light text-muted'"
+                  class="badge px-2.5 py-1 rounded-pill text-xs fw-semibold"
+                  :class="item.fee_exemption === 'yes' ? 'badge-exempted' : 'bg-light text-muted border'"
                 >
                   {{ item.fee_exemption === 'yes' ? 'Exempted' : 'Standard' }}
                 </span>
@@ -892,7 +915,7 @@ onMounted(() => {
           </div>
           <div class="col-md-4">
             <span class="text-xs text-muted text-uppercase fw-semibold d-block">Fee Exemption</span>
-            <span class="badge px-2.5 py-1 rounded-pill text-xs" :class="viewingMember?.fee_exemption === 'yes' ? 'bg-warning bg-opacity-15 text-warning border border-warning border-opacity-25' : 'bg-light text-muted'">
+            <span class="badge px-2.5 py-1 rounded-pill text-xs fw-semibold" :class="viewingMember?.fee_exemption === 'yes' ? 'badge-exempted' : 'bg-light text-muted border'">
               {{ viewingMember?.fee_exemption === 'yes' ? 'Exempted' : 'Standard' }}
             </span>
           </div>

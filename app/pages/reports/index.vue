@@ -31,6 +31,45 @@ const selectedMemberId = ref<number | string>('')
 const selectedFeeId = ref<number | string>('')
 const filterFromDate = ref('')
 const filterToDate = ref('')
+const dateRange = ref<{ start: Date | string | null; end: Date | string | null } | null>(null)
+
+const formatDateToDMY = (val: string | Date | null | undefined): string => {
+  if (!val) return ''
+  if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}/.test(val)) {
+    const parts = val.substring(0, 10).split('-')
+    return `${parts[2]}/${parts[1]}/${parts[0]}`
+  }
+  const d = val instanceof Date ? val : new Date(val)
+  if (isNaN(d.getTime())) return ''
+  const dd = String(d.getDate()).padStart(2, '0')
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const yyyy = d.getFullYear()
+  return `${dd}/${mm}/${yyyy}`
+}
+
+const formattedDateRange = computed(() => {
+  if (!dateRange.value || !dateRange.value.start) return ''
+  const startStr = formatDateToDMY(dateRange.value.start)
+  if (!dateRange.value.end) return `From ${startStr}`
+  const endStr = formatDateToDMY(dateRange.value.end)
+  return `${startStr} - ${endStr}`
+})
+
+const clearDateRange = () => {
+  dateRange.value = null
+  filterFromDate.value = ''
+  filterToDate.value = ''
+}
+
+watch(dateRange, (val) => {
+  if (!val || !val.start) {
+    filterFromDate.value = ''
+    filterToDate.value = ''
+  } else {
+    filterFromDate.value = formatDateToYMD(val.start)
+    filterToDate.value = val.end ? formatDateToYMD(val.end) : ''
+  }
+})
 
 // Preview Modal State
 const isPreviewModalOpen = ref(false)
@@ -108,6 +147,7 @@ const handleActionClick = (report: ReportDef, action: 'preview' | 'download' | '
   if (needsConfig) {
     selectedMemberId.value = ''
     selectedFeeId.value = ''
+    dateRange.value = null
     filterFromDate.value = ''
     filterToDate.value = ''
     reportToConfigure.value = report
@@ -406,49 +446,41 @@ onMounted(loadDependencies)
                 </div>
               </div>
 
-              <!-- Date Range Filter -->
+              <!-- Date Range Filter (Single Range Input) -->
               <div v-if="reportToConfigure.supportsDateFilter" class="col-12">
                 <label class="form-label fw-bold text-xs text-secondary-amms mb-1">
                   Date Range Filter <span class="text-muted fw-normal">(Optional)</span>
                 </label>
-                <div class="row g-3">
-                  <div class="col-6">
-                    <ClientOnly>
-                      <VDatePicker v-model="filterFromDate" mode="date" string-format="yyyy-MM-dd" :masks="{ input: 'DD-MM-YYYY' }">
-                        <template #default="{ inputValue, inputEvents }">
-                          <div class="input-group">
-                            <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-calendar3"></i></span>
-                            <input
-                              class="form-control border-start-0 text-sm font-monospace"
-                              :value="inputValue"
-                              v-on="inputEvents"
-                              placeholder="From Date"
-                              readonly
-                            />
-                          </div>
-                        </template>
-                      </VDatePicker>
-                    </ClientOnly>
-                  </div>
-                  <div class="col-6">
-                    <ClientOnly>
-                      <VDatePicker v-model="filterToDate" mode="date" string-format="yyyy-MM-dd" :masks="{ input: 'DD-MM-YYYY' }">
-                        <template #default="{ inputValue, inputEvents }">
-                          <div class="input-group">
-                            <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-calendar3"></i></span>
-                            <input
-                              class="form-control border-start-0 text-sm font-monospace"
-                              :value="inputValue"
-                              v-on="inputEvents"
-                              placeholder="To Date"
-                              readonly
-                            />
-                          </div>
-                        </template>
-                      </VDatePicker>
-                    </ClientOnly>
-                  </div>
-                </div>
+                <ClientOnly>
+                  <VDatePicker v-model.range="dateRange" mode="date" :popover="{ visibility: 'click' }">
+                    <template #default="{ inputValue, inputEvents }">
+                      <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0 text-muted">
+                          <i class="bi bi-calendar3"></i>
+                        </span>
+                        <input
+                          class="form-control border-start-0 text-sm font-monospace cursor-pointer"
+                          :value="formattedDateRange"
+                          v-on="inputEvents.start"
+                          placeholder="e.g. 10/10/2026 - 10/11/2026"
+                          readonly
+                        />
+                        <button
+                          v-if="dateRange?.start"
+                          type="button"
+                          class="btn btn-outline-secondary border-start-0 bg-white text-muted px-2.5"
+                          @click.stop="clearDateRange"
+                          title="Clear date range"
+                        >
+                          <i class="bi bi-x-circle-fill text-xs"></i>
+                        </button>
+                      </div>
+                    </template>
+                  </VDatePicker>
+                </ClientOnly>
+                <small class="text-muted d-block mt-1" style="font-size: 0.72rem;">
+                  Click to select start and end dates (e.g. 10/10/2026 - 10/11/2026)
+                </small>
               </div>
             </div>
           </div>

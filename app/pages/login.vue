@@ -203,10 +203,6 @@ const submitPasswordChange = async () => {
         <!-- Footer / Quote -->
         <div class="position-relative z-1 pt-4 border-top border-white border-opacity-10 d-flex justify-content-between align-items-center">
           <small class="text-white-50">&copy; {{ new Date().getFullYear() }} ASA Civic Registry</small>
-          <div class="d-flex gap-4 small text-white-50">
-            <a href="#" class="text-decoration-none text-white-50">Privacy Policy</a>
-            <a href="#" class="text-decoration-none text-white-50">Terms of Service</a>
-          </div>
         </div>
       </div>
 

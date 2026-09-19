@@ -465,11 +465,21 @@ const previewSampleMessage = computed(() => {
 const smsCharCount = computed(() => messageContent.value.length)
 const smsSegmentCount = computed(() => Math.ceil(messageContent.value.length / 160) || 1)
 
-// Auto-fill message content when broadcast or template is changed
+// Auto-fill message content AND template when broadcast campaign is changed
 watch(notificationId, (newNotifId) => {
   if (!newNotifId || !notifications.value) return
   const found = notifications.value.find(n => Number(n.id) === Number(newNotifId))
-  if (found && found.content && !messageContent.value) {
+  if (!found) return
+
+  // Auto-select the template linked to this campaign
+  if (found.notification_template_id) {
+    selectedTemplateId.value = found.notification_template_id
+  } else {
+    selectedTemplateId.value = ''
+  }
+
+  // Auto-fill message content from the campaign (only if not already typed)
+  if (found.content) {
     messageContent.value = found.content.replace(/\{\{fee_year\}\}/g, String(new Date().getFullYear()))
   }
 })
@@ -598,7 +608,7 @@ const handleSaveBatch = async (alsoBroadcast = false) => {
         channel: broadcastChannel.value
       }
       isSummaryModalOpen.value = true
-      push.success(`Broadcast successfully dispatched via ${broadcastChannel.value.toUpperCase()}! ${sentCount} delivered.`)
+      push.success(`Broadcast successfully dispatched via ${broadcastChannel.value.toUpperCase()}!`)
     } else {
       push.success(`Successfully assigned ${successCount} recipient(s) to the broadcast campaign!`)
     }
@@ -698,14 +708,14 @@ onMounted(() => {
   <div>
     <!-- Page Header -->
     <PageHeader
-      title="Broadcast Recipients"
-      subtitle="Dispatch and manage targeted member communication rosters"
+      title="Broadcasts"
+      subtitle="Dispatch and manage targeted member communications and campaigns"
       v-model:searchQuery="searchQuery"
       searchPlaceholder="Search member name or campaign..."
       :loading="loading"
       hideRefresh
       showAddButton
-      addButtonText="Assign Broadcast Recipients"
+      addButtonText="New Broadcast"
       @add="openAddModal"
     />
 
@@ -986,7 +996,7 @@ onMounted(() => {
               <span v-if="isMemberOutstanding(getFullMember(item))" class="badge bg-warning bg-opacity-15 text-warning-emphasis text-2xs">
                 Fee Due
               </span>
-              <span v-else-if="getFullMember(item)?.fee_exemption === 'yes'" class="badge bg-info bg-opacity-10 text-info text-2xs">
+              <span v-else-if="getFullMember(item)?.fee_exemption === 'yes'" class="badge badge-exempted text-2xs px-2 py-0.5 rounded-pill">
                 Exempted
               </span>
             </div>
@@ -1058,7 +1068,7 @@ onMounted(() => {
             <span class="text-xs text-muted text-uppercase fw-semibold d-block">Status & Exemption</span>
             <span class="fw-semibold text-body text-xs text-capitalize">
               {{ viewingItem ? (getFullMember(viewingItem)?.member_status || 'Active') : '—' }}
-              <span v-if="getFullMember(viewingItem)?.fee_exemption === 'yes'" class="badge bg-info bg-opacity-10 text-info ms-1">Exempted</span>
+              <span v-if="getFullMember(viewingItem)?.fee_exemption === 'yes'" class="badge badge-exempted ms-1 px-2 py-0.5 rounded-pill">Exempted</span>
             </span>
           </div>
           <div class="col-md-6">

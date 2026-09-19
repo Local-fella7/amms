@@ -320,7 +320,7 @@ onMounted(() => {
                 </label>
                 <div class="input-group">
                   <span class="input-group-text bg-transparent border-end-0 text-muted">
-                    <i class="bi bi-building"></i>
+                    <i class="bi bi-geo-alt-fill text-primary"></i>
                   </span>
                   <input
                     id="locNameModal"

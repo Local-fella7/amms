@@ -313,13 +313,6 @@ onMounted(() => {
         </div>
       </div>
 
-      <div v-if="loading" class="position-absolute top-0 start-0 w-100 h-100 bg-body bg-opacity-75 d-flex flex-column align-items-center justify-content-center z-3">
-        <div class="spinner-border text-primary" role="status" style="width: 2.5rem; height: 2.5rem;">
-          <span class="visually-hidden">Loading...</span>
-        </div>
-        <span class="text-xs fw-semibold text-primary mt-2">Loading system users...</span>
-      </div>
-
       <div v-if="error" class="alert alert-danger rounded-0 mb-0 py-3 px-4 d-flex align-items-center justify-content-between">
         <div class="d-flex align-items-center gap-2">
           <i class="bi bi-exclamation-triangle-fill fs-5"></i>

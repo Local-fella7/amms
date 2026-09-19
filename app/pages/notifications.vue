@@ -249,14 +249,14 @@ onMounted(() => {
   <div>
     <!-- Page Header -->
     <PageHeader
-      title="Broadcast Notifications"
-      subtitle="Dispatch and log SMS / Email announcements to association members"
+      title="Broadcasts Templates"
+      subtitle="Manage broadcast message templates and dispatch logs"
       v-model:searchQuery="searchQuery"
       searchPlaceholder="Search broadcast title or content..."
       :loading="loading"
       hideRefresh
       showAddButton
-      addButtonText="Create Broadcast"
+      addButtonText="Create Template"
       @add="openAddModal"
     />
 

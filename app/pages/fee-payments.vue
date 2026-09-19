@@ -62,7 +62,16 @@ const { data: fees, execute: fetchFees } = useApi<FeeOption[]>()
 const { data: paymentModes, execute: fetchPaymentModes } = useApi<PaymentModeOption[]>()
 const { downloadPdf, openPdfInNewTab, isGenerating: isDownloadingPdf } = useReportPdf()
 
-const searchQuery = ref('')
+// Pagination State
+const currentPage = ref(1)
+const itemsPerPage = ref(10)
+
+const route = useRoute()
+const searchQuery = ref(typeof route.query.search === 'string' ? route.query.search : '')
+watch(() => route.query.search, (val) => {
+  searchQuery.value = typeof val === 'string' ? val : ''
+  currentPage.value = 1
+}, { immediate: true })
 const selectedPaymentModeFilter = ref<string>('')
 const selectedFeeYearFilter = ref<string>('')
 
@@ -157,10 +166,6 @@ const isViewModalOpen = ref(false)
 const itemToDelete = ref<FeePayment | null>(null)
 const isDeleteModalOpen = ref(false)
 const isDeleting = ref(false)
-
-// Pagination State
-const currentPage = ref(1)
-const itemsPerPage = ref(10)
 
 const schema = z.object({
   member_id: z.union([z.number(), z.string().min(1, 'Member selection is required')]),
@@ -291,10 +296,26 @@ const filteredPayments = computed(() => {
   let result = [...rawPaymentsList.value]
 
   if (searchQuery.value.trim()) {
-    const q = searchQuery.value.toLowerCase()
+    const q = searchQuery.value.trim().toLowerCase()
     result = result.filter(p => {
-      const mName = p.member ? `${p.member.first_name} ${p.member.last_name}` : getMemberName(p.member_id)
-      return mName.toLowerCase().includes(q) || String(p.id).includes(q)
+      const m = p.member || (members.value ? members.value.find(m => Number(m.id) === Number(p.member_id)) : null)
+      const mFirst = (m?.first_name || '').toLowerCase()
+      const mLast = (m?.last_name || '').toLowerCase()
+      const mFullName = `${mFirst} ${mLast}`.trim()
+      const mReverseName = `${mLast} ${mFirst}`.trim()
+      const receipt = (p.receipt_number || '').toLowerCase()
+      const idStr = String(p.id)
+      const phone = (m?.phone || '').toLowerCase()
+      const amountStr = String(p.amount)
+
+      return mFullName.includes(q) ||
+        mReverseName.includes(q) ||
+        mFirst.includes(q) ||
+        mLast.includes(q) ||
+        receipt.includes(q) ||
+        idStr === q ||
+        phone.includes(q) ||
+        amountStr === q
     })
   }
 
@@ -612,7 +633,7 @@ onMounted(() => {
 
                 <span 
                   v-if="item.member?.fee_exemption === 'yes' || getMemberExemption(item.member_id) === 'yes'" 
-                  class="badge bg-warning bg-opacity-15 text-warning border border-warning border-opacity-25 px-2 py-0.5 rounded-pill"
+                  class="badge badge-exempted px-2.5 py-1 rounded-pill fw-semibold"
                 >
                   Exempted
                 </span>
