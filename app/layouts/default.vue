@@ -129,9 +129,8 @@ const backendBase = computed(() => {
 })
 
 const logoUrl = computed(() => {
-  if (logoLoadError.value) return ''
-  const path = logoPath.value || 'uploads/logos/logo.jpg'
-  const cleanPath = path.replace(/^\/+/, '')
+  if (logoLoadError.value || !logoPath.value) return ''
+  const cleanPath = logoPath.value.replace(/^\/+/, '')
   const base = backendBase.value ? backendBase.value.replace(/\/+$/, '') : ''
   return base ? `${base}/${cleanPath}` : `/${cleanPath}`
 })

@@ -219,25 +219,19 @@ const handleSave = async () => {
     if (props.editingMember) {
       await fetchWithAuth(`/api/members/${props.editingMember.id}`, { method: 'PUT', body: payload })
       if (selectedPhotoFile.value) {
+        const optimizedPhoto = await optimizeImageFile(selectedPhotoFile.value, 800, 0.85)
         const photoFormData = new FormData()
-        photoFormData.append('photo', selectedPhotoFile.value)
-        photoFormData.append('crop_x', String(cropX.value || 0))
-        photoFormData.append('crop_y', String(cropY.value || 0))
-        photoFormData.append('crop_width', String(cropWidth.value || 400))
-        photoFormData.append('crop_height', String(cropHeight.value || 400))
-        await fetchWithAuth(`/api/members/${props.editingMember.id}`, { method: 'POST', body: photoFormData }).catch(() => {})
+        photoFormData.append('photo', optimizedPhoto)
+        await fetchWithAuth(`/api/members/${props.editingMember.id}`, { method: 'POST', body: photoFormData })
       }
       push.success(`Member "${firstName.value} ${lastName.value}" updated successfully!`)
     } else {
       let requestBody: Record<string, unknown> | FormData = payload
       if (selectedPhotoFile.value) {
+        const optimizedPhoto = await optimizeImageFile(selectedPhotoFile.value, 800, 0.85)
         const formData = new FormData()
         Object.entries(payload).forEach(([k, v]) => { if (v !== undefined) formData.append(k, String(v)) })
-        formData.append('photo', selectedPhotoFile.value)
-        formData.append('crop_x', String(cropX.value || 0))
-        formData.append('crop_y', String(cropY.value || 0))
-        formData.append('crop_width', String(cropWidth.value || 400))
-        formData.append('crop_height', String(cropHeight.value || 400))
+        formData.append('photo', optimizedPhoto)
         requestBody = formData
       }
       await fetchWithAuth('/api/members', { method: 'POST', body: requestBody })
@@ -259,7 +253,7 @@ const handleSave = async () => {
     <div v-if="isSubmitting || true" class="modal-backdrop fade show" @click="emit('close')"></div>
     <div class="modal fade show d-block" tabindex="-1" role="dialog" @click.self="emit('close')">
       <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
-        <div class="modal-content amms-surface border-0 shadow-lg rounded-4 overflow-hidden">
+        <form class="modal-content amms-surface border-0 shadow-lg rounded-4 overflow-hidden" @submit.prevent="handleSave">
           
           <div class="modal-header border-bottom px-4 py-3 bg-body-tertiary position-relative justify-content-center">
             <h5 class="modal-title fw-bold text-primary text-sm mb-0 text-center">
@@ -269,8 +263,7 @@ const handleSave = async () => {
             <button type="button" class="btn-close position-absolute end-0 me-3" @click="emit('close')" aria-label="Close"></button>
           </div>
 
-          <form @submit.prevent="handleSave">
-            <div class="modal-body p-4">
+          <div class="modal-body p-4">
               <div v-if="modalError" class="alert alert-danger py-2 px-3 mb-3 rounded-3 small">
                 <i class="bi bi-exclamation-triangle-fill me-1"></i> {{ modalError }}
               </div>
@@ -479,8 +472,7 @@ const handleSave = async () => {
                 <span>{{ isSubmitting ? 'Saving Member...' : (editingMember ? 'Update Member' : 'Register Member') }}</span>
               </button>
             </div>
-          </form>
-        </div>
+        </form>
       </div>
     </div>
   </div>

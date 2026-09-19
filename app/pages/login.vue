@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { z } from 'zod'
 import { useAuthStore } from '~/stores/useAuthStore'
 import type { User } from '~/types'
+import { apiUrl, useApiBase } from '~/composables/useApiBase'
 
 interface LoginResponse {
   data?: {
@@ -25,6 +26,7 @@ definePageMeta({
 
 const config = useRuntimeConfig()
 const authStore = useAuthStore()
+const apiBase = useApiBase()
 const email = ref('admin@amms.local')
 const password = ref('admin123')
 const rememberMe = ref(true)
@@ -42,9 +44,8 @@ const backendBase = computed(() => {
 })
 
 const logoUrl = computed(() => {
-  if (logoLoadError.value) return ''
-  const path = logoPath.value || 'uploads/logos/logo.jpg'
-  const cleanPath = path.replace(/^\/+/, '')
+  if (logoLoadError.value || !logoPath.value) return ''
+  const cleanPath = logoPath.value.replace(/^\/+/, '')
   const base = backendBase.value ? backendBase.value.replace(/\/+$/, '') : ''
   return base ? `${base}/${cleanPath}` : `/${cleanPath}`
 })
@@ -88,9 +89,10 @@ const handleLogin = async () => {
 
   loading.value = true
   try {
-    console.log('Sending login request via proxy to: /api/auth/login')
+    const loginUrl = apiUrl('/api/auth/login', apiBase)
+    console.log('Sending login request to:', loginUrl)
     
-    const response = await $fetch<LoginResponse>('/api/auth/login', {
+    const response = await $fetch<LoginResponse>(loginUrl, {
       method: 'POST',
       body: {
         email: email.value,
@@ -145,7 +147,7 @@ const submitPasswordChange = async () => {
   isChangingPassword.value = true
   try {
     const token = authStore.token
-    await $fetch('/api/auth/change-password', {
+    await $fetch(apiUrl('/api/auth/change-password', apiBase), {
       method: 'POST',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: {

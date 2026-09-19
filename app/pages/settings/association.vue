@@ -132,48 +132,41 @@ const handleSave = async () => {
 
   isSaving.value = true
   try {
-    if (associationId.value) {
-      if (selectedLogoFile.value) {
-        const formData = new FormData()
-        formData.append('name', payload.name)
-        formData.append('address', payload.address)
-        formData.append('chairman_phone', payload.chairman_phone)
-        formData.append('secretary_phone', payload.secretary_phone)
-        formData.append('treasurer_phone', payload.treasurer_phone)
-        formData.append('registrar_phone', payload.registrar_phone)
-        formData.append('logo', selectedLogoFile.value)
-        formData.append('_method', 'PUT')
-
-        await fetchWithAuth(`/api/association/${associationId.value}`, {
-          method: 'POST',
-          body: formData
-        })
-      } else {
-        await fetchWithAuth(`/api/association/${associationId.value}`, {
-          method: 'PUT',
-          body: payload
-        })
-      }
+    let targetId = associationId.value
+    if (targetId) {
+      await fetchWithAuth(`/api/association/${targetId}`, {
+        method: 'PUT',
+        body: payload
+      })
     } else {
-      if (selectedLogoFile.value) {
-        const formData = new FormData()
-        formData.append('name', payload.name)
-        formData.append('address', payload.address)
-        formData.append('chairman_phone', payload.chairman_phone)
-        formData.append('secretary_phone', payload.secretary_phone)
-        formData.append('treasurer_phone', payload.treasurer_phone)
-        formData.append('registrar_phone', payload.registrar_phone)
-        formData.append('logo', selectedLogoFile.value)
+      const createRes = await fetchWithAuth<{ id?: number; data?: { id?: number } }>('/api/association', {
+        method: 'POST',
+        body: payload
+      })
+      targetId = createRes?.data?.id || createRes?.id || 1
+      associationId.value = targetId
+    }
 
-        await fetchWithAuth('/api/association', {
+    if (selectedLogoFile.value && targetId) {
+      const optimizedLogo = await optimizeImageFile(selectedLogoFile.value, 800, 0.9)
+      const logoFormData = new FormData()
+      logoFormData.append('logo', optimizedLogo)
+
+      try {
+        await fetchWithAuth(`/api/association/${targetId}/logo`, {
           method: 'POST',
-          body: formData
+          body: logoFormData
         })
-      } else {
-        await fetchWithAuth('/api/association', {
-          method: 'POST',
-          body: payload
-        })
+      } catch (logoErr: any) {
+        // Fallback to POST /association/:id if dedicated /logo endpoint returns 404
+        if (logoErr?.status === 404 || logoErr?.statusCode === 404) {
+          await fetchWithAuth(`/api/association/${targetId}`, {
+            method: 'POST',
+            body: logoFormData
+          })
+        } else {
+          throw logoErr
+        }
       }
     }
     

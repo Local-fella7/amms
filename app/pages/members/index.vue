@@ -402,9 +402,8 @@ const openEditModal = (m: Member) => {
   feeExemption.value = m.fee_exemption === 'yes' ? 'yes' : 'no'
   registrationDate.value = m.registration_date || new Date().toISOString().substring(0, 10)
   clearPhoto()
-  const existingPhoto = getMemberPhotoPath(m)
-  if (existingPhoto) {
-    photoPreview.value = getMemberPhotoUrl(existingPhoto)
+  if (m.picture) {
+    photoPreview.value = getMemberPhotoUrl(m.picture)
   }
   modalError.value = ''
   isModalOpen.value = true

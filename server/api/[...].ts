@@ -1,8 +1,6 @@
-import { useAuthStore } from '~/stores/useAuthStore'
-
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig()
-  const apiBase = config.public.apiBase || 'http://192.168.100.100/amms/public/api'
+  const apiBase = config.apiBase || 'https://asa.or.tz/backend/api'
   
   // Extract route path following /api/
   const reqUrl = getRequestURL(event)
@@ -15,8 +13,14 @@ export default defineEventHandler(async (event) => {
   const token = authHeader || (cookieToken ? `Bearer ${cookieToken}` : null)
 
   const headers: Record<string, string> = {
-    'Accept': 'application/json',
-    'Content-Type': 'application/json'
+    'Accept': 'application/json'
+  }
+
+  const incomingContentType = getHeader(event, 'content-type')
+  if (incomingContentType) {
+    headers['Content-Type'] = incomingContentType
+  } else if (event.method !== 'GET' && event.method !== 'HEAD') {
+    headers['Content-Type'] = 'application/json'
   }
 
   if (token) {
