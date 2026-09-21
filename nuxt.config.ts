@@ -9,6 +9,9 @@ if (!backendTarget && /^https?:\/\//i.test(rawBrowserBase)) {
   backendTarget = rawBrowserBase
 }
 backendTarget = (backendTarget || 'http://192.168.100.100/amms/public/api').replace(/\/+$/, '')
+if (!backendTarget.endsWith('/api')) {
+  backendTarget = `${backendTarget}/api`
+}
 const backendBase = backendTarget.replace(/\/api\/?$/, '')
 
 // In local development, if browser base is an external origin (like https://...),
@@ -38,7 +41,8 @@ export default defineNuxtConfig({
     apiBase: backendTarget,
     public: {
       // Exposed to the client: used to build API URLs in the browser.
-      apiBase: browserApiBase
+      apiBase: browserApiBase,
+      backendUrl: backendBase
     }
   },
   nitro: {

@@ -124,8 +124,13 @@ const clearSearch = () => {
 }
 
 const backendBase = computed(() => {
+  const backendUrl = (config.public?.backendUrl as string) || ''
+  if (backendUrl) return backendUrl.replace(/\/+$/, '')
   const api = (config.public?.apiBase as string) || ''
-  return api.replace(/\/api\/?$/, '')
+  if (/^https?:\/\//i.test(api)) {
+    return api.replace(/\/api\/?$/, '')
+  }
+  return ''
 })
 
 const logoUrl = computed(() => {
@@ -159,6 +164,9 @@ const loadAssociation = async () => {
       associationName.value = record.name || ''
       if (record.logo) {
         logoPath.value = record.logo
+        if (import.meta.client) {
+          localStorage.setItem('amms_association_logo', record.logo)
+        }
       }
     }
   } catch {

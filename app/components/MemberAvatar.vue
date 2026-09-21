@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type { Member } from '~/types'
 
 const props = defineProps<{
@@ -8,8 +8,13 @@ const props = defineProps<{
 
 const config = useRuntimeConfig()
 const backendBase = computed(() => {
+  const backendUrl = (config.public?.backendUrl as string) || ''
+  if (backendUrl) return backendUrl.replace(/\/+$/, '')
   const api = (config.public?.apiBase as string) || ''
-  return api.replace(/\/api\/?$/, '')
+  if (/^https?:\/\//i.test(api)) {
+    return api.replace(/\/api\/?$/, '')
+  }
+  return ''
 })
 
 const photoError = ref(false)
@@ -19,12 +24,32 @@ const getMemberPhotoPath = (m?: Partial<Member> | null): string => {
   return m.photo || m.picture || m.photo_url || m.avatar || ''
 }
 
+// Reset photo error when member or photo path changes
+watch(
+  () => [props.member?.id, getMemberPhotoPath(props.member), props.member?.updated_at],
+  () => {
+    photoError.value = false
+  }
+)
+
 const getMemberPhotoUrl = (pic?: string) => {
   if (!pic) return ''
-  if (pic.startsWith('http') || pic.startsWith('data:') || pic.startsWith('blob:')) return pic
-  const cleanPath = pic.replace(/^\/+/, '')
-  const base = backendBase.value ? backendBase.value.replace(/\/+$/, '') : ''
-  return base ? `${base}/${cleanPath}` : `/${cleanPath}`
+  if (pic.startsWith('data:') || pic.startsWith('blob:')) return pic
+  let url = ''
+  if (pic.startsWith('http')) {
+    url = pic
+  } else {
+    const cleanPath = pic.replace(/^\/+/, '')
+    const base = backendBase.value ? backendBase.value.replace(/\/+$/, '') : ''
+    url = base ? `${base}/${cleanPath}` : `/${cleanPath}`
+  }
+
+  // Cache buster if updated_at is present so browser immediately reflects fresh uploads
+  if (props.member?.updated_at) {
+    const sep = url.includes('?') ? '&' : '?'
+    url = `${url}${sep}v=${encodeURIComponent(props.member.updated_at)}`
+  }
+  return url
 }
 
 const hasValidPhoto = computed(() => {

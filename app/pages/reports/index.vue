@@ -28,6 +28,31 @@ const activeCategory = ref<'all' | 'finance' | 'roster' | 'demographics' | 'memb
 const reportToConfigure = ref<ReportDef | null>(null)
 const pendingActionType = ref<'preview' | 'download' | 'tab' | null>(null)
 const selectedMemberId = ref<number | string>('')
+const memberSearchQuery = ref('')
+const isMemberDropdownOpen = ref(false)
+
+const filteredMemberOptions = computed(() => {
+  if (!members.value) return []
+  if (!memberSearchQuery.value.trim()) return members.value
+  const q = memberSearchQuery.value.toLowerCase().trim()
+  return members.value.filter(m =>
+    `${m.first_name} ${m.last_name}`.toLowerCase().includes(q) ||
+    (m.phone && m.phone.includes(q))
+  )
+})
+
+const selectMember = (m: MemberOption) => {
+  selectedMemberId.value = m.id
+  memberSearchQuery.value = `${m.first_name} ${m.last_name}${m.phone ? ` • ${m.phone}` : ''}`
+  isMemberDropdownOpen.value = false
+}
+
+const clearMemberSelection = () => {
+  selectedMemberId.value = ''
+  memberSearchQuery.value = ''
+  isMemberDropdownOpen.value = true
+}
+
 const selectedFeeId = ref<number | string>('')
 const filterFromDate = ref('')
 const filterToDate = ref('')
@@ -146,6 +171,8 @@ const handleActionClick = (report: ReportDef, action: 'preview' | 'download' | '
   const needsConfig = report.requiresMember || report.supportsFeeFilter || report.supportsDateFilter
   if (needsConfig) {
     selectedMemberId.value = ''
+    memberSearchQuery.value = ''
+    isMemberDropdownOpen.value = false
     selectedFeeId.value = ''
     dateRange.value = null
     filterFromDate.value = ''
@@ -395,41 +422,88 @@ onMounted(loadDependencies)
     
     <!-- Configure Contextual Modal -->
     <div v-if="reportToConfigure" class="modal fade show d-block" tabindex="-1" role="dialog" style="z-index:1055;" @click.self="cancelConfiguration">
-      <div class="modal-dialog modal-dialog-centered" style="max-width: 540px;">
-        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+      <div class="modal-dialog modal-dialog-centered" style="max-width: 620px;">
+        <div class="modal-content border-0 shadow-lg rounded-4" style="overflow: visible;">
           
-          <div class="modal-header border-bottom px-4 py-3" style="background-color: var(--bs-body-bg);">
+          <div class="modal-header border-bottom px-4 py-3 rounded-top-4" style="background-color: var(--bs-body-bg);">
             <div class="d-flex align-items-center gap-3">
               <div class="rpt-row__iconbox" :style="{ background: reportToConfigure.accentColor + '15', color: reportToConfigure.accentColor }">
                 <i :class="`bi ${reportToConfigure.icon}`"></i>
               </div>
               <div>
-                <h5 class="modal-title fw-bold mb-0 text-dark" style="font-size: 1rem;">Configure Report</h5>
-                <small class="text-muted" style="font-size: .75rem;">{{ reportToConfigure.title }}</small>
+                <h5 class="modal-title fw-bold mb-0 text-dark" style="font-size: 1.05rem;">Configure Report</h5>
+                <small class="text-muted" style="font-size: .8rem;">{{ reportToConfigure.title }}</small>
               </div>
             </div>
             <button type="button" class="btn-close" @click="cancelConfiguration" aria-label="Close"></button>
           </div>
           
-          <div class="modal-body p-4 bg-body-tertiary">
+          <div class="modal-body p-4 bg-body-tertiary" style="overflow: visible; min-height: 280px;">
             <p class="text-secondary-amms text-sm mb-4">
               This report requires specific parameters before it can be generated. Please provide the required information below.
             </p>
             
             <div class="row g-3">
-              <!-- Member Filter -->
+              <!-- Member Filter (Searchable) -->
               <div v-if="reportToConfigure.requiresMember" class="col-12">
                 <label class="form-label fw-bold text-xs text-secondary-amms mb-1">
                   Target Member <span class="text-danger">*</span>
                 </label>
-                <div class="input-group">
-                  <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-person-fill"></i></span>
-                  <select v-model="selectedMemberId" class="form-select border-start-0" :class="{ 'is-invalid': !selectedMemberId }">
-                    <option value="">� Select a member �</option>
-                    <option v-for="m in members" :key="m.id" :value="m.id">{{ m.first_name }} {{ m.last_name }}{{ m.phone ? ` � ${m.phone}` : '' }}</option>
-                  </select>
+                <div class="position-relative">
+                  <div class="input-group">
+                    <span class="input-group-text bg-white border-end-0 text-muted">
+                      <i class="bi bi-person-fill text-primary"></i>
+                    </span>
+                    <input
+                      v-model="memberSearchQuery"
+                      type="text"
+                      class="form-control border-start-0 ps-1 py-2 text-sm"
+                      :class="{ 'is-invalid': !selectedMemberId && !memberSearchQuery }"
+                      placeholder="Type name or phone to search member..."
+                      @focus="isMemberDropdownOpen = true"
+                      @input="selectedMemberId = ''; isMemberDropdownOpen = true"
+                      @blur="setTimeout(() => { isMemberDropdownOpen = false }, 200)"
+                      autocomplete="off"
+                    />
+                    <button
+                      v-if="selectedMemberId || memberSearchQuery"
+                      type="button"
+                      class="btn btn-outline-secondary border-start-0 bg-white text-muted px-2.5"
+                      @click="clearMemberSelection"
+                      title="Clear member selection"
+                    >
+                      <i class="bi bi-x-circle-fill text-xs"></i>
+                    </button>
+                  </div>
+
+                  <!-- Dropdown Search Results -->
+                  <div
+                    v-if="isMemberDropdownOpen"
+                    class="position-absolute w-100 bg-body border rounded-3 shadow-lg mt-1 overflow-auto"
+                    style="z-index: 1060; max-height: 200px;"
+                  >
+                    <div
+                      v-if="filteredMemberOptions.length === 0"
+                      class="px-3 py-2 text-xs text-muted text-center"
+                    >
+                      No members found matching "{{ memberSearchQuery }}"
+                    </div>
+                    <div
+                      v-else
+                      v-for="m in filteredMemberOptions.slice(0, 30)"
+                      :key="m.id"
+                      class="px-3 py-2 text-sm cursor-pointer border-bottom rpt-member-opt d-flex justify-content-between align-items-center"
+                      :class="{ 'bg-primary bg-opacity-10 text-primary fw-semibold': Number(selectedMemberId) === Number(m.id) }"
+                      @mousedown.prevent="selectMember(m)"
+                    >
+                      <span class="fw-semibold">{{ m.first_name }} {{ m.last_name }}</span>
+                      <span class="text-muted font-monospace text-xs">{{ m.phone || 'No phone' }}</span>
+                    </div>
+                  </div>
                 </div>
-                <div v-if="!selectedMemberId" class="text-danger mt-1 text-2xs"><i class="bi bi-exclamation-circle"></i> A target member is required.</div>
+                <div v-if="!selectedMemberId" class="text-danger mt-1 text-2xs">
+                  <i class="bi bi-exclamation-circle"></i> A target member is required.
+                </div>
               </div>
               
               <!-- Fee Year Filter -->
@@ -452,7 +526,7 @@ onMounted(loadDependencies)
                   Date Range Filter <span class="text-muted fw-normal">(Optional)</span>
                 </label>
                 <ClientOnly>
-                  <VDatePicker v-model.range="dateRange" mode="date" :popover="{ visibility: 'click' }">
+                  <VDatePicker v-model.range="dateRange" mode="date" :popover="{ visibility: 'click', placement: 'top-start' }">
                     <template #default="{ inputValue, inputEvents }">
                       <div class="input-group">
                         <span class="input-group-text bg-white border-end-0 text-muted">
@@ -485,7 +559,7 @@ onMounted(loadDependencies)
             </div>
           </div>
           
-          <div class="modal-footer border-top px-4 py-3 bg-white">
+          <div class="modal-footer border-top px-4 py-3 bg-white rounded-bottom-4">
             <button type="button" class="btn btn-light rounded-pill px-4 fw-semibold border" @click="cancelConfiguration">Cancel</button>
             <button 
               type="button" 
@@ -704,6 +778,13 @@ onMounted(loadDependencies)
   .rpt-row { flex-wrap: wrap; }
   .rpt-row__tags { min-width: unset; justify-content: flex-start; }
   .rpt-row__desc { max-width: 100%; white-space: normal; }
+}
+
+.rpt-member-opt {
+  transition: background-color 0.15s ease;
+}
+.rpt-member-opt:hover {
+  background-color: rgba(67, 118, 108, 0.08);
 }
 </style>
 

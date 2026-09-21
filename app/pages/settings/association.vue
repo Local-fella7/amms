@@ -18,8 +18,13 @@ interface Association {
 const { data: associationData, loading, error, execute: fetchAssociation, fetchWithAuth } = useApi<AssociationRecord | AssociationRecord[] | { data: AssociationRecord | AssociationRecord[] }>()
 const config = useRuntimeConfig()
 const backendBase = computed(() => {
+  const backendUrl = (config.public?.backendUrl as string) || ''
+  if (backendUrl) return backendUrl.replace(/\/+$/, '')
   const api = (config.public?.apiBase as string) || ''
-  return api.replace(/\/api\/?$/, '')
+  if (/^https?:\/\//i.test(api)) {
+    return api.replace(/\/api\/?$/, '')
+  }
+  return ''
 })
 
 const isSaving = ref(false)
@@ -102,6 +107,9 @@ const loadData = async () => {
       logoTimestamp.value = Date.now()
       if (record.logo) {
         logoPreview.value = getLogoUrl(record.logo)
+        if (import.meta.client) {
+          localStorage.setItem('amms_association_logo', record.logo)
+        }
       } else {
         logoPreview.value = null
       }
@@ -150,24 +158,14 @@ const handleSave = async () => {
     if (selectedLogoFile.value && targetId) {
       const optimizedLogo = await optimizeImageFile(selectedLogoFile.value, 800, 0.9)
       const logoFormData = new FormData()
+      // Method spoofing required by PHP/CodeIgniter 4 to handle multipart updates with file upload
+      logoFormData.append('_method', 'PUT')
       logoFormData.append('logo', optimizedLogo)
 
-      try {
-        await fetchWithAuth(`/api/association/${targetId}/logo`, {
-          method: 'POST',
-          body: logoFormData
-        })
-      } catch (logoErr: any) {
-        // Fallback to POST /association/:id if dedicated /logo endpoint returns 404
-        if (logoErr?.status === 404 || logoErr?.statusCode === 404) {
-          await fetchWithAuth(`/api/association/${targetId}`, {
-            method: 'POST',
-            body: logoFormData
-          })
-        } else {
-          throw logoErr
-        }
-      }
+      await fetchWithAuth(`/api/association/${targetId}`, {
+        method: 'POST',
+        body: logoFormData
+      })
     }
     
     selectedLogoFile.value = null

@@ -53,8 +53,13 @@ const { data: ageGroups, execute: fetchAgeGroups } = useApi<AgeGroupItem[]>()
 const { downloadPdf, openPdfInNewTab, isGenerating: isDownloadingPdf } = useReportPdf()
 const config = useRuntimeConfig()
 const backendBase = computed(() => {
+  const backendUrl = (config.public?.backendUrl as string) || ''
+  if (backendUrl) return backendUrl.replace(/\/+$/, '')
   const api = (config.public?.apiBase as string) || ''
-  return api.replace(/\/api\/?$/, '')
+  if (/^https?:\/\//i.test(api)) {
+    return api.replace(/\/api\/?$/, '')
+  }
+  return ''
 })
 
 const failedImageMemberIds = ref<Set<number>>(new Set())
@@ -484,6 +489,7 @@ const handleSave = async () => {
 
       if (selectedPhotoFile.value) {
         const photoFormData = new FormData()
+        photoFormData.append('_method', 'PUT')
         photoFormData.append('photo', selectedPhotoFile.value)
         photoFormData.append('crop_x', String(cropX.value || 0))
         photoFormData.append('crop_y', String(cropY.value || 0))
@@ -751,6 +757,9 @@ onMounted(() => {
                 </div>
                 <div v-if="item.email" class="text-muted text-xs text-truncate font-monospace" style="max-width: 170px;" :title="item.email">
                   <i class="bi bi-envelope text-primary me-1"></i>{{ item.email }}
+                </div>
+                <div v-else class="text-muted text-xs font-monospace text-opacity-50">
+                  <i class="bi bi-envelope text-muted me-1 opacity-50"></i>—
                 </div>
               
       </template>

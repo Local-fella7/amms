@@ -35,12 +35,17 @@ const loading = ref(false)
 const errorMessage = ref('')
 const currentTheme = ref('light')
 
-const logoPath = ref<string | null>(null)
+const logoPath = ref<string | null>('uploads/logos/logo.jpg')
 const logoLoadError = ref(false)
 
 const backendBase = computed(() => {
+  const backendUrl = (config.public?.backendUrl as string) || ''
+  if (backendUrl) return backendUrl.replace(/\/+$/, '')
   const api = (config.public?.apiBase as string) || ''
-  return api.replace(/\/api\/?$/, '')
+  if (/^https?:\/\//i.test(api)) {
+    return api.replace(/\/api\/?$/, '')
+  }
+  return ''
 })
 
 const logoUrl = computed(() => {
@@ -48,6 +53,15 @@ const logoUrl = computed(() => {
   const cleanPath = logoPath.value.replace(/^\/+/, '')
   const base = backendBase.value ? backendBase.value.replace(/\/+$/, '') : ''
   return base ? `${base}/${cleanPath}` : `/${cleanPath}`
+})
+
+onMounted(() => {
+  if (import.meta.client) {
+    const cached = localStorage.getItem('amms_association_logo')
+    if (cached) {
+      logoPath.value = cached
+    }
+  }
 })
 
 const toggleTheme = () => {

@@ -17,8 +17,13 @@ const emit = defineEmits<{
 const { fetchWithAuth } = useApi<Member>()
 const config = useRuntimeConfig()
 const backendBase = computed(() => {
+  const backendUrl = (config.public?.backendUrl as string) || ''
+  if (backendUrl) return backendUrl.replace(/\/+$/, '')
   const api = (config.public?.apiBase as string) || ''
-  return api.replace(/\/api\/?$/, '')
+  if (/^https?:\/\//i.test(api)) {
+    return api.replace(/\/api\/?$/, '')
+  }
+  return ''
 })
 
 const isSubmitting = ref(false)
@@ -59,7 +64,7 @@ const schema = z.object({
   phone: z.string()
     .length(12, 'Phone number must be exactly 12 digits (e.g. 255755555555)')
     .regex(/^255[0-9]{9}$/, 'Phone number must start with 255 followed by 9 digits'),
-  email: z.string().min(1, 'Email address is required').email('Please enter a valid email address'),
+  email: z.string().trim().email('Please enter a valid email address').optional().or(z.literal('')),
   member_status: z.enum(['active', 'inactive', 'deceased'], { errorMap: () => ({ message: 'Membership status is required' }) }),
   marital_status: z.enum(['single', 'married', 'divorced', 'widowed'], { errorMap: () => ({ message: 'Marital status is required' }) }),
   fee_exemption: z.enum(['yes', 'no'], { errorMap: () => ({ message: 'Fee exemption is required' }) }),
@@ -217,14 +222,38 @@ const handleSave = async () => {
   isSubmitting.value = true
   try {
     if (props.editingMember) {
-      await fetchWithAuth(`/api/members/${props.editingMember.id}`, { method: 'PUT', body: payload })
       if (selectedPhotoFile.value) {
         const optimizedPhoto = await optimizeImageFile(selectedPhotoFile.value, 800, 0.85)
-        const photoFormData = new FormData()
-        photoFormData.append('photo', optimizedPhoto)
-        await fetchWithAuth(`/api/members/${props.editingMember.id}`, { method: 'POST', body: photoFormData })
+        const updateFormData = new FormData()
+        // Method spoofing required by PHP/CodeIgniter 4 for multipart updates with file upload
+        updateFormData.append('_method', 'PUT')
+        Object.entries(payload).forEach(([k, v]) => {
+          if (v !== undefined && v !== null) updateFormData.append(k, String(v))
+        })
+        updateFormData.append('photo', optimizedPhoto)
+
+        try {
+          await fetchWithAuth(`/api/members/${props.editingMember.id}`, {
+            method: 'POST',
+            body: updateFormData
+          })
+          push.success(`Member "${firstName.value} ${lastName.value}" and photo updated successfully!`)
+        } catch (photoErr: unknown) {
+          // Fallback to updating member text details via PUT JSON so textual edits are preserved
+          await fetchWithAuth(`/api/members/${props.editingMember.id}`, {
+            method: 'PUT',
+            body: payload
+          })
+          const photoMsg = extractErrorMessage(photoErr, 'Photo could not be processed')
+          push.warning(`Member profile saved, but photo could not be uploaded: ${photoMsg}`)
+        }
+      } else {
+        await fetchWithAuth(`/api/members/${props.editingMember.id}`, {
+          method: 'PUT',
+          body: payload
+        })
+        push.success(`Member "${firstName.value} ${lastName.value}" updated successfully!`)
       }
-      push.success(`Member "${firstName.value} ${lastName.value}" updated successfully!`)
     } else {
       let requestBody: Record<string, unknown> | FormData = payload
       if (selectedPhotoFile.value) {
@@ -382,10 +411,12 @@ const handleSave = async () => {
                   <input id="smPhone" v-model="phone" type="tel" maxlength="12" class="form-control py-2 text-sm font-monospace" placeholder="255755555555" required />
                 </div>
                 <div class="col-md-6">
-                  <label for="smEmail" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Email Address *</label>
+                  <label for="smEmail" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">
+                    Email Address <span class="text-muted text-lowercase fw-normal">(optional)</span>
+                  </label>
                   <div class="input-group">
                     <span class="input-group-text bg-transparent border-end-0 text-muted"><i class="bi bi-envelope text-primary"></i></span>
-                    <input id="smEmail" v-model="email" type="email" class="form-control border-start-0 ps-1 py-2 text-sm font-monospace" placeholder="member@example.com" required />
+                    <input id="smEmail" v-model="email" type="email" class="form-control border-start-0 ps-1 py-2 text-sm font-monospace" placeholder="member@example.com" />
                   </div>
                 </div>
 

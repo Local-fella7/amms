@@ -1,6 +1,9 @@
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig()
-  const apiBase = config.apiBase || 'https://asa.or.tz/backend/api'
+  let apiBase = ((config.apiBase as string) || 'https://asa.or.tz/backend/api').replace(/\/+$/, '')
+  if (!apiBase.endsWith('/api')) {
+    apiBase = `${apiBase}/api`
+  }
   
   // Extract route path following /api/
   const reqUrl = getRequestURL(event)
@@ -28,6 +31,7 @@ export default defineEventHandler(async (event) => {
   }
 
   return proxyRequest(event, `${apiBase}${path}${reqUrl.search}`, {
-    headers
+    headers,
+    streamRequest: true
   })
 })
