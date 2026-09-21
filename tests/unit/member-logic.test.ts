@@ -58,12 +58,34 @@ export const getMemberPhotoPath = (m?: Partial<Member> | null): string => {
   return m.photo || m.picture || m.photo_url || m.avatar || m.image || ''
 }
 
-export const getMemberPhotoUrl = (pic?: string, backendBase = ''): string => {
+export const getMemberPhotoUrl = (pic?: string, backendBase = '', updatedAt?: string): string => {
   if (!pic) return ''
-  if (pic.startsWith('http') || pic.startsWith('data:') || pic.startsWith('blob:')) return pic
-  const cleanPath = pic.replace(/^\/+/, '')
-  const base = backendBase ? backendBase.replace(/\/+$/, '') : ''
-  return base ? `${base}/${cleanPath}` : `/${cleanPath}`
+  if (pic.startsWith('data:') || pic.startsWith('blob:')) return pic
+  let url = ''
+  if (pic.startsWith('http')) {
+    url = pic
+  } else {
+    const cleanPath = pic.replace(/^\/+/, '')
+    const base = backendBase ? backendBase.replace(/\/+$/, '') : ''
+    url = base ? `${base}/${cleanPath}` : `/${cleanPath}`
+  }
+  if (updatedAt) {
+    const sep = url.includes('?') ? '&' : '?'
+    url = `${url}${sep}v=${encodeURIComponent(updatedAt)}`
+  }
+  return url
+}
+
+export const buildMemberUpdateFormData = (payload: Record<string, any>, photoFile?: any): FormData => {
+  const fd = new FormData()
+  fd.append('_method', 'PUT')
+  Object.entries(payload).forEach(([k, v]) => {
+    if (v !== undefined && v !== null) fd.append(k, String(v))
+  })
+  if (photoFile) {
+    fd.append('photo', photoFile)
+  }
+  return fd
 }
 
 describe('Member Logic & Formatting', () => {
@@ -107,31 +129,26 @@ describe('Member Logic & Formatting', () => {
   })
 
   describe('matchAgeGroup', () => {
-    const ageGroups: AgeGroup[] = [
-      { id: 1, name: 'Children', from_age: 0, to_age: 12 },
-      { id: 2, name: 'Youth', from_age: 13, to_age: 24 },
-      { id: 3, name: 'Adult', from_age: 25, to_age: 59 },
-      { id: 4, name: 'Senior', from_age: 60, to_age: 120 }
+    const sampleGroups: AgeGroup[] = [
+      { id: 1, name: 'Youth', from_age: 18, to_age: 35 },
+      { id: 2, name: 'Adult', from_age: 36, to_age: 59 },
+      { id: 3, name: 'Senior', from_age: 60, to_age: 120 }
     ]
 
-    it('matches child group', () => {
-      expect(matchAgeGroup(8, ageGroups)?.name).toBe('Children')
+    it('matches exact bracket boundaries', () => {
+      expect(matchAgeGroup(18, sampleGroups)?.name).toBe('Youth')
+      expect(matchAgeGroup(35, sampleGroups)?.name).toBe('Youth')
+      expect(matchAgeGroup(36, sampleGroups)?.name).toBe('Adult')
+      expect(matchAgeGroup(60, sampleGroups)?.name).toBe('Senior')
     })
 
-    it('matches youth group', () => {
-      expect(matchAgeGroup(18, ageGroups)?.name).toBe('Youth')
+    it('returns first group as default fallback if age is outside all brackets', () => {
+      expect(matchAgeGroup(10, sampleGroups)?.name).toBe('Youth')
     })
 
-    it('matches adult group', () => {
-      expect(matchAgeGroup(35, ageGroups)?.name).toBe('Adult')
-    })
-
-    it('matches senior group', () => {
-      expect(matchAgeGroup(70, ageGroups)?.name).toBe('Senior')
-    })
-
-    it('returns null when age is null', () => {
-      expect(matchAgeGroup(null, ageGroups)).toBeNull()
+    it('returns null if age is null or list is empty', () => {
+      expect(matchAgeGroup(null, sampleGroups)).toBeNull()
+      expect(matchAgeGroup(25, [])).toBeNull()
     })
   })
 
@@ -160,6 +177,38 @@ describe('Member Logic & Formatting', () => {
       expect(getMemberPhotoUrl('uploads/photos/1.jpg', 'http://api.local')).toBe('http://api.local/uploads/photos/1.jpg')
       expect(getMemberPhotoUrl('/uploads/photos/1.jpg', 'http://api.local/')).toBe('http://api.local/uploads/photos/1.jpg')
       expect(getMemberPhotoUrl('uploads/photos/1.jpg', '')).toBe('/uploads/photos/1.jpg')
+    })
+
+    it('appends cache buster timestamp query parameter when updatedAt is provided', () => {
+      const url = getMemberPhotoUrl('uploads/members/7.webp', 'https://asa.or.tz/backend', '2026-09-21 08:50:34')
+      expect(url).toBe('https://asa.or.tz/backend/uploads/members/7.webp?v=2026-09-21%2008%3A50%3A34')
+    })
+
+    it('correctly appends cache buster with & if URL already contains query parameters', () => {
+      const url = getMemberPhotoUrl('uploads/members/7.webp?existing=1', 'https://asa.or.tz/backend', '2026-09-21')
+      expect(url).toBe('https://asa.or.tz/backend/uploads/members/7.webp?existing=1&v=2026-09-21')
+    })
+  })
+
+  describe('buildMemberUpdateFormData (Method Spoofing)', () => {
+    it('always appends _method=PUT to enable PHP multipart parsing on resource updates', () => {
+      const payload = { first_name: 'Ahmed', last_name: 'Mahmoud', email: 'ahmed@example.com' }
+      const fd = buildMemberUpdateFormData(payload)
+      expect(fd.get('_method')).toBe('PUT')
+      expect(fd.get('first_name')).toBe('Ahmed')
+      expect(fd.get('last_name')).toBe('Mahmoud')
+      expect(fd.get('email')).toBe('ahmed@example.com')
+    })
+
+    it('attaches photo file and skips undefined/null fields', () => {
+      const payload = { first_name: 'Ahmed', mothers_name: undefined, fathers_name: null }
+      const fakePhoto = { name: 'avatar.webp', size: 1234 }
+      const fd = buildMemberUpdateFormData(payload, fakePhoto)
+      expect(fd.get('_method')).toBe('PUT')
+      expect(fd.get('first_name')).toBe('Ahmed')
+      expect(fd.get('mothers_name')).toBeNull()
+      expect(fd.get('fathers_name')).toBeNull()
+      expect(fd.get('photo')).toEqual(fakePhoto)
     })
   })
 })

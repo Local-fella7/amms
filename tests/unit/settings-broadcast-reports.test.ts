@@ -254,3 +254,92 @@ describe('Settings Modal Categories & Navigation', () => {
     })
   })
 })
+
+describe('Report Target Member Search & Validation Logic', () => {
+  interface MemberItem {
+    id: number
+    first_name: string
+    last_name: string
+    phone?: string
+  }
+
+  const sampleMembers: MemberItem[] = [
+    { id: 1, first_name: 'John', last_name: 'Doe', phone: '255744444444' },
+    { id: 4, first_name: 'Yusuph', last_name: 'Mdoe', phone: '255755111222' },
+    { id: 7, first_name: 'Ahmed', last_name: 'Mahmoud', phone: '255878999888' }
+  ]
+
+  const filterMembers = (members: MemberItem[], query: string): MemberItem[] => {
+    if (!members) return []
+    if (!query.trim()) return members
+    const q = query.toLowerCase().trim()
+    return members.filter(m =>
+      `${m.first_name} ${m.last_name}`.toLowerCase().includes(q) ||
+      (m.phone && m.phone.includes(q))
+    )
+  }
+
+  const selectMember = (m: MemberItem) => ({
+    selectedMemberId: m.id,
+    memberSearchQuery: `${m.first_name} ${m.last_name}${m.phone ? ` • ${m.phone}` : ''}`,
+    isMemberDropdownOpen: false
+  })
+
+  const clearMemberSelection = () => ({
+    selectedMemberId: '',
+    memberSearchQuery: '',
+    isMemberDropdownOpen: true
+  })
+
+  const isConfigValid = (requiresMember: boolean, selectedMemberId: number | string): boolean => {
+    if (requiresMember && !selectedMemberId) return false
+    return true
+  }
+
+  it('returns all members when search query is empty or whitespace', () => {
+    expect(filterMembers(sampleMembers, '')).toHaveLength(3)
+    expect(filterMembers(sampleMembers, '   ')).toHaveLength(3)
+  })
+
+  it('filters members by first name case-insensitively', () => {
+    const results = filterMembers(sampleMembers, 'ahmed')
+    expect(results).toHaveLength(1)
+    expect(results[0].id).toBe(7)
+  })
+
+  it('filters members by last name', () => {
+    const results = filterMembers(sampleMembers, 'mdoe')
+    expect(results).toHaveLength(1)
+    expect(results[0].first_name).toBe('Yusuph')
+  })
+
+  it('filters members by phone number', () => {
+    const results = filterMembers(sampleMembers, '999888')
+    expect(results).toHaveLength(1)
+    expect(results[0].id).toBe(7)
+  })
+
+  it('returns empty array when no matches are found', () => {
+    expect(filterMembers(sampleMembers, 'nonexistent')).toEqual([])
+  })
+
+  it('correctly sets state on member selection', () => {
+    const state = selectMember(sampleMembers[2])
+    expect(state.selectedMemberId).toBe(7)
+    expect(state.memberSearchQuery).toBe('Ahmed Mahmoud • 255878999888')
+    expect(state.isMemberDropdownOpen).toBe(false)
+  })
+
+  it('correctly resets state on member clearing', () => {
+    const state = clearMemberSelection()
+    expect(state.selectedMemberId).toBe('')
+    expect(state.memberSearchQuery).toBe('')
+    expect(state.isMemberDropdownOpen).toBe(true)
+  })
+
+  it('validates report configuration requiring member selection', () => {
+    expect(isConfigValid(true, '')).toBe(false)
+    expect(isConfigValid(true, 7)).toBe(true)
+    expect(isConfigValid(false, '')).toBe(true)
+  })
+})
