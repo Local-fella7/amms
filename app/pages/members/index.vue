@@ -3,20 +3,30 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { z } from 'zod'
 import { useReportPdf } from '~/composables/useReportPdf'
 
+type Gender = 'male' | 'female'
+type MemberStatus = 'active' | 'inactive' | 'deceased'
+type MaritalStatus = 'single' | 'married' | 'divorced' | 'widowed'
+type FeeExemption = 'yes' | 'no'
+
 interface Member {
   id: number
   first_name: string
   last_name: string
-  gender: 'male' | 'female' | string
+  gender: Gender | string
   fathers_name?: string
   mothers_name?: string
   location_id: number | string
   picture?: string
+  photo?: string
+  photo_url?: string
+  avatar?: string
+  image?: string
+  email?: string
   date_of_birth: string
-  member_status: 'active' | 'inactive' | 'deceased' | string
-  marital_status: 'single' | 'married' | 'divorced' | 'widowed' | string
+  member_status: MemberStatus | string
+  marital_status: MaritalStatus | string
   phone: string
-  fee_exemption: 'yes' | 'no' | string
+  fee_exemption: FeeExemption | string
   age_group_id: number | string
   registration_date: string
   location?: { id: number; name: string }
@@ -37,12 +47,41 @@ interface AgeGroupItem {
   to_age?: number | string
 }
 
-const { data: membersResponse, loading, error, execute: fetchMembers, fetchWithAuth } = useApi<any>()
+const { data: membersResponse, loading, error, execute: fetchMembers, fetchWithAuth } = useApi<Member[] | { data: Member[] }>()
 const { data: locations, execute: fetchLocations } = useApi<LocationItem[]>()
 const { data: ageGroups, execute: fetchAgeGroups } = useApi<AgeGroupItem[]>()
 const { downloadPdf, openPdfInNewTab, isGenerating: isDownloadingPdf } = useReportPdf()
+const config = useRuntimeConfig()
+const backendBase = computed(() => {
+  const backendUrl = (config.public?.backendUrl as string) || ''
+  if (backendUrl) return backendUrl.replace(/\/+$/, '')
+  const api = (config.public?.apiBase as string) || ''
+  if (/^https?:\/\//i.test(api)) {
+    return api.replace(/\/api\/?$/, '')
+  }
+  return ''
+})
 
-const searchQuery = ref('')
+const failedImageMemberIds = ref<Set<number>>(new Set())
+const onMemberPhotoError = (memberId: number) => {
+  failedImageMemberIds.value.add(memberId)
+}
+const hasValidMemberPhoto = (m?: Member | null): boolean => {
+  if (!m || !getMemberPhotoPath(m)) return false
+  return !failedImageMemberIds.value.has(m.id)
+}
+const viewingPhotoError = ref(false)
+
+// Pagination State
+const currentPage = ref(1)
+const itemsPerPage = ref(10)
+
+const route = useRoute()
+const searchQuery = ref(typeof route.query.search === 'string' ? route.query.search : '')
+watch(() => route.query.search, (val) => {
+  searchQuery.value = typeof val === 'string' ? val : ''
+  currentPage.value = 1
+}, { immediate: true })
 const selectedLocationFilter = ref<string>('')
 const selectedStatusFilter = ref<string>('')
 const selectedGenderFilter = ref<string>('')
@@ -62,6 +101,7 @@ const locationId = ref<string | number>('')
 const ageGroupId = ref<string | number>('')
 const dateOfBirth = ref('')
 const phone = ref('')
+const email = ref('')
 const memberStatus = ref<'active' | 'inactive' | 'deceased'>('active')
 const maritalStatus = ref<'single' | 'married' | 'divorced' | 'widowed'>('single')
 const feeExemption = ref<'yes' | 'no'>('no')
@@ -86,14 +126,12 @@ const itemToDelete = ref<Member | null>(null)
 const isDeleteModalOpen = ref(false)
 const isDeleting = ref(false)
 
-// Pagination State
-const currentPage = ref(1)
-const itemsPerPage = ref(10)
-
 const schema = z.object({
   first_name: z.string().min(2, 'First name is required'),
   last_name: z.string().min(2, 'Last name is required'),
-  gender: z.enum(['male', 'female']),
+  gender: z.enum(['male', 'female'], {
+    errorMap: () => ({ message: 'Gender is required' })
+  }),
   fathers_name: z.string().optional(),
   mothers_name: z.string().optional(),
   location_id: z.union([z.number(), z.string().min(1, 'Location branch is required')]),
@@ -102,9 +140,18 @@ const schema = z.object({
   phone: z.string()
     .length(12, 'Phone number must be exactly 12 digits (e.g. 255755555555)')
     .regex(/^255[0-9]{9}$/, 'Phone number must start with 255 followed by 9 digits'),
-  member_status: z.enum(['active', 'inactive', 'deceased']),
-  marital_status: z.enum(['single', 'married', 'divorced', 'widowed']),
-  fee_exemption: z.enum(['yes', 'no']),
+  email: z.string()
+    .min(1, 'Email address is required')
+    .email('Please enter a valid email address'),
+  member_status: z.enum(['active', 'inactive', 'deceased'], {
+    errorMap: () => ({ message: 'Membership status is required' })
+  }),
+  marital_status: z.enum(['single', 'married', 'divorced', 'widowed'], {
+    errorMap: () => ({ message: 'Marital status is required' })
+  }),
+  fee_exemption: z.enum(['yes', 'no'], {
+    errorMap: () => ({ message: 'Fee exemption is required' })
+  }),
   registration_date: z.string().min(4, 'Registration date is required')
 })
 
@@ -150,13 +197,28 @@ const filteredMembers = computed(() => {
   let result = [...rawMembersList.value]
 
   if (searchQuery.value.trim()) {
-    const q = searchQuery.value.toLowerCase()
-    result = result.filter(m => 
-      m.first_name.toLowerCase().includes(q) ||
-      m.last_name.toLowerCase().includes(q) ||
-      (m.phone && m.phone.includes(q)) ||
-      (m.fathers_name && m.fathers_name.toLowerCase().includes(q))
-    )
+    const q = searchQuery.value.trim().toLowerCase()
+    result = result.filter(m => {
+      const fn = (m.first_name || '').toLowerCase()
+      const ln = (m.last_name || '').toLowerCase()
+      const fullName = `${fn} ${ln}`.trim()
+      const reverseFullName = `${ln} ${fn}`.trim()
+      const phone = (m.phone || '').toLowerCase()
+      const email = (m.email || '').toLowerCase()
+      const fathers = (m.fathers_name || '').toLowerCase()
+      const mothers = (m.mothers_name || '').toLowerCase()
+      const idStr = String(m.id)
+
+      return fullName.includes(q) ||
+        reverseFullName.includes(q) ||
+        fn.includes(q) ||
+        ln.includes(q) ||
+        phone.includes(q) ||
+        email.includes(q) ||
+        fathers.includes(q) ||
+        mothers.includes(q) ||
+        idStr === q
+    })
   }
 
   if (selectedLocationFilter.value) {
@@ -173,6 +235,10 @@ const filteredMembers = computed(() => {
 
   // Descending sort by Member ID
   return result.sort((a, b) => b.id - a.id)
+})
+
+watch([searchQuery, selectedLocationFilter, selectedStatusFilter, selectedGenderFilter], () => {
+  currentPage.value = 1
 })
 
 // Pagination Slicing
@@ -290,6 +356,19 @@ const clearPhoto = () => {
   }
 }
 
+const getMemberPhotoPath = (m?: Member | null): string => {
+  if (!m) return ''
+  return m.photo || m.picture || m.photo_url || m.avatar || m.image || ''
+}
+
+const getMemberPhotoUrl = (pic?: string) => {
+  if (!pic) return ''
+  if (pic.startsWith('http') || pic.startsWith('data:') || pic.startsWith('blob:')) return pic
+  const cleanPath = pic.replace(/^\/+/, '')
+  const base = backendBase.value ? backendBase.value.replace(/\/+$/, '') : ''
+  return base ? `${base}/${cleanPath}` : `/${cleanPath}`
+}
+
 const openAddModal = () => {
   editingMember.value = null
   firstName.value = ''
@@ -301,6 +380,7 @@ const openAddModal = () => {
   ageGroupId.value = ageGroups.value && ageGroups.value.length > 0 ? ageGroups.value[0].id : ''
   dateOfBirth.value = '1990-01-01'
   phone.value = '255'
+  email.value = ''
   memberStatus.value = 'active'
   maritalStatus.value = 'single'
   feeExemption.value = 'no'
@@ -314,16 +394,17 @@ const openEditModal = (m: Member) => {
   editingMember.value = m
   firstName.value = m.first_name
   lastName.value = m.last_name
-  gender.value = (m.gender as any) || 'male'
+  gender.value = m.gender === 'female' ? 'female' : 'male'
   fathersName.value = m.fathers_name || ''
   mothersName.value = m.mothers_name || ''
   locationId.value = m.location_id
   ageGroupId.value = m.age_group_id
   dateOfBirth.value = m.date_of_birth
   phone.value = m.phone
-  memberStatus.value = (m.member_status as any) || 'active'
-  maritalStatus.value = (m.marital_status as any) || 'single'
-  feeExemption.value = (m.fee_exemption as any) || 'no'
+  email.value = m.email || ''
+  memberStatus.value = (m.member_status === 'inactive' || m.member_status === 'deceased') ? m.member_status : 'active'
+  maritalStatus.value = (m.marital_status === 'married' || m.marital_status === 'divorced' || m.marital_status === 'widowed') ? m.marital_status : 'single'
+  feeExemption.value = m.fee_exemption === 'yes' ? 'yes' : 'no'
   registrationDate.value = m.registration_date || new Date().toISOString().substring(0, 10)
   clearPhoto()
   if (m.picture) {
@@ -335,6 +416,7 @@ const openEditModal = (m: Member) => {
 
 const openViewModal = (m: Member) => {
   viewingMember.value = m
+  viewingPhotoError.value = false
   isViewModalOpen.value = true
 }
 
@@ -347,7 +429,7 @@ const closeModal = () => {
   isModalOpen.value = false
 }
 
-const formatDateToYMD = (val: any) => {
+const formatDateToYMD = (val: string | Date | null | undefined): string => {
   if (!val) return new Date().toISOString().substring(0, 10)
   if (val instanceof Date) {
     const yyyy = val.getFullYear()
@@ -383,6 +465,7 @@ const handleSave = async () => {
     age_group_id: Number(ageGroupId.value),
     date_of_birth: formatDateToYMD(dateOfBirth.value),
     phone: phone.value.trim(),
+    email: email.value.trim().toLowerCase(),
     member_status: memberStatus.value,
     marital_status: maritalStatus.value,
     fee_exemption: feeExemption.value,
@@ -403,9 +486,27 @@ const handleSave = async () => {
         method: 'PUT',
         body: payload
       })
+
+      if (selectedPhotoFile.value) {
+        const photoFormData = new FormData()
+        photoFormData.append('_method', 'PUT')
+        photoFormData.append('photo', selectedPhotoFile.value)
+        photoFormData.append('crop_x', String(cropX.value || 0))
+        photoFormData.append('crop_y', String(cropY.value || 0))
+        photoFormData.append('crop_width', String(cropWidth.value || 400))
+        photoFormData.append('crop_height', String(cropHeight.value || 400))
+
+        await fetchWithAuth(`/api/members/${editingMember.value.id}`, {
+          method: 'POST',
+          body: photoFormData
+        }).catch(err => {
+          console.warn('Failed to upload updated member photo via POST /members/{id}:', err)
+        })
+      }
+
       push.success(`Member "${firstName.value} ${lastName.value}" updated successfully!`)
     } else {
-      let requestBody: any = payload
+      let requestBody: Record<string, unknown> | FormData = payload
 
       if (selectedPhotoFile.value) {
         const formData = new FormData()
@@ -418,6 +519,7 @@ const handleSave = async () => {
         formData.append('age_group_id', String(payload.age_group_id))
         formData.append('date_of_birth', payload.date_of_birth)
         formData.append('phone', payload.phone)
+        formData.append('email', payload.email)
         formData.append('member_status', payload.member_status)
         formData.append('marital_status', payload.marital_status)
         formData.append('fee_exemption', payload.fee_exemption)
@@ -441,33 +543,13 @@ const handleSave = async () => {
     
     closeModal()
     await loadData()
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Save member error:', err)
-    const serverErrors = err?.data?.errors ? Object.values(err.data.errors).flat().join(', ') : null
-    modalError.value = serverErrors || err?.data?.message || err?.message || 'Failed to save member details'
+    modalError.value = extractErrorMessage(err, 'Failed to save member details')
     push.error(modalError.value)
   } finally {
     isSubmitting.value = false
   }
-}
-
-const getMemberPhotoUrl = (pic?: string) => {
-  if (!pic) return ''
-  if (pic.startsWith('data:') || pic.startsWith('blob:')) return pic
-
-  // The backend stores full URLs (e.g. https://asa.or.tz/uploads/members/x.webp).
-  // Since frontend and backend share the same origin, strip the domain so the
-  // image resolves against the current origin — localhost in dev, the real
-  // domain in production.
-  if (/^https?:\/\//i.test(pic)) {
-    try {
-      return new URL(pic).pathname
-    } catch {
-      return pic
-    }
-  }
-
-  return pic.startsWith('/') ? pic : `/${pic}`
 }
 
 const exportMemberProfilePdf = async (mId: number | string) => {
@@ -508,20 +590,16 @@ const cancelDelete = () => {
 }
 
 const confirmDelete = async () => {
-  if (!itemToDelete.value) return
-  
-  isDeleting.value = true
-  try {
-    await fetchWithAuth(`/api/members/${itemToDelete.value.id}`, { method: 'DELETE' })
-    push.success(`Member "${itemToDelete.value.first_name} ${itemToDelete.value.last_name}" deleted successfully!`)
-    cancelDelete()
-    await loadData()
-  } catch (err: any) {
-    const msg = err?.data?.message || 'Failed to delete member'
-    push.error(msg)
-  } finally {
-    isDeleting.value = false
-  }
+    if (!itemToDelete.value) return
+    
+    const success = await mutate(api => api(`/api/members/${itemToDelete.value.id}`, { method: 'DELETE' }), {
+      successMessage: `Member "${itemToDelete.value.first_name} ${itemToDelete.value.last_name}" deleted successfully!`
+    })
+    
+    if (success) {
+      cancelDelete()
+      await loadData()
+    }
 }
 
 onMounted(() => {
@@ -625,13 +703,6 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- Center Loading Spinner Overlay -->
-      <div v-if="loading" class="position-absolute top-0 start-0 w-100 h-100 bg-body bg-opacity-75 d-flex flex-column align-items-center justify-content-center z-3">
-        <div class="spinner-border text-primary" role="status" style="width: 2.5rem; height: 2.5rem;">
-          <span class="visually-hidden">Loading members...</span>
-        </div>
-        <span class="text-xs fw-semibold text-primary mt-2">Loading member directory...</span>
-      </div>
 
       <!-- Error Alert -->
       <div v-if="error" class="alert alert-danger rounded-0 mb-0 py-3 px-4 d-flex align-items-center justify-content-between">
@@ -642,138 +713,135 @@ onMounted(() => {
         <button class="btn btn-sm btn-outline-danger rounded-pill" @click="loadData">Retry</button>
       </div>
 
-      <div class="table-responsive">
-        <table class="table align-middle mb-0 custom-amms-table">
-          <thead>
-            <tr>
-              <th class="ps-4" style="width: 70px;"># ID</th>
-              <th>Full Name & Gender</th>
-              <th>Phone Number</th>
-              <th>Location Branch</th>
-              <th>Age Group</th>
-              <th>Registration Date</th>
-              <th>Exemption</th>
-              <th>Status</th>
-              <th class="text-end pe-4" style="width: 170px;">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <!-- Loading Skeleton -->
-            <template v-if="loading && rawMembersList.length === 0">
-              <tr v-for="i in 5" :key="i">
-                <td class="ps-4"><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-8"></span></td>
-                <td><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-4"></span></td>
-                <td><span class="placeholder col-4"></span></td>
-                <td class="pe-4 text-end"><span class="placeholder col-10"></span></td>
-              </tr>
-            </template>
+      
+    <!-- Replaced by AppTable Component -->
+    <AppTable
+      :columns="[
+        { key: 'id', label: '# ID', width: '70px', headerClass: 'ps-4 d-none d-xl-table-cell', cellClass: 'ps-4 font-monospace text-muted text-xs d-none d-xl-table-cell' },
+        { key: 'full-name-gender', label: 'Full Name & Gender', cellClass: 'fw-semibold text-primary' },
+        { key: 'contact-info', label: 'Contact Info', headerClass: 'd-none d-md-table-cell', cellClass: 'text-xs text-body d-none d-md-table-cell' },
+        { key: 'location-branch', label: 'Location Branch', headerClass: 'd-none d-lg-table-cell', cellClass: 'text-xs fw-medium text-body d-none d-lg-table-cell' },
+        { key: 'age-group', label: 'Age Group', headerClass: 'd-none d-lg-table-cell', cellClass: 'text-xs text-secondary-amms d-none d-lg-table-cell' },
+        { key: 'registration-date', label: 'Registration Date', headerClass: 'd-none d-xl-table-cell', cellClass: 'font-monospace text-xs text-body d-none d-xl-table-cell' },
+        { key: 'exemption', label: 'Exemption', headerClass: 'd-none d-sm-table-cell', cellClass: 'd-none d-sm-table-cell' },
+        { key: 'status', label: 'Status' },
+        { key: 'actions', label: 'Actions', align: 'right', width: '130px', headerClass: 'pe-4', cellClass: 'pe-4' }
+      ]"
+      :items="paginatedMembers"
+      :loading="loading"
+      emptyIcon="bi bi-person-x"
+      emptyTitle="No members found matching criteria"
+      emptySubtitle="Click 'Register New Member' above to add a member to the registry."
 
-            <!-- Empty State -->
-            <tr v-else-if="filteredMembers.length === 0">
-              <td colspan="9" class="text-center py-5 text-muted">
-                <i class="bi bi-person-x fs-1 d-block mb-2 text-opacity-50"></i>
-                <p class="mb-0 fw-medium">No members found matching criteria</p>
-                <small>Click "Register New Member" above to add a member to the registry.</small>
-              </td>
-            </tr>
+    >
+      <template #cell-id="{ item }">
+#{{ item.id }}
+      </template>
+      <template #cell-full-name-gender="{ item }">
 
-            <!-- Member Rows -->
-            <tr v-for="m in paginatedMembers" :key="m.id">
-              <td class="ps-4 font-monospace text-muted text-xs">#{{ m.id }}</td>
-              <td class="fw-semibold text-primary">
                 <div class="d-flex align-items-center gap-2.5">
-                  <div v-if="m.picture" class="avatar-badge rounded-circle overflow-hidden d-flex align-items-center justify-content-center">
-                    <img :src="getMemberPhotoUrl(m.picture)" :alt="m.first_name" class="w-100 h-100 object-fit-cover" />
-                  </div>
-                  <div v-else class="avatar-badge rounded-circle d-flex align-items-center justify-content-center text-primary font-monospace fw-bold text-xs">
-                    {{ m.first_name[0] }}{{ m.last_name[0] }}
-                  </div>
+                  <MemberAvatar :member="item" />
                   <div>
-                    <span class="d-block">{{ m.first_name }} {{ m.last_name }}</span>
+                    <span class="d-block">{{ item.first_name }} {{ item.last_name }}</span>
                     <small class="text-muted text-xs text-capitalize">
-                      <i :class="m.gender === 'female' ? 'bi bi-gender-female text-danger' : 'bi bi-gender-male text-primary'" class="me-1"></i>{{ m.gender || 'male' }}
+                      <i :class="item.gender === 'female' ? 'bi bi-gender-female text-danger' : 'bi bi-gender-male text-primary'" class="me-1"></i>{{ item.gender || 'male' }}
                     </small>
                   </div>
                 </div>
-              </td>
-              <td class="font-monospace text-xs text-body">
-                <i class="bi bi-telephone text-muted me-1"></i> {{ m.phone }}
-              </td>
-              <td class="text-xs fw-medium text-body">
-                <i class="bi bi-geo-alt text-muted me-1"></i> {{ m.location?.name || getLocationName(m.location_id) }}
-              </td>
-              <td class="text-xs text-secondary-amms">
-                {{ m.age_group?.name || getAgeGroupName(m.age_group_id) }}
-              </td>
-              <td class="font-monospace text-xs text-body">
-                {{ formatDateDisplay(m.registration_date) }}
-              </td>
-              <td>
+              
+      </template>
+      <template #cell-contact-info="{ item }">
+
+                <div class="font-monospace">
+                  <i class="bi bi-telephone text-muted me-1"></i>{{ item.phone }}
+                </div>
+                <div v-if="item.email" class="text-muted text-xs text-truncate font-monospace" style="max-width: 170px;" :title="item.email">
+                  <i class="bi bi-envelope text-primary me-1"></i>{{ item.email }}
+                </div>
+                <div v-else class="text-muted text-xs font-monospace text-opacity-50">
+                  <i class="bi bi-envelope text-muted me-1 opacity-50"></i>—
+                </div>
+              
+      </template>
+      <template #cell-location-branch="{ item }">
+
+                <i class="bi bi-geo-alt text-muted me-1"></i> {{ item.location?.name || getLocationName(item.location_id) }}
+              
+      </template>
+      <template #cell-age-group="{ item }">
+
+                {{ item.age_group?.name || getAgeGroupName(item.age_group_id) }}
+              
+      </template>
+      <template #cell-registration-date="{ item }">
+
+                {{ formatDateDisplay(item.registration_date) }}
+              
+      </template>
+      <template #cell-exemption="{ item }">
+
                 <span 
-                  class="badge px-2 py-0.8 rounded-pill text-xs"
-                  :class="m.fee_exemption === 'yes' ? 'bg-warning bg-opacity-15 text-warning border border-warning border-opacity-25' : 'bg-light text-muted'"
+                  class="badge px-2.5 py-1 rounded-pill text-xs fw-semibold"
+                  :class="item.fee_exemption === 'yes' ? 'badge-exempted' : 'bg-light text-muted border'"
                 >
-                  {{ m.fee_exemption === 'yes' ? 'Exempted' : 'Standard' }}
+                  {{ item.fee_exemption === 'yes' ? 'Exempted' : 'Standard' }}
                 </span>
-              </td>
-              <td>
+              
+      </template>
+      <template #cell-status="{ item }">
+
                 <span 
                   class="badge px-2.5 py-1 rounded-pill text-xs fw-semibold"
                   :class="{
-                    'bg-success bg-opacity-10 text-success border border-success border-opacity-20': m.member_status === 'active',
-                    'bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-20': m.member_status === 'inactive',
-                    'bg-dark bg-opacity-10 text-dark border border-dark border-opacity-20': m.member_status === 'deceased'
+                    'bg-success bg-opacity-10 text-success border border-success border-opacity-20': item.member_status === 'active',
+                    'bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-20': item.member_status === 'inactive',
+                    'bg-dark bg-opacity-10 text-dark border border-dark border-opacity-20': item.member_status === 'deceased'
                   }"
                 >
                   <i :class="{
-                    'bi bi-check-circle-fill me-1': m.member_status === 'active',
-                    'bi bi-dash-circle-fill me-1': m.member_status === 'inactive',
-                    'bi bi-slash-circle-fill me-1': m.member_status === 'deceased'
+                    'bi bi-check-circle-fill me-1': item.member_status === 'active',
+                    'bi bi-dash-circle-fill me-1': item.member_status === 'inactive',
+                    'bi bi-slash-circle-fill me-1': item.member_status === 'deceased'
                   }"></i>
-                  {{ m.member_status === 'deceased' ? 'Deceased' : (m.member_status === 'active' ? 'Active' : 'Inactive') }}
+                  {{ item.member_status === 'deceased' ? 'Deceased' : (item.member_status === 'active' ? 'Active' : 'Inactive') }}
                 </span>
-              </td>
-              <td class="pe-4 text-end">
-                <div class="d-flex align-items-center justify-content-end gap-1">
+              
+      </template>
+      <template #cell-actions="{ item }">
+
+                <div class="d-flex align-items-center justify-content-end gap-2">
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
-                    @click="openViewModal(m)"
+                    @click="openViewModal(item)"
                     title="View Member Profile"
                   >
                     <i class="bi bi-eye-fill text-primary"></i>
                   </button>
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
-                    @click="exportMemberProfilePdf(m.id)"
+                    @click="exportMemberProfilePdf(item.id)"
                     title="Download Profile Dossier PDF"
                   >
                     <i class="bi bi-file-earmark-person text-danger"></i>
                   </button>
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
-                    @click="openEditModal(m)"
+                    @click="openEditModal(item)"
                     title="Edit Member Details"
                   >
                     <i class="bi bi-pencil-fill text-muted"></i>
                   </button>
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn hover-danger" 
-                    @click="promptDelete(m)"
+                    @click="promptDelete(item)"
                     title="Delete Member"
                   >
                     <i class="bi bi-trash-fill text-danger"></i>
                   </button>
                 </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+              
+      </template>
+    </AppTable>
 
       <!-- Reusable Pagination Control Footer -->
       <PaginationControl
@@ -797,25 +865,36 @@ onMounted(() => {
       <div class="p-3 bg-body-tertiary rounded-3 border mb-3">
         
         <!-- Member Photo Banner if available -->
-        <div v-if="viewingMember?.picture" class="d-flex align-items-center gap-3 mb-3 pb-3 border-bottom">
+        <div v-if="getMemberPhotoPath(viewingMember) && !viewingPhotoError" class="d-flex align-items-center gap-3 mb-3 pb-3 border-bottom">
           <div class="avatar-photo-frame rounded-circle overflow-hidden border border-2 border-primary shadow-xs" style="width: 64px; height: 64px;">
-            <img :src="getMemberPhotoUrl(viewingMember.picture)" :alt="viewingMember.first_name" class="w-100 h-100 object-fit-cover" />
+            <img 
+              :src="getMemberPhotoUrl(getMemberPhotoPath(viewingMember))" 
+              :alt="viewingMember?.first_name" 
+              class="w-100 h-100 object-fit-cover" 
+              @error="viewingPhotoError = true"
+            />
           </div>
           <div>
-            <h6 class="fw-bold text-primary mb-0">{{ viewingMember.first_name }} {{ viewingMember.last_name }}</h6>
-            <small class="text-muted text-xs font-monospace">Member ID: #{{ viewingMember.id }}</small>
+            <h6 class="fw-bold text-primary mb-0">{{ viewingMember?.first_name }} {{ viewingMember?.last_name }}</h6>
+            <small class="text-muted text-xs font-monospace">Member ID: #{{ viewingMember?.id }}</small>
           </div>
         </div>
 
         <div class="row g-3">
-          <div class="col-md-6">
+          <div class="col-md-4">
             <span class="text-xs text-muted text-uppercase fw-semibold d-block">Full Member Name</span>
             <span class="fw-bold text-primary fs-6">{{ viewingMember?.first_name }} {{ viewingMember?.last_name }}</span>
           </div>
-          <div class="col-md-6">
+          <div class="col-md-4">
             <span class="text-xs text-muted text-uppercase fw-semibold d-block">Gender & Phone</span>
             <span class="fw-bold text-body text-xs text-capitalize">
               {{ viewingMember?.gender }} • <span class="font-monospace">{{ viewingMember?.phone }}</span>
+            </span>
+          </div>
+          <div class="col-md-4">
+            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Email Address</span>
+            <span class="fw-bold text-primary text-xs font-monospace">
+              {{ viewingMember?.email || '—' }}
             </span>
           </div>
           <div class="col-md-6">
@@ -844,7 +923,7 @@ onMounted(() => {
           </div>
           <div class="col-md-4">
             <span class="text-xs text-muted text-uppercase fw-semibold d-block">Fee Exemption</span>
-            <span class="badge px-2.5 py-1 rounded-pill text-xs" :class="viewingMember?.fee_exemption === 'yes' ? 'bg-warning bg-opacity-15 text-warning border border-warning border-opacity-25' : 'bg-light text-muted'">
+            <span class="badge px-2.5 py-1 rounded-pill text-xs fw-semibold" :class="viewingMember?.fee_exemption === 'yes' ? 'badge-exempted' : 'bg-light text-muted border'">
               {{ viewingMember?.fee_exemption === 'yes' ? 'Exempted' : 'Standard' }}
             </span>
           </div>
@@ -878,320 +957,24 @@ onMounted(() => {
       </div>
     </ViewDetailModal>
 
-    <!-- Custom Delete Confirmation Modal -->
-    <div v-if="isDeleteModalOpen" class="modal-backdrop fade show" style="z-index: 1060;"></div>
-    
-    <div 
-      v-if="isDeleteModalOpen" 
-      class="modal fade show d-block" 
-      tabindex="-1" 
-      role="dialog"
-      style="z-index: 1065;"
-      @click.self="cancelDelete"
-    >
-      <div class="modal-dialog modal-dialog-centered modal-sm">
-        <div class="modal-content amms-surface border-0 shadow-lg rounded-4 overflow-hidden text-center p-4">
-          
-          <div class="d-inline-flex align-items-center justify-content-center bg-danger bg-opacity-10 text-danger rounded-circle p-3 mx-auto mb-3" style="width: 56px; height: 56px;">
-            <i class="bi bi-trash3-fill fs-3"></i>
-          </div>
+    <DeleteConfirmModal
+      v-model="isDeleteModalOpen"
+      message="Are you sure you want to permanently delete this member record?"
+        :itemTitle="itemToDelete ? `&quot;${itemToDelete.first_name} ${itemToDelete.last_name}&quot;` : ''"
+      :loading="isDeleting"
+      confirmText="Delete Member"
+      @confirm="confirmDelete"
+    />
 
-          <h5 class="fw-bold text-primary text-sm mb-1">Confirm Deletion</h5>
-          <p class="text-secondary-amms text-xs mb-2">Are you sure you want to permanently delete this member record?</p>
-          
-          <p class="fw-bold text-danger text-xs mb-4 font-monospace bg-danger bg-opacity-10 py-1.5 px-3 rounded-3 d-inline-block mx-auto">
-            "{{ itemToDelete?.first_name }} {{ itemToDelete?.last_name }}"
-          </p>
-
-          <div class="d-flex align-items-center justify-content-center gap-2">
-            <button 
-              type="button" 
-              class="btn btn-sm btn-light border rounded-pill px-3.5 text-xs fw-semibold" 
-              @click="cancelDelete"
-            >
-              Cancel
-            </button>
-            <button 
-              type="button" 
-              class="btn btn-sm btn-danger rounded-pill px-4 text-xs fw-semibold d-flex align-items-center gap-1.5 shadow-sm"
-              :disabled="isDeleting"
-              @click="confirmDelete"
-            >
-              <span v-if="isDeleting" class="spinner-border spinner-border-sm" role="status"></span>
-              <span>{{ isDeleting ? 'Deleting...' : 'Delete Member' }}</span>
-            </button>
-          </div>
-
-        </div>
-      </div>
-    </div>
-
-    <!-- Create / Edit Member Vue Pure Modal -->
-    <div v-if="isModalOpen" class="modal-backdrop fade show"></div>
-    
-    <div 
-      v-if="isModalOpen" 
-      class="modal fade show d-block" 
-      tabindex="-1" 
-      role="dialog"
-      @click.self="closeModal"
-    >
-      <div class="modal-dialog modal-dialog-centered modal-lg">
-        <div class="modal-content amms-surface border-0 shadow-lg rounded-4 overflow-hidden">
-          
-          <div class="modal-header border-bottom px-4 py-3 bg-body-tertiary position-relative justify-content-center">
-            <h5 class="modal-title fw-bold text-primary text-sm mb-0 text-center">
-              <i class="bi bi-person-plus me-1.5 amms-accent"></i>
-              <span>{{ editingMember ? 'Edit Member Profile' : 'Register New Member' }}</span>
-            </h5>
-            <button 
-              type="button" 
-              class="btn-close position-absolute end-0 me-3" 
-              @click="closeModal"
-              aria-label="Close"
-            ></button>
-          </div>
-
-          <form @submit.prevent="handleSave">
-            <div class="modal-body p-4">
-              <div v-if="modalError" class="alert alert-danger py-2 px-3 mb-3 rounded-3 small">
-                <i class="bi bi-exclamation-triangle-fill me-1"></i> {{ modalError }}
-              </div>
-
-              <!-- Photo Upload & Cropping Section -->
-              <h6 class="fw-bold text-primary text-uppercase text-xs tracking-wider mb-2">
-                <i class="bi bi-camera me-1"></i> Member Photograph (Optional)
-              </h6>
-              <div class="d-flex align-items-center gap-3 p-3 bg-body-tertiary rounded-3 border mb-3">
-                <div class="position-relative" style="width: 64px; height: 64px;">
-                  <img 
-                    v-if="photoPreview" 
-                    :src="photoPreview" 
-                    class="w-100 h-100 rounded-circle object-fit-cover border border-2 border-primary" 
-                    alt="Photo Preview"
-                  />
-                  <div 
-                    v-else 
-                    class="w-100 h-100 rounded-circle bg-secondary bg-opacity-10 d-flex align-items-center justify-content-center text-muted"
-                  >
-                    <i class="bi bi-person fs-3"></i>
-                  </div>
-                </div>
-
-                <div class="flex-grow-1">
-                  <input
-                    ref="photoFileInput"
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp,image/jpg"
-                    class="form-control form-control-sm text-xs"
-                    @change="onPhotoSelected"
-                  />
-                  <div class="d-flex align-items-center justify-content-between mt-1">
-                    <small class="text-muted text-xs">JPG, PNG or WebP (Max 5MB). Processed into WebP by backend.</small>
-                    <button 
-                      v-if="photoPreview" 
-                      type="button" 
-                      class="btn btn-link btn-xs text-danger text-decoration-none p-0"
-                      @click="clearPhoto"
-                    >
-                      Remove Photo
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Registration & Personal Identity -->
-              <h6 class="fw-bold text-primary text-uppercase text-xs tracking-wider mb-2">Registration & Personal Identity</h6>
-              <div class="row g-3 mb-3">
-                <div class="col-md-6">
-                  <label for="regDate" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Registration Date *</label>
-                  <ClientOnly>
-                    <VDatePicker v-model="registrationDate" mode="date" string-format="yyyy-MM-dd" :masks="{ input: 'DD-MM-YYYY' }">
-                      <template #default="{ inputValue, inputEvents }">
-                        <div class="input-group">
-                          <span class="input-group-text bg-transparent border-end-0 text-muted">
-                            <i class="bi bi-calendar-event text-primary"></i>
-                          </span>
-                          <input
-                            :value="inputValue"
-                            v-on="inputEvents"
-                            class="form-control border-start-0 ps-1 py-2 text-sm bg-body font-monospace"
-                            placeholder="DD-MM-YYYY"
-                            readonly
-                          />
-                        </div>
-                      </template>
-                    </VDatePicker>
-                  </ClientOnly>
-                </div>
-
-                <div class="col-md-6">
-                  <div class="d-flex align-items-center justify-content-between mb-1">
-                    <label for="dateOfBirth" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase mb-0">Date of Birth *</label>
-                    <span v-if="calculatedAge !== null" class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-20 rounded-pill text-xs">
-                      Age: {{ calculatedAge }} Years
-                    </span>
-                  </div>
-                  <ClientOnly>
-                    <VDatePicker v-model="dateOfBirth" mode="date" string-format="yyyy-MM-dd" :masks="{ input: 'DD-MM-YYYY' }">
-                      <template #default="{ inputValue, inputEvents }">
-                        <div class="input-group">
-                          <span class="input-group-text bg-transparent border-end-0 text-muted">
-                            <i class="bi bi-calendar-heart text-primary"></i>
-                          </span>
-                          <input
-                            :value="inputValue"
-                            v-on="inputEvents"
-                            class="form-control border-start-0 ps-1 py-2 text-sm bg-body font-monospace"
-                            placeholder="DD-MM-YYYY"
-                            readonly
-                          />
-                        </div>
-                      </template>
-                    </VDatePicker>
-                  </ClientOnly>
-                </div>
-
-                <div class="col-md-4">
-                  <label for="firstName" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">First Name *</label>
-                  <input id="firstName" v-model="firstName" type="text" class="form-control py-2 text-sm" placeholder="e.g. Alice" required />
-                </div>
-                <div class="col-md-4">
-                  <label for="lastName" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Last Name *</label>
-                  <input id="lastName" v-model="lastName" type="text" class="form-control py-2 text-sm" placeholder="e.g. Smith" required />
-                </div>
-                <div class="col-md-4">
-                  <label for="memberGender" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Gender *</label>
-                  <select id="memberGender" v-model="gender" class="form-select py-2 text-sm" required>
-                    <option value="male">Male</option>
-                    <option value="female">Female</option>
-                  </select>
-                </div>
-
-                <div class="col-md-6">
-                  <label for="fathersName" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Father's Name</label>
-                  <input id="fathersName" v-model="fathersName" type="text" class="form-control py-2 text-sm" placeholder="e.g. Bob Smith" />
-                </div>
-                <div class="col-md-6">
-                  <label for="mothersName" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Mother's Name</label>
-                  <input id="mothersName" v-model="mothersName" type="text" class="form-control py-2 text-sm" placeholder="e.g. Carol Smith" />
-                </div>
-              </div>
-
-              <hr class="my-3 opacity-10" />
-
-              <!-- Demographics & Classification Row -->
-              <h6 class="fw-bold text-primary text-uppercase text-xs tracking-wider mb-2">Demographics & Classification</h6>
-              <div class="row g-3 mb-3">
-                <div class="col-md-6">
-                  <label for="phone" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Phone Number *</label>
-                  <input id="phone" v-model="phone" type="tel" maxlength="12" class="form-control py-2 text-sm font-monospace" placeholder="255755555555" required />
-                </div>
-                <div class="col-md-6">
-                  <label for="maritalStatus" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Marital Status *</label>
-                  <select id="maritalStatus" v-model="maritalStatus" class="form-select py-2 text-sm" required>
-                    <option value="single">Single</option>
-                    <option value="married">Married</option>
-                    <option value="divorced">Divorced</option>
-                    <option value="widowed">Widowed</option>
-                  </select>
-                </div>
-
-                <div class="col-md-6">
-                  <label for="locId" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Location Branch *</label>
-                  <select id="locId" v-model="locationId" class="form-select py-2 text-sm" required>
-                    <option v-for="loc in locations" :key="loc.id" :value="loc.id">{{ loc.name }}</option>
-                  </select>
-                </div>
-                <div class="col-md-6">
-                  <label class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">
-                    Age Group
-                    <span class="text-primary text-lowercase fw-normal">(auto-computed)</span>
-                  </label>
-                  <div class="form-control py-2 text-sm bg-body-tertiary d-flex align-items-center justify-content-between border shadow-xs" style="height: 38px;">
-                    <span class="fw-semibold text-primary d-flex align-items-center gap-1.5">
-                      <i class="bi bi-people-fill amms-accent"></i>
-                      <span>{{ currentMatchedAgeGroupName }}</span>
-                    </span>
-                    <span v-if="calculatedAge !== null" class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-20 rounded-pill text-xs font-monospace">
-                      {{ calculatedAge }} yrs
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <hr class="my-3 opacity-10" />
-
-              <!-- System Status & Exemptions -->
-              <h6 class="fw-bold text-primary text-uppercase text-xs tracking-wider mb-2">Membership Status & Exemptions</h6>
-              <div class="row g-3">
-                <div class="col-md-6">
-                  <label for="memStatus" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Membership Status *</label>
-                  <select id="memStatus" v-model="memberStatus" class="form-select py-2 text-sm" required>
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                    <option value="deceased">Deceased</option>
-                  </select>
-                </div>
-                <div class="col-md-6">
-                  <label class="form-label text-xs fw-semibold text-secondary-amms text-uppercase d-block">
-                    Fee Exemption
-                  </label>
-                  <div class="p-2.5 bg-body-tertiary rounded-3 border d-flex align-items-center justify-content-between">
-                    <div class="d-flex align-items-center gap-2">
-                      <i 
-                        :class="feeExemption === 'yes' ? 'bi bi-shield-slash-fill text-warning' : 'bi bi-shield-check text-success'" 
-                        class="fs-5"
-                      ></i>
-                      <div>
-                        <span class="d-block fw-semibold text-xs text-body">
-                          {{ feeExemption === 'yes' ? 'Fee Exempted' : 'Standard Fees' }}
-                        </span>
-                        <small class="text-muted" style="font-size: 0.725rem;">
-                          {{ feeExemption === 'yes' ? 'Excluded from regular dues' : 'Applies standard fee schedule' }}
-                        </small>
-                      </div>
-                    </div>
-
-                    <div class="form-check form-switch m-0 ps-0 pe-1 d-flex align-items-center">
-                      <input 
-                        id="feeExemptionToggle" 
-                        class="form-check-input ms-0 cursor-pointer" 
-                        type="checkbox" 
-                        role="switch"
-                        style="width: 2.6em; height: 1.4em;"
-                        :checked="feeExemption === 'yes'"
-                        @change="feeExemption = ($event.target as HTMLInputElement).checked ? 'yes' : 'no'"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-            </div>
-
-            <div class="modal-footer border-top px-4 py-3 bg-body-tertiary">
-              <button 
-                type="button" 
-                class="btn btn-sm btn-outline-secondary rounded-pill px-3" 
-                @click="closeModal"
-              >
-                Cancel
-              </button>
-              <button 
-                type="submit" 
-                class="btn btn-sm btn-primary rounded-pill px-4 fw-semibold d-flex align-items-center gap-2 shadow-sm"
-                :disabled="isSubmitting"
-              >
-                <span v-if="isSubmitting" class="spinner-border spinner-border-sm" role="status"></span>
-                <span>{{ isSubmitting ? 'Saving Member...' : (editingMember ? 'Update Member' : 'Register Member') }}</span>
-              </button>
-            </div>
-          </form>
-
-        </div>
-      </div>
-    </div>
+    <!-- Shared Member Modal Component -->
+    <SharedMemberModal
+      v-if="isModalOpen"
+      :locations="locations || []"
+      :age-groups="ageGroups || []"
+      :editing-member="editingMember"
+      @close="closeModal"
+      @saved="loadData"
+    />
 
   </div>
 </template>
@@ -1249,3 +1032,5 @@ onMounted(() => {
   background-color: rgba(220, 53, 69, 0.12) !important;
 }
 </style>
+
+

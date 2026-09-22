@@ -1,0 +1,195 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { optimizeImageFile } from '../../app/utils/image'
+
+describe('optimizeImageFile', () => {
+  it('returns small files (<= 1MB) directly without processing', async () => {
+    const smallContent = new Uint8Array(500 * 1024) // 500 KB
+    const smallFile = new File([smallContent], 'avatar.jpg', { type: 'image/jpeg' })
+
+    const result = await optimizeImageFile(smallFile)
+    expect(result).toBe(smallFile)
+  })
+
+  describe('large files (> 1MB)', () => {
+    let originalFileReader: typeof FileReader
+    let originalImage: typeof Image
+    let originalCreateElement: typeof document.createElement
+
+    beforeEach(() => {
+      originalFileReader = globalThis.FileReader
+      originalImage = globalThis.Image
+      originalCreateElement = document.createElement.bind(document)
+    })
+
+    afterEach(() => {
+      globalThis.FileReader = originalFileReader
+      globalThis.Image = originalImage
+      document.createElement = originalCreateElement
+      vi.restoreAllMocks()
+    })
+
+    const setupMocks = (options: {
+      imgWidth: number
+      imgHeight: number
+      hasContext?: boolean
+      hasBlob?: boolean
+      triggerReaderError?: boolean
+      triggerImgError?: boolean
+    }) => {
+      const {
+        imgWidth,
+        imgHeight,
+        hasContext = true,
+        hasBlob = true,
+        triggerReaderError = false,
+        triggerImgError = false
+      } = options
+
+      // Mock FileReader
+      class MockFileReader {
+        onload: ((e: { target: { result: string } }) => void) | null = null
+        onerror: (() => void) | null = null
+        readAsDataURL() {
+          setTimeout(() => {
+            if (triggerReaderError) {
+              this.onerror?.()
+            } else {
+              this.onload?.({ target: { result: 'data:image/jpeg;base64,mockdata' } })
+            }
+          }, 0)
+        }
+      }
+      globalThis.FileReader = MockFileReader as unknown as typeof FileReader
+
+      // Mock Image
+      class MockImage {
+        width = imgWidth
+        height = imgHeight
+        onload: (() => void) | null = null
+        onerror: (() => void) | null = null
+        private _src = ''
+
+        get src() {
+          return this._src
+        }
+        set src(val: string) {
+          this._src = val
+          setTimeout(() => {
+            if (triggerImgError) {
+              this.onerror?.()
+            } else {
+              this.onload?.()
+            }
+          }, 0)
+        }
+      }
+      globalThis.Image = MockImage as unknown as typeof Image
+
+      // Mock Canvas
+      const drawImageSpy = vi.fn()
+      const mockCtx = hasContext
+        ? {
+            drawImage: drawImageSpy
+          }
+        : null
+
+      document.createElement = vi.fn((tagName: string) => {
+        if (tagName === 'canvas') {
+          return {
+            width: 0,
+            height: 0,
+            getContext: () => mockCtx,
+            toBlob: (cb: (b: Blob | null) => void, mime: string, _q: number) => {
+              if (hasBlob) {
+                cb(new Blob(['processed-image-data'], { type: mime }))
+              } else {
+                cb(null)
+              }
+            }
+          } as unknown as HTMLCanvasElement
+        }
+        return originalCreateElement(tagName)
+      }) as unknown as typeof document.createElement
+
+      return { drawImageSpy }
+    }
+
+    it('downscales wide landscape images (width > height)', async () => {
+      setupMocks({ imgWidth: 2400, imgHeight: 1200 })
+      const largeContent = new Uint8Array(1.5 * 1024 * 1024)
+      const largeFile = new File([largeContent], 'landscape.jpg', { type: 'image/jpeg' })
+
+      const result = await optimizeImageFile(largeFile, 1200)
+      expect(result).not.toBe(largeFile)
+      expect(result.name).toBe('landscape.jpg')
+      expect(result.type).toBe('image/jpeg')
+    })
+
+    it('downscales tall portrait images (height > width)', async () => {
+      setupMocks({ imgWidth: 1000, imgHeight: 2000 })
+      const largeContent = new Uint8Array(1.5 * 1024 * 1024)
+      const largeFile = new File([largeContent], 'portrait.png', { type: 'image/png' })
+
+      const result = await optimizeImageFile(largeFile, 1000)
+      expect(result).not.toBe(largeFile)
+      expect(result.name).toBe('portrait.png')
+      expect(result.type).toBe('image/png')
+    })
+
+    it('recompresses images within maxDimension without scaling', async () => {
+      setupMocks({ imgWidth: 800, imgHeight: 600 })
+      const largeContent = new Uint8Array(1.2 * 1024 * 1024)
+      const largeFile = new File([largeContent], 'dense.jpg', { type: 'image/jpeg' })
+
+      const result = await optimizeImageFile(largeFile, 1200)
+      expect(result).not.toBe(largeFile)
+      expect(result.name).toBe('dense.jpg')
+    })
+
+    it('converts non-PNG files to JPEG name and type', async () => {
+      setupMocks({ imgWidth: 1600, imgHeight: 1200 })
+      const largeContent = new Uint8Array(1.5 * 1024 * 1024)
+      const largeFile = new File([largeContent], 'photo.webp', { type: 'image/webp' })
+
+      const result = await optimizeImageFile(largeFile, 1200)
+      expect(result.name).toBe('photo.jpg')
+      expect(result.type).toBe('image/jpeg')
+    })
+
+    it('returns original file if canvas context is unavailable', async () => {
+      setupMocks({ imgWidth: 2000, imgHeight: 1500, hasContext: false })
+      const largeContent = new Uint8Array(1.5 * 1024 * 1024)
+      const largeFile = new File([largeContent], 'photo.jpg', { type: 'image/jpeg' })
+
+      const result = await optimizeImageFile(largeFile)
+      expect(result).toBe(largeFile)
+    })
+
+    it('returns original file if canvas.toBlob returns null', async () => {
+      setupMocks({ imgWidth: 2000, imgHeight: 1500, hasBlob: false })
+      const largeContent = new Uint8Array(1.5 * 1024 * 1024)
+      const largeFile = new File([largeContent], 'photo.jpg', { type: 'image/jpeg' })
+
+      const result = await optimizeImageFile(largeFile)
+      expect(result).toBe(largeFile)
+    })
+
+    it('returns original file if FileReader triggers error', async () => {
+      setupMocks({ imgWidth: 2000, imgHeight: 1500, triggerReaderError: true })
+      const largeContent = new Uint8Array(1.5 * 1024 * 1024)
+      const largeFile = new File([largeContent], 'corrupt.jpg', { type: 'image/jpeg' })
+
+      const result = await optimizeImageFile(largeFile)
+      expect(result).toBe(largeFile)
+    })
+
+    it('returns original file if Image triggers error', async () => {
+      setupMocks({ imgWidth: 2000, imgHeight: 1500, triggerImgError: true })
+      const largeContent = new Uint8Array(1.5 * 1024 * 1024)
+      const largeFile = new File([largeContent], 'corrupt.jpg', { type: 'image/jpeg' })
+
+      const result = await optimizeImageFile(largeFile)
+      expect(result).toBe(largeFile)
+    })
+  })
+})

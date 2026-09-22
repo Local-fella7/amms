@@ -2,12 +2,29 @@
 import { ref, onMounted } from 'vue'
 import { z } from 'zod'
 import { useAuthStore } from '~/stores/useAuthStore'
+import type { User } from '~/types'
 import { apiUrl, useApiBase } from '~/composables/useApiBase'
+
+interface LoginResponse {
+  data?: {
+    token?: string
+    jwt_token?: string
+    user?: User
+    requires_password_change?: boolean
+  }
+  token?: string
+  jwt_token?: string
+  user?: User
+  requires_password_change?: boolean
+  message?: string
+  error?: string
+}
 
 definePageMeta({
   layout: 'auth'
 })
 
+const config = useRuntimeConfig()
 const authStore = useAuthStore()
 const apiBase = useApiBase()
 const email = ref('admin@amms.local')
@@ -17,6 +34,35 @@ const showPassword = ref(false)
 const loading = ref(false)
 const errorMessage = ref('')
 const currentTheme = ref('light')
+
+const logoPath = ref<string | null>('uploads/logos/logo.jpg')
+const logoLoadError = ref(false)
+
+const backendBase = computed(() => {
+  const backendUrl = (config.public?.backendUrl as string) || ''
+  if (backendUrl) return backendUrl.replace(/\/+$/, '')
+  const api = (config.public?.apiBase as string) || ''
+  if (/^https?:\/\//i.test(api)) {
+    return api.replace(/\/api\/?$/, '')
+  }
+  return ''
+})
+
+const logoUrl = computed(() => {
+  if (logoLoadError.value || !logoPath.value) return ''
+  const cleanPath = logoPath.value.replace(/^\/+/, '')
+  const base = backendBase.value ? backendBase.value.replace(/\/+$/, '') : ''
+  return base ? `${base}/${cleanPath}` : `/${cleanPath}`
+})
+
+onMounted(() => {
+  if (import.meta.client) {
+    const cached = localStorage.getItem('amms_association_logo')
+    if (cached) {
+      logoPath.value = cached
+    }
+  }
+})
 
 const toggleTheme = () => {
   currentTheme.value = currentTheme.value === 'light' ? 'dark' : 'light'
@@ -60,7 +106,7 @@ const handleLogin = async () => {
     const loginUrl = apiUrl('/api/auth/login', apiBase)
     console.log('Sending login request to:', loginUrl)
     
-    const response: any = await $fetch(loginUrl, {
+    const response = await $fetch<LoginResponse>(loginUrl, {
       method: 'POST',
       body: {
         email: email.value,
@@ -86,9 +132,9 @@ const handleLogin = async () => {
     } else {
       errorMessage.value = response?.message || response?.error || 'Login failed. Please check your credentials.'
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Login submit error:', err)
-    errorMessage.value = err.data?.message || err.response?._data?.message || err.message || 'An error occurred during authentication.'
+    errorMessage.value = extractErrorMessage(err, 'An error occurred during authentication.')
   } finally {
     loading.value = false
   }
@@ -126,8 +172,8 @@ const submitPasswordChange = async () => {
 
     isChangePasswordModalOpen.value = false
     await navigateTo('/', { replace: true })
-  } catch (err: any) {
-    changePasswordError.value = err.data?.message || err.response?._data?.message || err.message || 'Failed to update password'
+  } catch (err: unknown) {
+    changePasswordError.value = extractErrorMessage(err, 'Failed to update password')
   } finally {
     isChangingPassword.value = false
   }
@@ -135,68 +181,52 @@ const submitPasswordChange = async () => {
 </script>
 
 <template>
-  <div class="container-fluid p-0 min-vh-100 d-flex">
-    <div class="row g-0 w-100 min-vh-100">
+  <div class="container-fluid p-0 flex-grow-1 d-flex flex-column" style="min-height: 0;">
+    <div class="row g-0 flex-grow-1" style="min-height: 0;">
       
       <!-- Left Hero Banner Section -->
-      <div class="col-lg-6 d-none d-lg-flex flex-column justify-content-between p-5 text-white position-relative left-banner">
+      <div class="col-lg-6 d-none d-lg-flex flex-column justify-content-between p-5 text-white position-relative left-banner" style="overflow-y: auto; overflow-x: hidden;">
         
         <!-- Brand Header (Enlarged & Centered) -->
-        <div class="position-relative z-1 text-center w-100 py-3">
-          <div class="brand-icon-wrapper rounded-4 d-inline-flex align-items-center justify-content-center mb-3 shadow">
-            <i class="bi bi-shield-check display-4 amms-accent"></i>
+        <div class="position-relative z-1 text-center w-100 py-3 mt-4">
+          <div class="mb-4">
+            <img v-if="logoUrl" :src="logoUrl" @error="logoLoadError = true" alt="Logo" class="login-logo shadow-sm" />
+            <div v-else class="brand-icon-wrapper rounded-4 d-inline-flex align-items-center justify-content-center shadow-sm">
+              <i class="bi bi-shield-check display-4"></i>
+            </div>
           </div>
           <div>
             <h1 class="display-3 fw-bold mb-1 text-white tracking-tight">ASA</h1>
-            <p class="fs-4 text-white-50 fw-normal mb-0">Arusha Somali Association</p>
+            <p class="fs-4 fw-normal mb-0 text-white-50">Arusha Somali Association</p>
           </div>
         </div>
 
         <!-- Hero Content -->
-        <div class="position-relative z-1 my-auto py-5">
-          <div class="badge amms-badge-accent mb-3 px-3 py-2 rounded-pill fw-semibold text-uppercase tracking-wider">
+        <div class="position-relative z-1 my-auto py-5 px-4 text-center">
+          <div class="badge amms-badge-accent mb-4 px-4 py-2 rounded-pill fw-semibold text-uppercase tracking-wider">
             Enterprise Registry Platform
           </div>
           <h1 class="display-5 fw-bold mb-4 leading-tight">
             Empowering Associations with Intelligent Governance.
           </h1>
-          <p class="fs-6 text-white-50 mb-4 max-w-md">
+          <p class="fs-5 text-white-50 mb-5 mx-auto max-w-md">
             Streamline membership administration, automate fee collection, send targeted communications, and track audit trails seamlessly.
           </p>
 
-          <div class="row g-3 mt-4">
-            <div class="col-6">
-              <div class="feature-card p-3 rounded-3">
-                <i class="bi bi-people-fill fs-4 amms-accent mb-2 d-block"></i>
-                <h6 class="fw-semibold mb-1">Member Registry</h6>
-                <small class="text-white-50">Comprehensive demographics & status tracking</small>
-              </div>
-            </div>
-            <div class="col-6">
-              <div class="feature-card p-3 rounded-3">
-                <i class="bi bi-cash-stack fs-4 amms-accent mb-2 d-block"></i>
-                <h6 class="fw-semibold mb-1">Financial Management</h6>
-                <small class="text-white-50">Fee structures & payment audit trails</small>
-              </div>
-            </div>
-          </div>
+
         </div>
 
         <!-- Footer / Quote -->
         <div class="position-relative z-1 pt-4 border-top border-white border-opacity-10 d-flex justify-content-between align-items-center">
           <small class="text-white-50">&copy; {{ new Date().getFullYear() }} ASA Civic Registry</small>
-          <div class="d-flex gap-3 text-white-50 small">
-            <span>Privacy Policy</span>
-            <span>Terms of Service</span>
-          </div>
         </div>
       </div>
 
-      <!-- Right Form Section (Enhanced UI) -->
-      <div class="col-lg-6 d-flex flex-column align-items-center justify-content-between p-4 p-md-5 amms-surface position-relative">
+      <!-- Right Form Section -->
+      <div class="col-lg-6 d-flex flex-column align-items-center justify-content-center p-4 p-xl-5 amms-surface position-relative right-section" style="overflow-y: auto; overflow-x: hidden;">
         
         <!-- Top Toolbar (Theme toggle) -->
-        <div class="w-100 d-flex align-items-center justify-content-end mb-4">
+        <div class="position-absolute top-0 end-0 p-4">
           <button 
             type="button" 
             class="btn btn-sm btn-outline-secondary rounded-circle theme-toggle-btn d-flex align-items-center justify-content-center" 
@@ -208,23 +238,24 @@ const submitPasswordChange = async () => {
         </div>
 
         <!-- Main Form Container -->
-        <div class="auth-form-wrapper w-100 mx-auto my-auto p-4 p-sm-5 rounded-4 shadow-sm bg-body border">
+        <div class="auth-form-wrapper w-100 mx-auto bg-transparent">
           
           <!-- Mobile Brand Logo -->
-          <div class="d-lg-none text-center mb-4">
-            <div class="d-inline-flex align-items-center justify-content-center bg-primary bg-opacity-10 p-3 rounded-circle mb-2">
-              <i class="bi bi-shield-check fs-1 amms-accent"></i>
+          <div class="d-lg-none text-center mb-5">
+            <img v-if="logoUrl" :src="logoUrl" @error="logoLoadError = true" alt="Logo" class="mobile-login-logo shadow-sm mb-3" />
+            <div v-else class="d-inline-flex align-items-center justify-content-center bg-primary bg-opacity-10 p-3 rounded-circle mb-3">
+              <i class="bi bi-shield-check fs-1 text-primary"></i>
             </div>
-            <h3 class="fw-bold text-primary mb-0">ASA Portal</h3>
+            <h2 class="fw-bold text-primary mb-0">ASA Portal</h2>
           </div>
 
           <div class="mb-4 text-center text-lg-start">
-            <h2 class="fw-bold text-primary mb-1">Sign In to Your Account</h2>
-            <p class="text-secondary-amms fs-6">Enter your credentials below to access the portal</p>
+            <h2 class="fw-bold text-primary mb-2 display-6">Sign In</h2>
+            <p class="fs-5 text-secondary-amms">Please enter your details to continue.</p>
           </div>
 
-          <div v-if="errorMessage" class="alert alert-danger d-flex align-items-center py-3 px-3 mb-4 rounded-3">
-            <i class="bi bi-exclamation-triangle-fill me-2 fs-4"></i>
+          <div v-if="errorMessage" class="alert alert-danger d-flex align-items-center py-3 px-3 mb-4 rounded-3 border-0 shadow-sm">
+            <i class="bi bi-exclamation-triangle-fill me-2 fs-5"></i>
             <div>{{ errorMessage }}</div>
           </div>
 
@@ -232,14 +263,14 @@ const submitPasswordChange = async () => {
             <div class="mb-4">
               <label for="email" class="form-label fs-6 fw-semibold text-secondary-amms mb-2">Email Address</label>
               <div class="input-group input-group-lg custom-input-group">
-                <span class="input-group-text bg-transparent border-end-0 text-muted px-3">
+                <span class="input-group-text px-4 bg-transparent border-0 text-muted">
                   <i class="bi bi-envelope fs-5"></i>
                 </span>
                 <input
                   id="email"
                   v-model="email"
                   type="email"
-                  class="form-control border-start-0 ps-1 py-3 fs-6"
+                  class="form-control ps-2 py-3 fs-6 bg-transparent border-0"
                   placeholder="admin@amms.local"
                   required
                 />
@@ -251,20 +282,20 @@ const submitPasswordChange = async () => {
                 <label for="password" class="form-label fs-6 fw-semibold text-secondary-amms mb-0">Password</label>
               </div>
               <div class="input-group input-group-lg custom-input-group">
-                <span class="input-group-text bg-transparent border-end-0 text-muted px-3">
+                <span class="input-group-text px-4 bg-transparent border-0 text-muted">
                   <i class="bi bi-lock fs-5"></i>
                 </span>
                 <input
                   id="password"
                   v-model="password"
                   :type="showPassword ? 'text' : 'password'"
-                  class="form-control border-start-0 border-end-0 ps-1 py-3 fs-6"
+                  class="form-control px-2 py-3 fs-6 bg-transparent border-0"
                   placeholder="••••••••"
                   required
                 />
                 <button 
                   type="button" 
-                  class="input-group-text bg-transparent border-start-0 text-muted px-3 cursor-pointer"
+                  class="input-group-text px-4 bg-transparent border-0 text-muted cursor-pointer toggle-pw"
                   @click.prevent="showPassword = !showPassword"
                 >
                   <i :class="showPassword ? 'bi bi-eye-slash fs-5' : 'bi bi-eye fs-5'"></i>
@@ -272,32 +303,31 @@ const submitPasswordChange = async () => {
               </div>
             </div>
 
-            <div class="d-flex align-items-center justify-content-between mb-4">
-              <div class="form-check">
-                <input id="remember" v-model="rememberMe" type="checkbox" class="form-check-input p-2" />
-                <label for="remember" class="form-check-label fs-6 text-secondary-amms ms-1">Remember me</label>
+            <div class="d-flex align-items-center justify-content-between mb-5">
+              <div class="form-check custom-checkbox">
+                <input id="remember" v-model="rememberMe" type="checkbox" class="form-check-input" />
+                <label for="remember" class="form-check-label fs-6 ms-2 text-secondary-amms">Remember me</label>
               </div>
+              <a href="#" class="text-decoration-none fw-semibold fs-6 text-primary">Forgot Password?</a>
             </div>
 
             <button
               type="submit"
-              class="btn btn-primary w-100 py-3 fs-5 fw-semibold d-flex align-items-center justify-content-center gap-2 rounded-pill shadow-sm login-btn"
+              class="btn btn-primary w-100 py-3 fs-5 fw-bold d-flex align-items-center justify-content-center gap-2 rounded-pill shadow login-btn"
               :disabled="loading"
               @click="handleLogin"
             >
               <span v-if="loading" class="spinner-border spinner-border-sm" role="status"></span>
               <span>{{ loading ? 'Authenticating...' : 'Sign In' }}</span>
-              <i v-if="!loading" class="bi bi-arrow-right fs-4"></i>
             </button>
           </form>
+          
+          <!-- Right Footer (Mobile mainly) -->
+          <div class="w-100 text-center mt-5 pt-4 d-lg-none">
+            <small class="text-muted">&copy; {{ new Date().getFullYear() }} ASA — Arusha Somali Association</small>
+          </div>
 
         </div>
-
-        <!-- Right Footer -->
-        <div class="w-100 text-center pt-3">
-          <small class="text-muted">&copy; {{ new Date().getFullYear() }} ASA — Arusha Somali Association</small>
-        </div>
-
       </div>
 
     </div>
@@ -326,31 +356,31 @@ const submitPasswordChange = async () => {
 
           <form @submit.prevent="submitPasswordChange">
             <div class="modal-body p-4">
-              <p class="text-secondary-amms text-xs mb-3">
+              <p class="text-secondary-amms text-xs mb-4">
                 Your account requires a password change before you can access the system. Please choose a new secure password.
               </p>
 
-              <div v-if="changePasswordError" class="alert alert-danger py-2 px-3 mb-3 rounded-3 text-xs">
+              <div v-if="changePasswordError" class="alert alert-danger py-2 px-3 mb-4 rounded-3 text-xs border-0 shadow-sm">
                 <i class="bi bi-exclamation-triangle-fill me-1"></i> {{ changePasswordError }}
               </div>
 
-              <div class="mb-3">
-                <label class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Current Password</label>
+              <div class="mb-4">
+                <label class="form-label text-xs fw-bold text-uppercase text-secondary-amms">Current Password</label>
                 <input
                   v-model="currentPasswordInput"
                   type="password"
-                  class="form-control text-sm font-monospace py-2"
+                  class="form-control text-sm font-monospace py-2 custom-modal-input"
                   placeholder="••••••••"
                   required
                 />
               </div>
 
-              <div class="mb-3">
-                <label class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">New Password (Min 6 Characters)</label>
+              <div class="mb-4">
+                <label class="form-label text-xs fw-bold text-uppercase text-secondary-amms">New Password (Min 6 Characters)</label>
                 <input
                   v-model="newPasswordInput"
                   type="password"
-                  class="form-control text-sm font-monospace py-2"
+                  class="form-control text-sm font-monospace py-2 custom-modal-input"
                   placeholder="••••••••"
                   minlength="6"
                   required
@@ -358,11 +388,11 @@ const submitPasswordChange = async () => {
               </div>
 
               <div class="mb-2">
-                <label class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">Confirm New Password</label>
+                <label class="form-label text-xs fw-bold text-uppercase text-secondary-amms">Confirm New Password</label>
                 <input
                   v-model="confirmPasswordInput"
                   type="password"
-                  class="form-control text-sm font-monospace py-2"
+                  class="form-control text-sm font-monospace py-2 custom-modal-input"
                   placeholder="••••••••"
                   minlength="6"
                   required
@@ -373,7 +403,7 @@ const submitPasswordChange = async () => {
             <div class="modal-footer border-top px-4 py-3 bg-body-tertiary">
               <button
                 type="submit"
-                class="btn btn-primary rounded-pill w-100 py-2.5 fw-semibold text-xs d-flex align-items-center justify-content-center gap-2 shadow-sm"
+                class="btn btn-primary rounded-pill w-100 py-2.5 fw-bold text-sm d-flex align-items-center justify-content-center gap-2 shadow-sm login-btn"
                 :disabled="isChangingPassword"
               >
                 <span v-if="isChangingPassword" class="spinner-border spinner-border-sm" role="status"></span>
@@ -391,26 +421,47 @@ const submitPasswordChange = async () => {
 </template>
 
 <style scoped>
+.login-logo {
+  width: 90px;
+  height: 90px;
+  object-fit: contain;
+  background-color: white;
+  border-radius: 1rem;
+}
+
+.mobile-login-logo {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+  background-color: white;
+  border-radius: 50%;
+}
+
 .left-banner {
   background: linear-gradient(135deg, var(--amms-primary) 0%, var(--amms-secondary) 100%);
+  background-size: cover;
   overflow: hidden;
 }
 
 .brand-icon-wrapper {
-  width: 80px;
-  height: 80px;
+  width: 90px;
+  height: 90px;
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
-.feature-card {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(8px);
+.amms-accent {
+  color: var(--amms-accent) !important;
+}
+.amms-badge-accent {
+  background-color: var(--amms-accent);
+  color: #fff;
 }
 
+
+
 .auth-form-wrapper {
-  max-width: 460px;
+  max-width: 440px;
 }
 
 .theme-toggle-btn {
@@ -418,39 +469,61 @@ const submitPasswordChange = async () => {
   height: 36px;
 }
 
-.quick-fill-box {
-  background-color: rgba(0, 0, 0, 0.02);
-}
-
 .custom-input-group {
-  border-radius: 50rem;
-  border: 1px solid var(--amms-border);
-  overflow: hidden;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  background: var(--bs-body-bg);
+  border: 1.5px solid var(--bs-border-color);
+  border-radius: 0.75rem;
+  transition: all 0.2s ease;
 }
-
-.custom-input-group .form-control {
-  border: none !important;
-}
-
-.custom-input-group .input-group-text {
-  border: none !important;
-}
-
 .custom-input-group:focus-within {
-  border-color: var(--amms-primary) !important;
-  box-shadow: 0 0 0 0.25rem rgba(27, 42, 74, 0.15);
+  border-color: var(--bs-primary);
+  box-shadow: 0 0 0 4px rgba(var(--bs-primary-rgb), 0.15);
+}
+.custom-input-group input:focus {
+  box-shadow: none !important;
 }
 
-.cursor-pointer {
+.custom-modal-input {
+  border: 1.5px solid var(--bs-border-color);
+  border-radius: 0.5rem;
+}
+.custom-modal-input:focus {
+  border-color: var(--bs-primary);
+  box-shadow: 0 0 0 4px rgba(var(--bs-primary-rgb), 0.15);
+}
+
+.custom-checkbox .form-check-input {
   cursor: pointer;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-top: 0.15rem;
+}
+.custom-checkbox .form-check-input:focus {
+  box-shadow: 0 0 0 3px rgba(var(--bs-primary-rgb), 0.2);
 }
 
 .login-btn {
-  transition: transform 0.15s ease, background-color 0.15s ease;
+  transition: all 0.2s ease;
+}
+.login-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 12px rgba(var(--bs-primary-rgb), 0.2) !important;
+}
+.login-btn:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: none !important;
 }
 
-.login-btn:hover {
-  transform: translateY(-1px);
+.tracking-wider {
+  letter-spacing: 0.05em;
+}
+.tracking-tight {
+  letter-spacing: -0.02em;
+}
+.leading-tight {
+  line-height: 1.2;
+}
+.max-w-md {
+  max-width: 28rem;
 }
 </style>

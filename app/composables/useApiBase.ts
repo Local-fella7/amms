@@ -8,7 +8,13 @@
  */
 export const useApiBase = (): string => {
   const config = useRuntimeConfig()
-  return ((config.public.apiBase as string) || '/api').replace(/\/+$/, '')
+  const configuredBase = ((config.public.apiBase as string) || '/api').replace(/\/+$/, '')
+
+  if (import.meta.dev && /^https?:\/\//i.test(configuredBase)) {
+    return '/api'
+  }
+
+  return configuredBase
 }
 
 /**

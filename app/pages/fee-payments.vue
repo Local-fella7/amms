@@ -56,13 +56,22 @@ interface PaymentModeOption {
   name: string
 }
 
-const { data: paymentsResponse, loading, error, execute: fetchPayments, fetchWithAuth } = useApi<any>()
+const { data: paymentsResponse, loading, error, execute: fetchPayments, fetchWithAuth } = useApi<FeePayment[] | { data: FeePayment[] }>()
 const { data: members, execute: fetchMembers } = useApi<MemberOption[]>()
 const { data: fees, execute: fetchFees } = useApi<FeeOption[]>()
 const { data: paymentModes, execute: fetchPaymentModes } = useApi<PaymentModeOption[]>()
 const { downloadPdf, openPdfInNewTab, isGenerating: isDownloadingPdf } = useReportPdf()
 
-const searchQuery = ref('')
+// Pagination State
+const currentPage = ref(1)
+const itemsPerPage = ref(10)
+
+const route = useRoute()
+const searchQuery = ref(typeof route.query.search === 'string' ? route.query.search : '')
+watch(() => route.query.search, (val) => {
+  searchQuery.value = typeof val === 'string' ? val : ''
+  currentPage.value = 1
+}, { immediate: true })
 const selectedPaymentModeFilter = ref<string>('')
 const selectedFeeYearFilter = ref<string>('')
 
@@ -158,10 +167,6 @@ const itemToDelete = ref<FeePayment | null>(null)
 const isDeleteModalOpen = ref(false)
 const isDeleting = ref(false)
 
-// Pagination State
-const currentPage = ref(1)
-const itemsPerPage = ref(10)
-
 const schema = z.object({
   member_id: z.union([z.number(), z.string().min(1, 'Member selection is required')]),
   fee_id: z.union([z.number(), z.string().min(1, 'Fee schedule selection is required')]),
@@ -191,6 +196,14 @@ const rawPaymentsList = computed<FeePayment[]>(() => {
   if (res.data && Array.isArray(res.data.data)) return res.data.data
   return []
 })
+
+const getFullMember = (item: FeePayment) => {
+  if (members.value) {
+    const found = members.value.find(m => Number(m.id) === Number(item.member_id))
+    if (found) return found
+  }
+  return item.member
+}
 
 const getMemberName = (mId: number | string) => {
   if (!members.value) return `Member #${mId}`
@@ -230,7 +243,7 @@ const getMemberExemption = (mId: number | string) => {
   return found?.fee_exemption || 'no'
 }
 
-const getHistoricalRunningBalance = (p: any) => {
+const getHistoricalRunningBalance = (p: FeePayment) => {
   if (p.member?.fee_exemption === 'yes' || getMemberExemption(p.member_id) === 'yes') {
     return 0
   }
@@ -267,7 +280,7 @@ const getHistoricalRunningBalance = (p: any) => {
   return Math.max(0, feeAmt - cumulativePaid)
 }
 
-const getPaymentBalance = (p: any) => {
+const getPaymentBalance = (p: FeePayment) => {
   return getHistoricalRunningBalance(p)
 }
 
@@ -283,10 +296,26 @@ const filteredPayments = computed(() => {
   let result = [...rawPaymentsList.value]
 
   if (searchQuery.value.trim()) {
-    const q = searchQuery.value.toLowerCase()
+    const q = searchQuery.value.trim().toLowerCase()
     result = result.filter(p => {
-      const mName = p.member ? `${p.member.first_name} ${p.member.last_name}` : getMemberName(p.member_id)
-      return mName.toLowerCase().includes(q) || String(p.id).includes(q)
+      const m = p.member || (members.value ? members.value.find(m => Number(m.id) === Number(p.member_id)) : null)
+      const mFirst = (m?.first_name || '').toLowerCase()
+      const mLast = (m?.last_name || '').toLowerCase()
+      const mFullName = `${mFirst} ${mLast}`.trim()
+      const mReverseName = `${mLast} ${mFirst}`.trim()
+      const receipt = (p.receipt_number || '').toLowerCase()
+      const idStr = String(p.id)
+      const phone = (m?.phone || '').toLowerCase()
+      const amountStr = String(p.amount)
+
+      return mFullName.includes(q) ||
+        mReverseName.includes(q) ||
+        mFirst.includes(q) ||
+        mLast.includes(q) ||
+        receipt.includes(q) ||
+        idStr === q ||
+        phone.includes(q) ||
+        amountStr === q
     })
   }
 
@@ -345,7 +374,7 @@ const closeModal = () => {
   isModalOpen.value = false
 }
 
-const formatDateToYMD = (val: any) => {
+const formatDateToYMD = (val: string | Date | null | undefined): string => {
   if (!val) return new Date().toISOString().substring(0, 10)
   if (val instanceof Date) {
     const yyyy = val.getFullYear()
@@ -393,10 +422,9 @@ const handleSave = async () => {
     
     closeModal()
     await loadData()
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Save payment error:', err)
-    const serverErrors = err?.data?.errors ? Object.values(err.data.errors).flat().join(', ') : null
-    modalError.value = serverErrors || err?.data?.message || err?.message || 'Failed to save fee payment'
+    modalError.value = extractErrorMessage(err, 'Failed to save fee payment')
     push.error(modalError.value)
   } finally {
     isSubmitting.value = false
@@ -437,20 +465,16 @@ const cancelDelete = () => {
 }
 
 const confirmDelete = async () => {
-  if (!itemToDelete.value) return
-  
-  isDeleting.value = true
-  try {
-    await fetchWithAuth(`/api/fee-payments/${itemToDelete.value.id}`, { method: 'DELETE' })
-    push.success('Fee payment record deleted successfully!')
-    cancelDelete()
-    await loadData()
-  } catch (err: any) {
-    const msg = err?.data?.message || 'Failed to delete fee payment'
-    push.error(msg)
-  } finally {
-    isDeleting.value = false
-  }
+    if (!itemToDelete.value) return
+    
+    const success = await mutate(api => api(`/api/fee-payments/${itemToDelete.value.id}`, { method: 'DELETE' }), {
+      successMessage: 'Fee payment record deleted successfully!'
+    })
+    
+    if (success) {
+      cancelDelete()
+      await loadData()
+    }
 }
 
 onMounted(() => {
@@ -541,13 +565,6 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- Center Loading Spinner Overlay -->
-      <div v-if="loading" class="position-absolute top-0 start-0 w-100 h-100 bg-body bg-opacity-75 d-flex flex-column align-items-center justify-content-center z-3">
-        <div class="spinner-border text-primary" role="status" style="width: 2.5rem; height: 2.5rem;">
-          <span class="visually-hidden">Loading payments...</span>
-        </div>
-        <span class="text-xs fw-semibold text-primary mt-2">Loading fee payment records...</span>
-      </div>
 
       <!-- Error Alert -->
       <div v-if="error" class="alert alert-danger rounded-0 mb-0 py-3 px-4 d-flex align-items-center justify-content-between">
@@ -558,84 +575,73 @@ onMounted(() => {
         <button class="btn btn-sm btn-outline-danger rounded-pill" @click="loadData">Retry</button>
       </div>
 
-      <div class="table-responsive">
-        <table class="table align-middle mb-0 custom-amms-table">
-          <thead>
-            <tr>
-              <th class="ps-4" style="width: 70px;"># ID</th>
-              <th>Member Name</th>
-              <th>Fee Year</th>
-              <th>Payment Mode</th>
-              <th>Amount Paid</th>
-              <th>Balance Due</th>
-              <th>Payment Date</th>
-              <th class="text-end pe-4" style="width: 140px;">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <!-- Loading Skeleton -->
-            <template v-if="loading && rawPaymentsList.length === 0">
-              <tr v-for="i in 5" :key="i">
-                <td class="ps-4"><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-8"></span></td>
-                <td><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-6"></span></td>
-                <td class="pe-4 text-end"><span class="placeholder col-10"></span></td>
-              </tr>
-            </template>
+      
+    <!-- Replaced by AppTable Component -->
+    <AppTable
+      :columns="[
+        { key: 'id', label: '# ID', width: '70px', headerClass: 'ps-4 d-none d-xl-table-cell', cellClass: 'ps-4 font-monospace text-muted text-xs d-none d-xl-table-cell' },
+        { key: 'member-name', label: 'Member Name', cellClass: 'fw-semibold text-primary' },
+        { key: 'fee-year', label: 'Fee Year', headerClass: 'd-none d-lg-table-cell', cellClass: 'd-none d-lg-table-cell' },
+        { key: 'payment-mode', label: 'Payment Mode', headerClass: 'd-none d-md-table-cell', cellClass: 'text-xs fw-medium text-body d-none d-md-table-cell' },
+        { key: 'amount-paid', label: 'Amount Paid', cellClass: 'fw-bold text-success font-monospace text-sm' },
+        { key: 'balance-due', label: 'Balance Due', headerClass: 'd-none d-lg-table-cell', cellClass: 'font-monospace text-xs d-none d-lg-table-cell' },
+        { key: 'payment-date', label: 'Payment Date', headerClass: 'd-none d-sm-table-cell', cellClass: 'font-monospace text-xs text-body d-none d-sm-table-cell' },
+        { key: 'actions', label: 'Actions', align: 'right', width: '130px', headerClass: 'pe-4', cellClass: 'pe-4' }
+      ]"
+      :items="paginatedPayments"
+      :loading="loading"
+      emptyIcon="bi bi-receipt-cutoff"
+      emptyTitle="No fee payment records found"
+      emptySubtitle="Click 'Record Fee Payment' above to enter a payment transaction."
 
-            <!-- Empty State -->
-            <tr v-else-if="filteredPayments.length === 0">
-              <td colspan="8" class="text-center py-5 text-muted">
-                <i class="bi bi-receipt-cutoff fs-1 d-block mb-2 text-opacity-50"></i>
-                <p class="mb-0 fw-medium">No fee payment records found</p>
-                <small>Click "Record Fee Payment" above to enter a payment transaction.</small>
-              </td>
-            </tr>
+    >
+      <template #cell-id="{ item }">
+#{{ item.id }}
+      </template>
+      <template #cell-member-name="{ item }">
 
-            <!-- Payment Rows -->
-            <tr v-for="p in paginatedPayments" :key="p.id">
-              <td class="ps-4 font-monospace text-muted text-xs">#{{ p.id }}</td>
-              <td class="fw-semibold text-primary">
                 <div class="d-flex align-items-center gap-2.5">
-                  <div class="pay-icon-badge rounded-circle d-flex align-items-center justify-content-center">
-                    <i class="bi bi-person text-primary text-xs"></i>
-                  </div>
+                  <MemberAvatar :member="getFullMember(item)" />
                   <div>
-                    <span>{{ p.member ? `${p.member.first_name} ${p.member.last_name}` : getMemberName(p.member_id) }}</span>
-                    <small v-if="getMemberPhone(p.member_id)" class="d-block text-muted font-monospace text-xs">{{ getMemberPhone(p.member_id) }}</small>
+                    <span>{{ item.member ? `${item.member.first_name} ${item.member.last_name}` : getMemberName(item.member_id) }}</span>
+                    <small v-if="getMemberPhone(item.member_id)" class="d-block text-muted font-monospace text-xs">{{ getMemberPhone(item.member_id) }}</small>
                   </div>
                 </div>
-              </td>
-              <td>
+              
+      </template>
+      <template #cell-fee-year="{ item }">
+
                 <span class="badge bg-body-tertiary text-body border px-2.5 py-1 rounded-pill font-monospace text-xs">
-                  Year {{ p.fee ? getFeeYear(p.fee) : getFeeYear(p.fee_id) }}
+                  Year {{ item.fee ? getFeeYear(item.fee) : getFeeYear(item.fee_id) }}
                 </span>
-              </td>
-              <td class="text-xs fw-medium text-body">
+              
+      </template>
+      <template #cell-payment-mode="{ item }">
+
                 <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-20 px-2.5 py-1 rounded-pill text-xs">
                   <i class="bi bi-credit-card me-1"></i>
-                  {{ p.payment_mode?.name || getPaymentModeName(p.payment_mode_id) }}
+                  {{ item.payment_mode?.name || getPaymentModeName(item.payment_mode_id) }}
                 </span>
-              </td>
-              <td class="fw-bold text-success font-monospace text-sm">
-                {{ formatCurrency(p.amount) }}
-              </td>
-              <td class="font-monospace text-xs">
+              
+      </template>
+      <template #cell-amount-paid="{ item }">
+
+                {{ formatCurrency(item.amount) }}
+              
+      </template>
+      <template #cell-balance-due="{ item }">
+
                 <span 
-                  v-if="p.member?.fee_exemption === 'yes' || getMemberExemption(p.member_id) === 'yes'" 
-                  class="badge bg-warning bg-opacity-15 text-warning border border-warning border-opacity-25 px-2 py-0.5 rounded-pill"
+                  v-if="item.member?.fee_exemption === 'yes' || getMemberExemption(item.member_id) === 'yes'" 
+                  class="badge badge-exempted px-2.5 py-1 rounded-pill fw-semibold"
                 >
                   Exempted
                 </span>
                 <span 
-                  v-else-if="getPaymentBalance(p) > 0" 
+                  v-else-if="getPaymentBalance(item) > 0" 
                   class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-20 px-2 py-0.5 rounded-pill fw-bold"
                 >
-                  <i class="bi bi-exclamation-circle me-1"></i>{{ formatCurrency(getPaymentBalance(p)) }}
+                  <i class="bi bi-exclamation-circle me-1"></i>{{ formatCurrency(getPaymentBalance(item)) }}
                 </span>
                 <span 
                   v-else 
@@ -643,39 +649,41 @@ onMounted(() => {
                 >
                   <i class="bi bi-check2 me-1"></i>0.00 (Paid)
                 </span>
-              </td>
-              <td class="font-monospace text-xs text-body">
-                {{ formatDateDisplay(p.date) }}
-              </td>
-              <td class="pe-4 text-end">
+              
+      </template>
+      <template #cell-payment-date="{ item }">
+
+                {{ formatDateDisplay(item.date) }}
+              
+      </template>
+      <template #cell-actions="{ item }">
+
                 <div class="d-flex align-items-center justify-content-end gap-1">
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
-                    @click="openViewModal(p)"
+                    @click="openViewModal(item)"
                     title="View Receipt Details"
                   >
                     <i class="bi bi-eye-fill text-primary"></i>
                   </button>
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
-                    @click="downloadMemberStatement(p.member_id)"
+                    @click="downloadMemberStatement(item.member_id)"
                     title="Download Member Statement PDF"
                   >
                     <i class="bi bi-file-earmark-pdf text-danger"></i>
                   </button>
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn hover-danger" 
-                    @click="promptDelete(p)"
+                    @click="promptDelete(item)"
                     title="Delete / Void Transaction"
                   >
                     <i class="bi bi-trash-fill text-danger"></i>
                   </button>
                 </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+              
+      </template>
+    </AppTable>
 
       <!-- Reusable Pagination Control Footer -->
       <PaginationControl
@@ -746,243 +754,22 @@ onMounted(() => {
       </div>
     </ViewDetailModal>
 
-    <!-- Custom Delete Confirmation Modal -->
-    <div v-if="isDeleteModalOpen" class="modal-backdrop fade show" style="z-index: 1060;"></div>
-    
-    <div 
-      v-if="isDeleteModalOpen" 
-      class="modal fade show d-block" 
-      tabindex="-1" 
-      role="dialog"
-      style="z-index: 1065;"
-      @click.self="cancelDelete"
-    >
-      <div class="modal-dialog modal-dialog-centered modal-sm">
-        <div class="modal-content amms-surface border-0 shadow-lg rounded-4 overflow-hidden text-center p-4">
-          
-          <div class="d-inline-flex align-items-center justify-content-center bg-danger bg-opacity-10 text-danger rounded-circle p-3 mx-auto mb-3" style="width: 56px; height: 56px;">
-            <i class="bi bi-trash3-fill fs-3"></i>
-          </div>
+    <DeleteConfirmModal
+      v-model="isDeleteModalOpen"
+      message="Are you sure you want to permanently delete this fee payment receipt?"
+        :itemTitle="itemToDelete ? `&quot;Receipt #${itemToDelete.receipt_number}&quot;` : ''"
+      :loading="isDeleting"
+      confirmText="Delete Payment"
+      @confirm="confirmDelete"
+    />
 
-          <h5 class="fw-bold text-primary text-sm mb-1">Confirm Deletion</h5>
-          <p class="text-secondary-amms text-xs mb-2">Are you sure you want to permanently delete this fee payment transaction?</p>
-          
-          <p class="fw-bold text-danger text-xs mb-4 font-monospace bg-danger bg-opacity-10 py-1.5 px-3 rounded-3 d-inline-block mx-auto">
-            Payment for {{ itemToDelete ? getMemberName(itemToDelete.member_id) : '' }} ({{ itemToDelete ? formatCurrency(itemToDelete.amount) : '' }})
-          </p>
 
-          <div class="d-flex justify-content-center gap-2">
-            <button 
-              type="button" 
-              class="btn btn-sm btn-light border rounded-pill px-3 text-xs fw-semibold"
-              :disabled="isDeleting"
-              @click="cancelDelete"
-            >
-              Cancel
-            </button>
-            <button 
-              type="button" 
-              class="btn btn-sm btn-danger rounded-pill px-4 text-xs fw-semibold d-flex align-items-center gap-1.5 shadow-sm"
-              :disabled="isDeleting"
-              @click="confirmDelete"
-            >
-              <span v-if="isDeleting" class="spinner-border spinner-border-sm" role="status"></span>
-              <span>{{ isDeleting ? 'Deleting...' : 'Delete Transaction' }}</span>
-            </button>
-          </div>
-
-        </div>
-      </div>
-    </div>
-
-    <!-- Create Payment Vue Pure Modal -->
-    <div v-if="isModalOpen" class="modal-backdrop fade show"></div>
-    
-    <div 
-      v-if="isModalOpen" 
-      class="modal fade show d-block" 
-      tabindex="-1" 
-      role="dialog"
-      @click.self="closeModal"
-    >
-      <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content amms-surface border-0 shadow-lg rounded-4 overflow-hidden">
-          
-          <div class="modal-header border-bottom px-4 py-3 bg-body-tertiary position-relative justify-content-center">
-            <h5 class="modal-title fw-bold text-primary text-sm mb-0 text-center">
-              <i class="bi bi-receipt me-1.5 amms-accent"></i>
-              <span>Record Fee Payment</span>
-            </h5>
-            <button 
-              type="button" 
-              class="btn-close position-absolute end-0 me-3" 
-              @click="closeModal"
-              aria-label="Close"
-            ></button>
-          </div>
-
-          <form @submit.prevent="handleSave">
-            <div class="modal-body p-4">
-              <div v-if="modalError" class="alert alert-danger py-2 px-3 mb-3 rounded-3 small">
-                <i class="bi bi-exclamation-triangle-fill me-1"></i> {{ modalError }}
-              </div>
-
-              <!-- Single Column Form Fields -->
-              <div class="mb-3">
-                <label for="payDate" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">
-                  Payment Date *
-                </label>
-                <ClientOnly>
-                  <VDatePicker v-model="date" mode="date" string-format="yyyy-MM-dd" :masks="{ input: 'DD-MM-YYYY' }">
-                    <template #default="{ inputValue, inputEvents }">
-                      <div class="input-group">
-                        <span class="input-group-text bg-transparent border-end-0 text-muted">
-                          <i class="bi bi-calendar-event text-primary"></i>
-                        </span>
-                        <input
-                          :value="inputValue"
-                          v-on="inputEvents"
-                          class="form-control border-start-0 ps-1 py-2.5 text-sm bg-body font-monospace"
-                          placeholder="DD-MM-YYYY"
-                          readonly
-                        />
-                      </div>
-                    </template>
-                  </VDatePicker>
-                </ClientOnly>
-              </div>
-
-              <div class="mb-3">
-                <label for="memId" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">
-                  Select Member *
-                </label>
-                <select id="memId" v-model="memberId" class="form-select py-2.5 text-sm" required>
-                  <option v-for="m in members" :key="m.id" :value="m.id">
-                    {{ m.first_name }} {{ m.last_name }} ({{ m.phone || 'No phone' }})
-                  </option>
-                </select>
-              </div>
-
-              <div class="mb-3">
-                <label for="feeId" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">
-                  Fee Schedule / Year *
-                </label>
-                <select id="feeId" v-model="feeId" class="form-select py-2.5 text-sm" required>
-                  <option v-for="f in fees" :key="f.id" :value="f.id">
-                    Year: {{ getFeeYear(f) }} ({{ formatCurrency(f.amount) }})
-                  </option>
-                </select>
-              </div>
-
-              <div class="mb-3">
-                <label for="payMode" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">
-                  Payment Mode *
-                </label>
-                <select id="payMode" v-model="paymentModeId" class="form-select py-2.5 text-sm" required>
-                  <option v-for="pm in paymentModes" :key="pm.id" :value="pm.id">
-                    {{ pm.name }}
-                  </option>
-                </select>
-              </div>
-
-              <!-- Prior Payments Breakdown Notice -->
-              <div v-if="memberId && feeId && selectedFeeSchedule" class="mb-3">
-                <div v-if="memberPriorPaymentsForFee > 0" class="p-2.5 bg-body-tertiary rounded-3 border text-xs">
-                  <div class="d-flex align-items-center justify-content-between mb-1">
-                    <span class="text-muted">Total Annual Fee:</span>
-                    <span class="fw-semibold text-body font-monospace">{{ formatCurrency(selectedFeeSchedule.amount) }}</span>
-                  </div>
-                  <div class="d-flex align-items-center justify-content-between mb-1">
-                    <span class="text-muted">Already Paid in Past Receipts:</span>
-                    <span class="fw-semibold text-success font-monospace">- {{ formatCurrency(memberPriorPaymentsForFee) }}</span>
-                  </div>
-                  <div class="d-flex align-items-center justify-content-between pt-1.5 border-top">
-                    <span class="fw-bold text-primary">Remaining Balance Needed:</span>
-                    <span class="fw-bold font-monospace fs-6" :class="remainingSuggestedAmount > 0 ? 'text-danger' : 'text-success'">
-                      {{ formatCurrency(remainingSuggestedAmount) }}
-                    </span>
-                  </div>
-
-                  <!-- Quick Fill Helper Buttons -->
-                  <div class="d-flex align-items-center gap-1.5 mt-2 pt-1 border-top border-secondary border-opacity-10">
-                    <button 
-                      type="button" 
-                      class="btn btn-xs btn-outline-danger rounded-pill px-2.5 py-0.5 text-xs fw-semibold"
-                      @click="amount = remainingSuggestedAmount"
-                    >
-                      Fill Balance ({{ formatCurrency(remainingSuggestedAmount) }})
-                    </button>
-                    <button 
-                      type="button" 
-                      class="btn btn-xs btn-light border rounded-pill px-2.5 py-0.5 text-xs text-muted"
-                      @click="amount = selectedFeeSchedule?.amount || 0"
-                    >
-                      Full Fee
-                    </button>
-                  </div>
-                </div>
-
-                <div v-else-if="memberPriorPaymentsForFee === 0" class="text-xs text-muted font-monospace d-flex align-items-center justify-content-between px-1">
-                  <span>Standard Annual Fee:</span>
-                  <span class="fw-semibold text-body">{{ formatCurrency(selectedFeeSchedule.amount) }}</span>
-                </div>
-              </div>
-
-              <!-- Amount Paid -->
-              <div class="mb-3">
-                <div class="d-flex align-items-center justify-content-between mb-1">
-                  <label for="payAmt" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase mb-0">
-                    Amount Paid (TZS) *
-                  </label>
-                  <span 
-                    class="badge px-2.5 py-1 rounded-pill text-xs fw-semibold border"
-                    :class="paymentStatusBadge.class"
-                  >
-                    {{ paymentStatusBadge.label }}
-                  </span>
-                </div>
-                <input id="payAmt" v-model.number="amount" type="number" step="100" class="form-control py-2.5 text-sm font-monospace" placeholder="e.g. 50000" required />
-              </div>
-
-              <!-- Partial Payment Alert Notice -->
-              <div v-if="paymentBalance > 0 && requiredAmount > 0" class="alert alert-warning py-2.5 px-3 rounded-3 text-xs mb-3 border-warning border-opacity-30 d-flex align-items-center justify-content-between">
-                <div class="d-flex align-items-center gap-2">
-                  <i class="bi bi-exclamation-circle-fill text-warning fs-6"></i>
-                  <div>
-                    <span class="fw-bold d-block text-warning">Partial Payment Notice</span>
-                    <span class="text-secondary-amms">Required: {{ formatCurrency(requiredAmount) }}</span>
-                  </div>
-                </div>
-                <div class="text-end">
-                  <span class="text-muted d-block text-xs">Remaining Balance</span>
-                  <span class="fw-bold text-danger font-monospace text-xs">{{ formatCurrency(paymentBalance) }}</span>
-                </div>
-              </div>
-
-            </div>
-
-            <div class="modal-footer border-top px-4 py-3 bg-body-tertiary">
-              <button 
-                type="button" 
-                class="btn btn-sm btn-outline-secondary rounded-pill px-3" 
-                @click="closeModal"
-              >
-                Cancel
-              </button>
-              <button 
-                type="submit" 
-                class="btn btn-sm btn-primary rounded-pill px-4 fw-semibold d-flex align-items-center gap-2 shadow-sm"
-                :disabled="isSubmitting"
-              >
-                <span v-if="isSubmitting" class="spinner-border spinner-border-sm" role="status"></span>
-                <span>{{ isSubmitting ? 'Recording...' : (editingPayment ? 'Update Payment' : 'Save Payment') }}</span>
-              </button>
-            </div>
-          </form>
-
-        </div>
-      </div>
-    </div>
+    <!-- Shared Payment Modal Component -->
+    <SharedPaymentModal
+      v-if="isModalOpen"
+      @close="closeModal"
+      @saved="loadData"
+    />
 
   </div>
 </template>
@@ -1040,3 +827,5 @@ onMounted(() => {
   background-color: rgba(220, 53, 69, 0.12) !important;
 }
 </style>
+
+

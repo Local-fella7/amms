@@ -127,8 +127,8 @@ const handleSave = async () => {
     
     closeModal()
     await loadData()
-  } catch (err: any) {
-    modalError.value = err?.data?.message || err?.message || 'Failed to save age group'
+  } catch (err: unknown) {
+    modalError.value = extractErrorMessage(err, 'Failed to save age group')
     push.error(modalError.value)
   } finally {
     isSubmitting.value = false
@@ -161,20 +161,16 @@ const cancelDelete = () => {
 }
 
 const confirmDelete = async () => {
-  if (!itemToDelete.value) return
-  
-  isDeleting.value = true
-  try {
-    await fetchWithAuth(`/api/age-groups/${itemToDelete.value.id}`, { method: 'DELETE' })
-    push.success(`Age Group "${itemToDelete.value.name}" deleted successfully!`)
-    cancelDelete()
-    await loadData()
-  } catch (err: any) {
-    const msg = err?.data?.message || 'Failed to delete age group'
-    push.error(msg)
-  } finally {
-    isDeleting.value = false
-  }
+    if (!itemToDelete.value) return
+    
+    const success = await mutate(api => api(`/api/age-groups/${itemToDelete.value.id}`, { method: 'DELETE' }), {
+      successMessage: `Age Group "${itemToDelete.value.name}" deleted successfully!`
+    })
+    
+    if (success) {
+      cancelDelete()
+      await loadData()
+    }
 }
 
 onMounted(() => {
@@ -197,113 +193,81 @@ onMounted(() => {
       @add="openAddModal"
     />
 
-    <!-- Main Data Table Container -->
-    <div class="card amms-surface border-0 shadow-sm rounded-4 overflow-hidden mb-4 position-relative">
+        <!-- Main Data Table Container using Reusable AppTable -->
+    <AppTable
+      :columns="[
+        { key: 'id', label: '# ID', width: '90px', cellClass: 'ps-4 font-monospace text-muted text-xs', headerClass: 'ps-4' },
+        { key: 'name', label: 'Group Name' },
+        { key: 'range', label: 'Age Range' },
+        { key: 'actions', label: 'Actions', width: '140px', align: 'right', cellClass: 'pe-4', headerClass: 'pe-4' }
+      ]"
+      :items="paginatedAgeGroups"
+      :loading="loading"
+      emptyIcon="bi bi-people"
+      emptyTitle="No age groups found"
+      emptySubtitle="Click 'New Age Group' above to add your first bracket.'
+      v-model:currentPage='currentPage"
+      v-model:itemsPerPage="itemsPerPage"
+      :totalPages="totalPages"
+      :totalItems="filteredAgeGroups.length"
+    >
+      <template #toolbar>
+        <!-- Error Alert -->
+        <div v-if="error" class="alert alert-danger rounded-0 mb-0 py-3 px-4 d-flex align-items-center justify-content-between border-start-0 border-end-0 border-top-0 border-bottom">
+          <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+            <span>{{ error }}</span>
+          </div>
+          <button class="btn btn-sm btn-outline-danger rounded-pill" @click="loadData">Retry</button>
+        </div>
+      </template>
       
-      <!-- Center Loading Spinner Overlay -->
-      <div v-if="loading" class="position-absolute top-0 start-0 w-100 h-100 bg-body bg-opacity-75 d-flex flex-column align-items-center justify-content-center z-3">
-        <div class="spinner-border text-primary" role="status" style="width: 2.5rem; height: 2.5rem;">
-          <span class="visually-hidden">Loading age groups...</span>
+      <template #cell-id="{ item }">
+        #{{ item.id }}
+      </template>
+
+      <template #cell-name="{ item }">
+        <div class="fw-semibold text-primary d-flex align-items-center gap-2.5">
+          <div class="group-icon-badge rounded-circle d-flex align-items-center justify-content-center">
+            <i class="bi bi-person-bounding-box text-primary text-xs"></i>
+          </div>
+          <span>{{ item.name }}</span>
         </div>
-        <span class="text-xs fw-semibold text-primary mt-2">Loading age groups data...</span>
-      </div>
+      </template>
+      
+      <template #cell-range="{ item }">
+        <span class="badge bg-body-tertiary text-body border px-3 py-1.5 rounded-pill font-monospace text-xs">
+          <i class="bi bi-clock-history me-1 text-muted"></i>
+          {{ item.from_age }} � {{ item.to_age }} Years
+        </span>
+      </template>
 
-      <!-- Error Alert -->
-      <div v-if="error" class="alert alert-danger rounded-0 mb-0 py-3 px-4 d-flex align-items-center justify-content-between">
-        <div class="d-flex align-items-center gap-2">
-          <i class="bi bi-exclamation-triangle-fill fs-5"></i>
-          <span>{{ error }}</span>
+      <template #cell-actions="{ item }">
+        <div class="d-flex align-items-center justify-content-end gap-1">
+          <button 
+            class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
+            @click="openViewModal(item)"
+            title="View Age Group Details"
+          >
+            <i class="bi bi-eye-fill text-primary"></i>
+          </button>
+          <button 
+            class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
+            @click="openEditModal(item)"
+            title="Edit Age Group"
+          >
+            <i class="bi bi-pencil-fill text-muted"></i>
+          </button>
+          <button 
+            class="btn btn-sm btn-light border-0 rounded-circle action-btn hover-danger" 
+            @click="promptDelete(item)"
+            title="Delete Age Group"
+          >
+            <i class="bi bi-trash-fill text-danger"></i>
+          </button>
         </div>
-        <button class="btn btn-sm btn-outline-danger rounded-pill" @click="loadData">Retry</button>
-      </div>
-
-      <div class="table-responsive">
-        <table class="table align-middle mb-0 custom-amms-table">
-          <thead>
-            <tr>
-              <th class="ps-4" style="width: 90px;"># ID</th>
-              <th>Group Name</th>
-              <th>Age Range</th>
-              <th class="text-end pe-4" style="width: 140px;">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <!-- Loading Skeleton -->
-            <template v-if="loading && (!ageGroups || ageGroups.length === 0)">
-              <tr v-for="i in 4" :key="i">
-                <td class="ps-4"><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-8"></span></td>
-                <td><span class="placeholder col-6"></span></td>
-                <td class="pe-4 text-end"><span class="placeholder col-10"></span></td>
-              </tr>
-            </template>
-
-            <!-- Empty State -->
-            <tr v-else-if="filteredAgeGroups.length === 0">
-              <td colspan="4" class="text-center py-5 text-muted">
-                <i class="bi bi-people fs-1 d-block mb-2 text-opacity-50"></i>
-                <p class="mb-0 fw-medium">No age groups found</p>
-                <small>Click "New Age Group" above to add your first bracket.</small>
-              </td>
-            </tr>
-
-            <!-- Age Group Rows -->
-            <tr v-for="group in paginatedAgeGroups" :key="group.id">
-              <td class="ps-4 font-monospace text-muted text-xs">#{{ group.id }}</td>
-              <td class="fw-semibold text-primary">
-                <div class="d-flex align-items-center gap-2.5">
-                  <div class="group-icon-badge rounded-circle d-flex align-items-center justify-content-center">
-                    <i class="bi bi-person-bounding-box text-primary text-xs"></i>
-                  </div>
-                  <span>{{ group.name }}</span>
-                </div>
-              </td>
-              <td>
-                <span class="badge bg-body-tertiary text-body border px-3 py-1.5 rounded-pill font-monospace text-xs">
-                  <i class="bi bi-clock-history me-1 text-muted"></i>
-                  {{ group.from_age }} – {{ group.to_age }} Years
-                </span>
-              </td>
-              <td class="pe-4 text-end">
-                <div class="d-flex align-items-center justify-content-end gap-1">
-                  <button 
-                    class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
-                    @click="openViewModal(group)"
-                    title="View Age Group Details"
-                  >
-                    <i class="bi bi-eye-fill text-primary"></i>
-                  </button>
-                  <button 
-                    class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
-                    @click="openEditModal(group)"
-                    title="Edit Age Group"
-                  >
-                    <i class="bi bi-pencil-fill text-muted"></i>
-                  </button>
-                  <button 
-                    class="btn btn-sm btn-light border-0 rounded-circle action-btn hover-danger" 
-                    @click="promptDelete(group)"
-                    title="Delete Age Group"
-                  >
-                    <i class="bi bi-trash-fill text-danger"></i>
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <!-- Reusable Pagination Control Footer -->
-      <PaginationControl
-        v-if="filteredAgeGroups.length > 0"
-        v-model:currentPage="currentPage"
-        v-model:itemsPerPage="itemsPerPage"
-        :totalPages="totalPages"
-        :totalItems="filteredAgeGroups.length"
-      />
-
-    </div>
+      </template>
+    </AppTable>
 
     <!-- View Age Group Details Modal -->
     <ViewDetailModal
@@ -543,3 +507,7 @@ onMounted(() => {
   background-color: rgba(220, 53, 69, 0.12) !important;
 }
 </style>
+
+
+
+

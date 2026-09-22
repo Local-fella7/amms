@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
+import type { FeePayment, Member } from '~/types'
 
 interface NotificationMemberItem {
   id: number
@@ -15,6 +16,7 @@ interface NotificationMemberItem {
     first_name: string
     last_name: string
     phone?: string
+    email?: string
     gender?: string
     location_id?: number | string
     member_status?: string
@@ -46,6 +48,7 @@ interface MemberOption {
   first_name: string
   last_name: string
   phone?: string
+  email?: string
   gender?: string
   location_id?: number | string
   member_status?: string
@@ -61,14 +64,53 @@ interface LocationOption {
   name: string
 }
 
-const { data: notificationMembersResponse, loading, error, execute: fetchNotificationMembers, fetchWithAuth } = useApi<any>()
+const { data: notificationMembersResponse, loading, error, execute: fetchNotificationMembers, fetchWithAuth } = useApi<NotificationMemberItem[] | { data: NotificationMemberItem[] }>()
 const { data: notifications, execute: fetchNotifications } = useApi<NotificationOption[]>()
 const { data: templates, execute: fetchTemplates } = useApi<NotificationTemplateOption[]>()
 const { data: members, execute: fetchMembers } = useApi<MemberOption[]>()
 const { data: locations, execute: fetchLocations } = useApi<LocationOption[]>()
+const { data: payments, execute: fetchPayments } = useApi<FeePayment[] | { data: FeePayment[] }>()
 
 const searchQuery = ref('')
 const selectedNotificationFilter = ref<string>('')
+const selectedLocationFilter = ref<string>('')
+const selectedStatusFilter = ref<string>('all')
+const selectedReachabilityFilter = ref<string>('all')
+const selectedPaymentFilter = ref<string>('all')
+const selectedDateFilter = ref<string>('all')
+const selectedGenderFilter = ref<string>('all')
+const isFilterDrawerOpen = ref(false)
+
+const secondaryActiveFilterCount = computed(() => {
+  let count = 0
+  if (selectedStatusFilter.value !== 'all') count++
+  if (selectedReachabilityFilter.value !== 'all') count++
+  if (selectedPaymentFilter.value !== 'all') count++
+  if (selectedDateFilter.value !== 'all') count++
+  if (selectedGenderFilter.value !== 'all') count++
+  return count
+})
+
+const activeFilterCount = computed(() => {
+  let count = secondaryActiveFilterCount.value
+  if (selectedNotificationFilter.value) count++
+  if (selectedLocationFilter.value) count++
+  if (searchQuery.value.trim()) count++
+  return count
+})
+
+const hasActiveFilters = computed(() => activeFilterCount.value > 0)
+
+const resetAllFilters = () => {
+  searchQuery.value = ''
+  selectedNotificationFilter.value = ''
+  selectedLocationFilter.value = ''
+  selectedStatusFilter.value = 'all'
+  selectedReachabilityFilter.value = 'all'
+  selectedPaymentFilter.value = 'all'
+  selectedDateFilter.value = 'all'
+  selectedGenderFilter.value = 'all'
+}
 
 const isSubmitting = ref(false)
 const modalError = ref('')
@@ -80,10 +122,19 @@ const selectedTemplateId = ref<number | string>('')
 const messageContent = ref('')
 const selectedMemberIds = ref<number[]>([])
 
+// Broadcast Dispatch Channel State (Step 3: POST /api/notifications/{id}/broadcast)
+const broadcastChannel = ref<'email' | 'sms' | 'both'>('both')
+const isBroadcasting = ref(false)
+const directDispatchNotifId = ref<number | string>('')
+const directDispatchChannel = ref<'email' | 'sms' | 'both'>('both')
+const isDirectDispatchModalOpen = ref(false)
+const broadcastSummary = ref<{ sent: number; failed: number; channel: string } | null>(null)
+const isSummaryModalOpen = ref(false)
+
 // Left Column Filters
 const memberFilterSearch = ref('')
 const memberFilterLocation = ref<string>('')
-const memberFilterStatus = ref<string>('active')
+const audienceFilter = ref<'all' | 'active' | 'inactive' | 'deceased' | 'outstanding'>('all')
 
 // View Modal State
 const viewingItem = ref<NotificationMemberItem | null>(null)
@@ -102,7 +153,8 @@ const availablePlaceholders = [
   { tag: '{{first_name}}', label: 'First Name' },
   { tag: '{{last_name}}', label: 'Last Name' },
   { tag: '{{fee_year}}', label: 'Fee Year' },
-  { tag: '{{phone}}', label: 'Phone' }
+  { tag: '{{phone}}', label: 'Phone' },
+  { tag: '{{outstanding_balance}}', label: 'Outstanding Balance' }
 ]
 
 const loadData = async () => {
@@ -112,7 +164,8 @@ const loadData = async () => {
       fetchNotifications((api) => api('/api/notifications')).catch(() => []),
       fetchTemplates((api) => api('/api/notification-templates')).catch(() => []),
       fetchMembers((api) => api('/api/members')).catch(() => []),
-      fetchLocations((api) => api('/api/locations')).catch(() => [])
+      fetchLocations((api) => api('/api/locations')).catch(() => []),
+      fetchPayments((api) => api('/api/fee-payments')).catch(() => [])
     ])
   } catch (err) {
     // Handled by composable
@@ -134,6 +187,14 @@ const getNotificationTitle = (nId: number | string) => {
   return found ? found.name : `Broadcast #${nId}`
 }
 
+const getFullMember = (item: NotificationMemberItem): MemberOption | NotificationMemberItem['member'] | undefined => {
+  if (members.value) {
+    const found = members.value.find(m => Number(m.id) === Number(item.member_id))
+    if (found) return found
+  }
+  return item.member
+}
+
 const getMemberName = (mId: number | string) => {
   if (!members.value) return `Member #${mId}`
   const found = members.value.find(m => Number(m.id) === Number(mId))
@@ -152,20 +213,138 @@ const getLocationName = (locId?: number | string) => {
   return found ? found.name : 'Branch'
 }
 
+const currentYear = new Date().getFullYear()
+
+const paidMemberIds = computed(() => {
+  const ids = new Set<number>()
+  const list = Array.isArray(payments.value) ? payments.value : (payments.value?.data || [])
+  list.forEach((p: FeePayment) => {
+    if ((p.date || p.created_at || '').startsWith(String(currentYear))) {
+      ids.add(Number(p.member_id))
+    }
+  })
+  return ids
+})
+
+const isMemberOutstanding = (m?: MemberOption | Partial<Member>) => {
+  if (!m) return false
+  return (m.member_status || 'active') === 'active' && m.fee_exemption !== 'yes' && !paidMemberIds.value.has(Number(m.id))
+}
+
+const checkReachability = (member: MemberOption | Partial<Member> | null | undefined, mode: string) => {
+  if (!member || mode === 'all') return true
+  const phone = (member.phone || '').trim().replace(/\D/g, '')
+  const email = (member.email || '').trim().toLowerCase()
+  const hasPhone = phone.length >= 9
+  const hasEmail = email.includes('@') && email.includes('.')
+
+  if (mode === 'has_phone') return hasPhone
+  if (mode === 'missing_phone') return !hasPhone
+  if (mode === 'has_email') return hasEmail
+  if (mode === 'missing_email') return !hasEmail
+  return true
+}
+
+const checkPaymentStatus = (member: MemberOption | Partial<Member> | null | undefined, mode: string) => {
+  if (!member || mode === 'all') return true
+  if (mode === 'outstanding') return isMemberOutstanding(member)
+  if (mode === 'paid') return paidMemberIds.value.has(Number(member.id))
+  if (mode === 'exempted') return member.fee_exemption === 'yes'
+  return true
+}
+
+const isDateMatching = (createdAtStr?: string, filterMode = 'all') => {
+  if (!createdAtStr || filterMode === 'all') return true
+  const created = new Date(createdAtStr)
+  if (isNaN(created.getTime())) return true
+
+  const now = new Date()
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  const createdTime = created.getTime()
+
+  if (filterMode === 'today') {
+    return createdTime >= todayStart
+  }
+  if (filterMode === 'this_week') {
+    const day = now.getDay() === 0 ? 6 : now.getDay() - 1
+    const weekStart = todayStart - day * 86400000
+    return createdTime >= weekStart
+  }
+  if (filterMode === 'this_month') {
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime()
+    return createdTime >= monthStart
+  }
+  return true
+}
+
 const filteredItems = computed(() => {
   let result = [...rawList.value]
 
   if (searchQuery.value.trim()) {
     const q = searchQuery.value.toLowerCase()
     result = result.filter(item => {
-      const mName = item.member ? `${item.member.first_name} ${item.member.last_name}` : getMemberName(item.member_id)
+      const m = getFullMember(item)
+      const mName = m ? `${m.first_name} ${m.last_name}` : getMemberName(item.member_id)
+      const phone = (m?.phone || '').toLowerCase()
+      const email = (m?.email || '').toLowerCase()
       const nTitle = item.notification?.name || getNotificationTitle(item.notification_id)
-      return mName.toLowerCase().includes(q) || nTitle.toLowerCase().includes(q) || String(item.id).includes(q)
+      return mName.toLowerCase().includes(q) ||
+             phone.includes(q) ||
+             email.includes(q) ||
+             nTitle.toLowerCase().includes(q) ||
+             String(item.id).includes(q)
     })
   }
 
+  // 1. Broadcast Filter
   if (selectedNotificationFilter.value) {
     result = result.filter(item => Number(item.notification_id) === Number(selectedNotificationFilter.value))
+  }
+
+  // 2. Location / Branch Filter
+  if (selectedLocationFilter.value) {
+    result = result.filter(item => {
+      const m = getFullMember(item)
+      return String(m?.location_id || '') === String(selectedLocationFilter.value)
+    })
+  }
+
+  // 3. Member Status Filter
+  if (selectedStatusFilter.value !== 'all') {
+    result = result.filter(item => {
+      const m = getFullMember(item)
+      const status = m?.member_status || 'active'
+      return status === selectedStatusFilter.value
+    })
+  }
+
+  // 4. Reachability Filter
+  if (selectedReachabilityFilter.value !== 'all') {
+    result = result.filter(item => {
+      const m = getFullMember(item)
+      return checkReachability(m, selectedReachabilityFilter.value)
+    })
+  }
+
+  // 5. Payment / Outstanding Status Filter
+  if (selectedPaymentFilter.value !== 'all') {
+    result = result.filter(item => {
+      const m = getFullMember(item)
+      return checkPaymentStatus(m, selectedPaymentFilter.value)
+    })
+  }
+
+  // 6. Assignment Period / Date Filter
+  if (selectedDateFilter.value !== 'all') {
+    result = result.filter(item => isDateMatching(item.created_at, selectedDateFilter.value))
+  }
+
+  // 7. Gender Filter
+  if (selectedGenderFilter.value !== 'all') {
+    result = result.filter(item => {
+      const m = getFullMember(item)
+      return (m?.gender || '').toLowerCase() === selectedGenderFilter.value
+    })
   }
 
   // Descending sort by ID
@@ -180,7 +359,17 @@ const paginatedItems = computed(() => {
   return filteredItems.value.slice(start, start + itemsPerPage.value)
 })
 
-watch([searchQuery, selectedNotificationFilter, itemsPerPage], () => {
+watch([
+  searchQuery,
+  selectedNotificationFilter,
+  selectedLocationFilter,
+  selectedStatusFilter,
+  selectedReachabilityFilter,
+  selectedPaymentFilter,
+  selectedDateFilter,
+  selectedGenderFilter,
+  itemsPerPage
+], () => {
   currentPage.value = 1
 })
 
@@ -197,8 +386,14 @@ const availableFilteredMembers = computed(() => {
     if (memberFilterLocation.value && String(m.location_id) !== String(memberFilterLocation.value)) {
       return false
     }
-    if (memberFilterStatus.value && (m.member_status || 'active') !== memberFilterStatus.value) {
-      return false
+    if (audienceFilter.value === 'active') {
+      if ((m.member_status || 'active') !== 'active') return false
+    } else if (audienceFilter.value === 'inactive') {
+      if (m.member_status !== 'inactive') return false
+    } else if (audienceFilter.value === 'deceased') {
+      if (m.member_status !== 'deceased') return false
+    } else if (audienceFilter.value === 'outstanding') {
+      if (!isMemberOutstanding(m)) return false
     }
     return true
   })
@@ -250,19 +445,42 @@ const clearAllSelected = () => {
   selectedMemberIds.value = []
 }
 
-// Selected Members List for Right Column Preview
+// Selected Members List for Preview
 const selectedMembersObjects = computed(() => {
   if (!members.value) return []
   const idMap = new Map(members.value.map(m => [Number(m.id), m]))
   return selectedMemberIds.value.map(id => idMap.get(id)).filter(Boolean) as MemberOption[]
 })
 
-// Auto-fill message content when broadcast or template is changed
+const previewSampleMessage = computed(() => {
+  if (!messageContent.value) return 'Type message or select a template to preview...'
+  return messageContent.value
+    .replace(/\{\{first_name\}\}/g, 'Halima')
+    .replace(/\{\{last_name\}\}/g, 'Said')
+    .replace(/\{\{fee_year\}\}/g, String(new Date().getFullYear()))
+    .replace(/\{\{phone\}\}/g, '+255 711 222 333')
+    .replace(/\{\{outstanding_balance\}\}/g, 'TZS 50,000')
+})
+
+const smsCharCount = computed(() => messageContent.value.length)
+const smsSegmentCount = computed(() => Math.ceil(messageContent.value.length / 160) || 1)
+
+// Auto-fill message content AND template when broadcast campaign is changed
 watch(notificationId, (newNotifId) => {
   if (!newNotifId || !notifications.value) return
   const found = notifications.value.find(n => Number(n.id) === Number(newNotifId))
-  if (found && found.content && !messageContent.value) {
-    messageContent.value = found.content
+  if (!found) return
+
+  // Auto-select the template linked to this campaign
+  if (found.notification_template_id) {
+    selectedTemplateId.value = found.notification_template_id
+  } else {
+    selectedTemplateId.value = ''
+  }
+
+  // Auto-fill message content from the campaign (only if not already typed)
+  if (found.content) {
+    messageContent.value = found.content.replace(/\{\{fee_year\}\}/g, String(new Date().getFullYear()))
   }
 })
 
@@ -270,12 +488,13 @@ watch(selectedTemplateId, (newTmplId) => {
   if (!newTmplId || !templates.value) return
   const found = templates.value.find(t => Number(t.id) === Number(newTmplId))
   if (found && found.content) {
-    messageContent.value = found.content
+    messageContent.value = found.content.replace(/\{\{fee_year\}\}/g, String(new Date().getFullYear()))
   }
 })
 
 const insertPlaceholder = (tag: string) => {
-  messageContent.value += ` ${tag}`
+  const valueToInsert = tag === '{{fee_year}}' ? String(new Date().getFullYear()) : tag
+  messageContent.value = messageContent.value ? `${messageContent.value} ${valueToInsert} ` : `${valueToInsert} `
 }
 
 const openAddModal = () => {
@@ -285,12 +504,12 @@ const openAddModal = () => {
   selectedMemberIds.value = []
   memberFilterSearch.value = ''
   memberFilterLocation.value = ''
-  memberFilterStatus.value = 'active'
+  audienceFilter.value = 'all'
   modalError.value = ''
   
   if (notifications.value && notifications.value.length > 0) {
     const first = notifications.value[0]
-    if (first.content) messageContent.value = first.content
+    if (first.content) messageContent.value = first.content.replace(/\{\{fee_year\}\}/g, String(new Date().getFullYear()))
   }
   
   isModalOpen.value = true
@@ -321,7 +540,7 @@ const formatDateDisplay = (val?: string) => {
   return str
 }
 
-const handleSaveBatch = async () => {
+const handleSaveBatch = async (alsoBroadcast = false) => {
   modalError.value = ''
   
   if (!notificationId.value) {
@@ -337,36 +556,123 @@ const handleSaveBatch = async () => {
   }
 
   isSubmitting.value = true
+  if (alsoBroadcast) isBroadcasting.value = true
+
   try {
-    const toAssign = selectedMemberIds.value.filter(id => !assignedMemberIdsForCurrentBroadcast.value.has(id))
-    
-    if (toAssign.length === 0) {
-      push.info('All selected members are already assigned to this broadcast.')
-      closeModal()
-      return
+    // 1. If message content was edited or selected from template, update broadcast content
+    if (notificationId.value && messageContent.value.trim()) {
+      const currentNotif = notifications.value?.find(n => Number(n.id) === Number(notificationId.value))
+      const sanitizedContent = messageContent.value.trim().replace(/\{\{fee_year\}\}/g, String(new Date().getFullYear()))
+      if (currentNotif && currentNotif.content !== sanitizedContent) {
+        await fetchWithAuth(`/api/notifications/${notificationId.value}`, {
+          method: 'PUT',
+          body: {
+            name: currentNotif.name ? currentNotif.name.replace(/\{\{fee_year\}\}/g, String(new Date().getFullYear())) : `Broadcast #${notificationId.value}`,
+            content: sanitizedContent,
+            notification_template_id: selectedTemplateId.value || currentNotif.notification_template_id
+          }
+        }).catch(() => {})
+      }
     }
 
+    // 2. Link unassigned members (Step 2)
+    const toAssign = selectedMemberIds.value.filter(id => !assignedMemberIdsForCurrentBroadcast.value.has(id))
     let successCount = 0
-    for (const mId of toAssign) {
-      await fetchWithAuth('/api/notification-members', {
+    if (toAssign.length > 0) {
+      for (const mId of toAssign) {
+        await fetchWithAuth('/api/notification-members', {
+          method: 'POST',
+          body: {
+            notification_id: Number(notificationId.value),
+            member_id: Number(mId)
+          }
+        })
+        successCount++
+      }
+    }
+
+    // 3. If requested, trigger broadcast dispatch (Step 3: POST /api/notifications/{id}/broadcast)
+    if (alsoBroadcast) {
+      const res = await fetchWithAuth<{ data?: { sent?: number; failed?: number } }>(`/api/notifications/${notificationId.value}/broadcast`, {
         method: 'POST',
         body: {
-          notification_id: Number(notificationId.value),
-          member_id: Number(mId)
+          channel: broadcastChannel.value
         }
       })
-      successCount++
+
+      const sentCount = res?.data?.sent ?? (successCount > 0 ? successCount : selectedMemberIds.value.length)
+      const failedCount = res?.data?.failed ?? 0
+      broadcastSummary.value = {
+        sent: Number(sentCount),
+        failed: Number(failedCount),
+        channel: broadcastChannel.value
+      }
+      isSummaryModalOpen.value = true
+      push.success(`Broadcast successfully dispatched via ${broadcastChannel.value.toUpperCase()}!`)
+    } else {
+      push.success(`Successfully assigned ${successCount} recipient(s) to the broadcast campaign!`)
     }
 
-    push.success(`Successfully assigned ${successCount} recipient(s) to the broadcast campaign!`)
     closeModal()
     await loadData()
-  } catch (err: any) {
-    const serverErrors = err?.data?.errors ? Object.values(err.data.errors).flat().join(', ') : null
-    modalError.value = serverErrors || err?.data?.message || err?.message || 'Failed to save recipient assignments'
+  } catch (err: unknown) {
+    modalError.value = extractErrorMessage(err, 'Failed to complete broadcast operation')
     push.error(modalError.value)
   } finally {
     isSubmitting.value = false
+    isBroadcasting.value = false
+  }
+}
+
+// Direct Campaign Dispatch Helpers
+const directDispatchRecipientCount = computed(() => {
+  if (!directDispatchNotifId.value || !rawList.value) return 0
+  return rawList.value.filter(item => Number(item.notification_id) === Number(directDispatchNotifId.value)).length
+})
+
+const openDirectDispatchModal = (notifId?: number | string) => {
+  const targetId = notifId || selectedNotificationFilter.value || (notifications.value && notifications.value[0]?.id)
+  if (!targetId) {
+    push.warning('Please select a broadcast campaign first')
+    return
+  }
+  directDispatchNotifId.value = targetId
+  directDispatchChannel.value = 'both'
+  isDirectDispatchModalOpen.value = true
+}
+
+const closeDirectDispatchModal = () => {
+  isDirectDispatchModalOpen.value = false
+}
+
+const executeDirectDispatch = async () => {
+  if (!directDispatchNotifId.value) return
+  isBroadcasting.value = true
+  try {
+    const res = await fetchWithAuth<{ data?: { sent?: number; failed?: number } }>(`/api/notifications/${directDispatchNotifId.value}/broadcast`, {
+      method: 'POST',
+      body: {
+        channel: directDispatchChannel.value
+      }
+    })
+
+    const notifName = getNotificationTitle(directDispatchNotifId.value)
+    const sentCount = res?.data?.sent ?? directDispatchRecipientCount.value
+    const failedCount = res?.data?.failed ?? 0
+    broadcastSummary.value = {
+      sent: Number(sentCount),
+      failed: Number(failedCount),
+      channel: directDispatchChannel.value
+    }
+    closeDirectDispatchModal()
+    isSummaryModalOpen.value = true
+    push.success(`Broadcast "${notifName}" dispatched via ${directDispatchChannel.value.toUpperCase()}!`)
+    await loadData()
+  } catch (err: unknown) {
+    const msg = extractErrorMessage(err, 'Failed to dispatch broadcast')
+    push.error(msg)
+  } finally {
+    isBroadcasting.value = false
   }
 }
 
@@ -381,20 +687,16 @@ const cancelDelete = () => {
 }
 
 const confirmDelete = async () => {
-  if (!itemToDelete.value) return
-  
-  isDeleting.value = true
-  try {
-    await fetchWithAuth(`/api/notification-members/${itemToDelete.value.id}`, { method: 'DELETE' })
-    push.success('Recipient member assignment removed successfully!')
-    cancelDelete()
-    await loadData()
-  } catch (err: any) {
-    const msg = err?.data?.message || 'Failed to remove recipient assignment'
-    push.error(msg)
-  } finally {
-    isDeleting.value = false
-  }
+    if (!itemToDelete.value) return
+    
+    const success = await mutate(api => api(`/api/notification-members/${itemToDelete.value.id}`, { method: 'DELETE' }), {
+      successMessage: 'Recipient member assignment removed successfully!'
+    })
+    
+    if (success) {
+      cancelDelete()
+      await loadData()
+    }
 }
 
 onMounted(() => {
@@ -406,14 +708,14 @@ onMounted(() => {
   <div>
     <!-- Page Header -->
     <PageHeader
-      title="Broadcast Recipients"
-      subtitle="Dispatch and manage targeted member communication rosters"
+      title="Broadcasts"
+      subtitle="Dispatch and manage targeted member communications and campaigns"
       v-model:searchQuery="searchQuery"
       searchPlaceholder="Search member name or campaign..."
       :loading="loading"
       hideRefresh
       showAddButton
-      addButtonText="Assign Broadcast Recipients"
+      addButtonText="New Broadcast"
       @add="openAddModal"
     />
 
@@ -430,7 +732,7 @@ onMounted(() => {
             <select 
               v-model="selectedNotificationFilter" 
               class="form-select form-select-sm filter-pill-select rounded-pill text-xs shadow-none border bg-body"
-              style="min-width: 220px;"
+              style="min-width: 200px;"
             >
               <option value="">All Broadcasts ({{ rawList.length }})</option>
               <option v-for="n in notifications" :key="n.id" :value="String(n.id)">
@@ -439,11 +741,51 @@ onMounted(() => {
             </select>
           </div>
 
-          <!-- Clear Filters -->
+          <!-- Branch / Location Filter -->
+          <div class="d-flex align-items-center gap-1.5">
+            <span class="text-xs fw-semibold text-muted text-uppercase font-monospace">Branch:</span>
+            <select 
+              v-model="selectedLocationFilter" 
+              class="form-select form-select-sm filter-pill-select rounded-pill text-xs shadow-none border bg-body"
+              style="min-width: 170px;"
+            >
+              <option value="">All Branches</option>
+              <option v-for="loc in locations" :key="loc.id" :value="String(loc.id)">
+                {{ loc.name }}
+              </option>
+            </select>
+          </div>
+
+          <!-- More Filters Drawer Toggle Button -->
           <button 
-            v-if="selectedNotificationFilter || searchQuery"
-            class="btn btn-sm btn-link text-decoration-none text-xs text-danger p-0 ms-2"
-            @click="selectedNotificationFilter = ''; searchQuery = ''"
+            type="button" 
+            class="btn btn-sm rounded-pill px-3 py-1 text-xs fw-semibold shadow-2xs d-flex align-items-center gap-1.5 transition-all"
+            :class="isFilterDrawerOpen || secondaryActiveFilterCount > 0 ? 'btn-primary' : 'btn-outline-secondary'"
+            @click="isFilterDrawerOpen = !isFilterDrawerOpen"
+            title="Toggle more filters"
+          >
+            <i class="bi bi-sliders"></i>
+            <span>Filters</span>
+            <span v-if="secondaryActiveFilterCount > 0" class="badge rounded-pill bg-warning text-dark ms-0.5">
+              +{{ secondaryActiveFilterCount }}
+            </span>
+          </button>
+
+          <!-- Dispatch Selected Campaign Button -->
+          <button 
+            v-if="selectedNotificationFilter"
+            type="button" 
+            class="btn btn-sm btn-primary rounded-pill px-3 py-1 text-xs fw-semibold shadow-2xs d-flex align-items-center gap-1.5"
+            @click="openDirectDispatchModal(selectedNotificationFilter)"
+          >
+            <i class="bi bi-broadcast"></i> Dispatch Campaign
+          </button>
+
+          <!-- Clear All Filters -->
+          <button 
+            v-if="hasActiveFilters"
+            class="btn btn-sm btn-link text-decoration-none text-xs text-danger p-0 ms-1"
+            @click="resetAllFilters"
           >
             <i class="bi bi-x-circle me-1"></i>Reset
           </button>
@@ -451,16 +793,116 @@ onMounted(() => {
 
         <!-- Total Counter Badge -->
         <div class="text-xs text-muted font-monospace d-none d-sm-block">
-          Showing <span class="fw-bold text-primary">{{ filteredItems.length }}</span> assignments
+          Showing <span class="fw-bold text-primary">{{ filteredItems.length }}</span> of {{ rawList.length }} assignments
         </div>
       </div>
 
-      <!-- Center Loading Spinner Overlay -->
-      <div v-if="loading" class="position-absolute top-0 start-0 w-100 h-100 bg-body bg-opacity-75 d-flex flex-column align-items-center justify-content-center z-3">
-        <div class="spinner-border text-primary" role="status" style="width: 2.5rem; height: 2.5rem;">
-          <span class="visually-hidden">Loading recipients...</span>
+      <!-- Expandable Secondary Filter Drawer -->
+      <div v-if="isFilterDrawerOpen" class="bg-body-tertiary border-bottom px-4 py-3">
+        <div class="row g-2.5 align-items-end">
+          <!-- Member Status Filter -->
+          <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+            <label class="form-label text-xs fw-semibold text-muted text-uppercase mb-1">Status</label>
+            <select v-model="selectedStatusFilter" class="form-select form-select-sm rounded-3 text-xs shadow-none bg-body">
+              <option value="all">All Statuses</option>
+              <option value="active">Active Members</option>
+              <option value="inactive">Inactive Members</option>
+              <option value="deceased">Deceased</option>
+            </select>
+          </div>
+
+          <!-- Reachability Filter -->
+          <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+            <label class="form-label text-xs fw-semibold text-muted text-uppercase mb-1">Contact Reachability</label>
+            <select v-model="selectedReachabilityFilter" class="form-select form-select-sm rounded-3 text-xs shadow-none bg-body">
+              <option value="all">All Channels</option>
+              <option value="has_phone">Phone Available (SMS-Ready)</option>
+              <option value="missing_phone">⚠️ Missing Phone (Needs Update)</option>
+              <option value="has_email">Email Available</option>
+              <option value="missing_email">Missing Email</option>
+            </select>
+          </div>
+
+          <!-- Payment / Dues Filter -->
+          <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+            <label class="form-label text-xs fw-semibold text-muted text-uppercase mb-1">Fee Status ({{ currentYear }})</label>
+            <select v-model="selectedPaymentFilter" class="form-select form-select-sm rounded-3 text-xs shadow-none bg-body">
+              <option value="all">All Payment Statuses</option>
+              <option value="outstanding">Outstanding Dues (Due {{ currentYear }})</option>
+              <option value="paid">Fully Paid</option>
+              <option value="exempted">Fee Exempted</option>
+            </select>
+          </div>
+
+          <!-- Gender Filter -->
+          <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+            <label class="form-label text-xs fw-semibold text-muted text-uppercase mb-1">Gender</label>
+            <select v-model="selectedGenderFilter" class="form-select form-select-sm rounded-3 text-xs shadow-none bg-body">
+              <option value="all">All Genders</option>
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+            </select>
+          </div>
+
+          <!-- Assigned Period -->
+          <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+            <label class="form-label text-xs fw-semibold text-muted text-uppercase mb-1">Assigned Period</label>
+            <select v-model="selectedDateFilter" class="form-select form-select-sm rounded-3 text-xs shadow-none bg-body">
+              <option value="all">All Time</option>
+              <option value="today">Today</option>
+              <option value="this_week">This Week</option>
+              <option value="this_month">This Month</option>
+            </select>
+          </div>
         </div>
-        <span class="text-xs fw-semibold text-primary mt-2">Loading recipient assignments...</span>
+
+        <!-- Active filter chips -->
+        <div v-if="hasActiveFilters" class="d-flex flex-wrap align-items-center gap-1.5 mt-3 pt-2 border-top">
+          <span class="text-xs text-muted me-1 font-monospace">Active Filters:</span>
+          
+          <span v-if="selectedNotificationFilter" class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-20 rounded-pill px-2.5 py-1 text-xs d-flex align-items-center gap-1">
+            <i class="bi bi-broadcast"></i> {{ getNotificationTitle(selectedNotificationFilter) }}
+            <i class="bi bi-x cursor-pointer ms-1" @click="selectedNotificationFilter = ''"></i>
+          </span>
+
+          <span v-if="selectedLocationFilter" class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-20 rounded-pill px-2.5 py-1 text-xs d-flex align-items-center gap-1">
+            <i class="bi bi-geo-alt"></i> {{ getLocationName(selectedLocationFilter) }}
+            <i class="bi bi-x cursor-pointer ms-1" @click="selectedLocationFilter = ''"></i>
+          </span>
+
+          <span v-if="selectedStatusFilter !== 'all'" class="badge bg-secondary bg-opacity-10 text-secondary border rounded-pill px-2.5 py-1 text-xs d-flex align-items-center gap-1 text-capitalize">
+            Status: {{ selectedStatusFilter }}
+            <i class="bi bi-x cursor-pointer ms-1" @click="selectedStatusFilter = 'all'"></i>
+          </span>
+
+          <span v-if="selectedReachabilityFilter !== 'all'" class="badge rounded-pill px-2.5 py-1 text-xs d-flex align-items-center gap-1"
+            :class="selectedReachabilityFilter === 'missing_phone' ? 'bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25' : 'bg-info bg-opacity-10 text-info border border-info border-opacity-25'">
+            <i class="bi bi-telephone"></i>
+            {{ selectedReachabilityFilter === 'has_phone' ? 'Has Phone' : selectedReachabilityFilter === 'missing_phone' ? 'Missing Phone' : selectedReachabilityFilter === 'has_email' ? 'Has Email' : 'Missing Email' }}
+            <i class="bi bi-x cursor-pointer ms-1" @click="selectedReachabilityFilter = 'all'"></i>
+          </span>
+
+          <span v-if="selectedPaymentFilter !== 'all'" class="badge rounded-pill px-2.5 py-1 text-xs d-flex align-items-center gap-1"
+            :class="selectedPaymentFilter === 'outstanding' ? 'bg-warning bg-opacity-15 text-warning-emphasis border border-warning border-opacity-25' : 'bg-success bg-opacity-10 text-success border border-success border-opacity-25'">
+            <i class="bi bi-cash-stack"></i>
+            {{ selectedPaymentFilter === 'outstanding' ? 'Outstanding Dues' : selectedPaymentFilter === 'paid' ? 'Paid' : 'Exempted' }}
+            <i class="bi bi-x cursor-pointer ms-1" @click="selectedPaymentFilter = 'all'"></i>
+          </span>
+
+          <span v-if="selectedGenderFilter !== 'all'" class="badge bg-secondary bg-opacity-10 text-secondary border rounded-pill px-2.5 py-1 text-xs d-flex align-items-center gap-1 text-capitalize">
+            Gender: {{ selectedGenderFilter }}
+            <i class="bi bi-x cursor-pointer ms-1" @click="selectedGenderFilter = 'all'"></i>
+          </span>
+
+          <span v-if="selectedDateFilter !== 'all'" class="badge bg-secondary bg-opacity-10 text-secondary border rounded-pill px-2.5 py-1 text-xs d-flex align-items-center gap-1 text-capitalize">
+            Period: {{ selectedDateFilter.replace('_', ' ') }}
+            <i class="bi bi-x cursor-pointer ms-1" @click="selectedDateFilter = 'all'"></i>
+          </span>
+
+          <button class="btn btn-link btn-xs text-danger text-decoration-none p-0 ms-2" @click="resetAllFilters">
+            Clear All
+          </button>
+        </div>
       </div>
 
       <!-- Error Alert -->
@@ -472,91 +914,118 @@ onMounted(() => {
         <button class="btn btn-sm btn-outline-danger rounded-pill" @click="loadData">Retry</button>
       </div>
 
-      <div class="table-responsive">
-        <table class="table align-middle mb-0 custom-amms-table">
-          <thead>
-            <tr>
-              <th class="ps-4" style="width: 80px;"># ID</th>
-              <th>Recipient Member</th>
-              <th>Phone Number</th>
-              <th>Broadcast Campaign</th>
-              <th>Assigned Date</th>
-              <th class="text-end pe-4" style="width: 120px;">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <!-- Loading Skeleton -->
-            <template v-if="loading && rawList.length === 0">
-              <tr v-for="i in 5" :key="i">
-                <td class="ps-4"><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-8"></span></td>
-                <td><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-8"></span></td>
-                <td><span class="placeholder col-6"></span></td>
-                <td class="pe-4 text-end"><span class="placeholder col-10"></span></td>
-              </tr>
-            </template>
-
-            <!-- Empty State -->
-            <tr v-else-if="filteredItems.length === 0">
-              <td colspan="6" class="text-center py-5 text-muted">
-                <i class="bi bi-person-lines-fill fs-1 d-block mb-2 text-opacity-50"></i>
-                <p class="mb-0 fw-medium">No broadcast recipients assigned yet</p>
-                <small>Click "Assign Broadcast Recipients" above to select and queue members.</small>
-              </td>
-            </tr>
-
-            <!-- Recipient Assignment Rows -->
-            <tr v-for="item in paginatedItems" :key="item.id">
-              <td class="ps-4 font-monospace text-muted text-xs">#{{ item.id }}</td>
-              <td class="fw-semibold text-primary">
-                <div class="d-flex align-items-center gap-2.5">
-                  <div class="recip-badge rounded-circle d-flex align-items-center justify-content-center text-primary font-monospace fw-bold text-xs">
-                    {{ item.member ? `${item.member.first_name[0]}${item.member.last_name[0]}` : 'MB' }}
-                  </div>
-                  <div>
-                    <span>{{ item.member ? `${item.member.first_name} ${item.member.last_name}` : getMemberName(item.member_id) }}</span>
-                    <small v-if="item.member?.gender" class="d-block text-muted text-xs text-capitalize">
-                      <i :class="item.member.gender === 'female' ? 'bi bi-gender-female text-danger' : 'bi bi-gender-male text-primary'" class="me-1"></i>{{ item.member.gender }}
-                    </small>
-                  </div>
-                </div>
-              </td>
-              <td class="font-monospace text-xs text-body">
-                <i class="bi bi-telephone text-muted me-1"></i>
-                {{ item.member?.phone || getMemberPhone(item.member_id) }}
-              </td>
-              <td>
-                <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-20 px-2.5 py-1 rounded-pill text-xs fw-semibold">
-                  <i class="bi bi-send-fill me-1"></i>
-                  {{ item.notification?.name || getNotificationTitle(item.notification_id) }}
+      <!-- Replaced by AppTable Component -->
+      <AppTable
+        :columns="[
+          { key: 'id', label: '# ID', width: '70px', headerClass: 'ps-4 d-none d-xl-table-cell', cellClass: 'ps-4 font-monospace text-muted text-xs d-none d-xl-table-cell' },
+          { key: 'recipient-member', label: 'Recipient Member', cellClass: 'fw-semibold text-primary' },
+          { key: 'phone-number', label: 'Contact Reachability', headerClass: 'd-none d-sm-table-cell', cellClass: 'd-none d-sm-table-cell' },
+          { key: 'broadcast-campaign', label: 'Broadcast Campaign', headerClass: 'd-none d-md-table-cell', cellClass: 'd-none d-md-table-cell' },
+          { key: 'status-branch', label: 'Branch & Status', headerClass: 'd-none d-lg-table-cell', cellClass: 'd-none d-lg-table-cell text-xs' },
+          { key: 'assigned-date', label: 'Assigned Date', headerClass: 'd-none d-xl-table-cell', cellClass: 'font-monospace text-xs text-secondary-amms d-none d-xl-table-cell' },
+          { key: 'actions', label: 'Actions', align: 'right', width: '110px', headerClass: 'pe-4', cellClass: 'pe-4' }
+        ]"
+        :items="paginatedItems"
+        :loading="loading"
+        emptyIcon="bi bi-person-lines-fill"
+        emptyTitle="No broadcast recipients match filters"
+        emptySubtitle="Try adjusting your search criteria or click 'Reset' above."
+      >
+        <template #cell-id="{ item }">
+          #{{ item.id }}
+        </template>
+        
+        <template #cell-recipient-member="{ item }">
+          <div class="d-flex align-items-center gap-2.5">
+            <MemberAvatar :member="getFullMember(item)" />
+            <div>
+              <div class="d-flex align-items-center gap-1.5 flex-wrap">
+                <span>{{ item.member ? `${item.member.first_name} ${item.member.last_name}` : getMemberName(item.member_id) }}</span>
+                <span v-if="getFullMember(item)?.location_id" class="badge bg-secondary bg-opacity-10 text-secondary-amms text-2xs rounded-pill d-lg-none">
+                  {{ getLocationName(getFullMember(item)?.location_id) }}
                 </span>
-              </td>
-              <td class="font-monospace text-xs text-secondary-amms">
-                {{ formatDateDisplay(item.created_at) }}
-              </td>
-              <td class="pe-4 text-end">
-                <div class="d-flex align-items-center justify-content-end gap-1">
-                  <button 
-                    class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
-                    @click="openViewModal(item)"
-                    title="View Assignment Details"
-                  >
-                    <i class="bi bi-eye-fill text-primary"></i>
-                  </button>
-                  <button 
-                    class="btn btn-sm btn-light border-0 rounded-circle action-btn hover-danger" 
-                    @click="promptDelete(item)"
-                    title="Remove Recipient"
-                  >
-                    <i class="bi bi-trash-fill text-danger"></i>
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+              </div>
+              <div class="d-flex align-items-center gap-2 mt-0.5">
+                <small v-if="getFullMember(item)?.gender" class="text-muted text-xs text-capitalize">
+                  <i :class="getFullMember(item)?.gender === 'female' ? 'bi bi-gender-female text-danger' : 'bi bi-gender-male text-primary'" class="me-0.5"></i>{{ getFullMember(item)?.gender }}
+                </small>
+                <span v-if="(getFullMember(item)?.member_status || 'active') !== 'active'" class="badge bg-warning bg-opacity-10 text-warning text-2xs text-capitalize">
+                  {{ getFullMember(item)?.member_status }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <template #cell-phone-number="{ item }">
+          <div class="d-flex flex-column gap-0.5">
+            <div class="d-flex align-items-center gap-1.5">
+              <template v-if="getFullMember(item)?.phone && getFullMember(item)?.phone?.trim().length >= 9">
+                <i class="bi bi-telephone-fill text-success text-xs"></i>
+                <span class="font-monospace text-xs text-body">{{ getFullMember(item)?.phone }}</span>
+              </template>
+              <template v-else>
+                <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 rounded-pill px-2 py-0.5 text-xs font-monospace">
+                  <i class="bi bi-exclamation-circle-fill me-1"></i>No Phone
+                </span>
+              </template>
+            </div>
+            <small v-if="getFullMember(item)?.email" class="text-muted text-xs font-monospace text-truncate" style="max-width: 170px;">
+              <i class="bi bi-envelope text-muted me-1"></i>{{ getFullMember(item)?.email }}
+            </small>
+          </div>
+        </template>
+
+        <template #cell-broadcast-campaign="{ item }">
+          <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-20 px-2.5 py-1 rounded-pill text-xs fw-semibold">
+            <i class="bi bi-send-fill me-1"></i>
+            {{ item.notification?.name || getNotificationTitle(item.notification_id) }}
+          </span>
+        </template>
+
+        <template #cell-status-branch="{ item }">
+          <div class="d-flex flex-column gap-0.5">
+            <span class="fw-semibold text-body">
+              <i class="bi bi-geo-alt text-muted me-1"></i>{{ getLocationName(getFullMember(item)?.location_id) }}
+            </span>
+            <div class="d-flex align-items-center gap-1.5 flex-wrap">
+              <span class="badge rounded-pill text-2xs"
+                :class="(getFullMember(item)?.member_status || 'active') === 'active' ? 'bg-success bg-opacity-10 text-success' : 'bg-secondary bg-opacity-10 text-secondary'">
+                {{ getFullMember(item)?.member_status || 'active' }}
+              </span>
+              <span v-if="isMemberOutstanding(getFullMember(item))" class="badge bg-warning bg-opacity-15 text-warning-emphasis text-2xs">
+                Fee Due
+              </span>
+              <span v-else-if="getFullMember(item)?.fee_exemption === 'yes'" class="badge badge-exempted text-2xs px-2 py-0.5 rounded-pill">
+                Exempted
+              </span>
+            </div>
+          </div>
+        </template>
+
+        <template #cell-assigned-date="{ item }">
+          {{ formatDateDisplay(item.created_at) }}
+        </template>
+
+        <template #cell-actions="{ item }">
+          <div class="d-flex align-items-center justify-content-end gap-1">
+            <button 
+              class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
+              @click="openViewModal(item)"
+              title="View Assignment Details"
+            >
+              <i class="bi bi-eye-fill text-primary"></i>
+            </button>
+            <button 
+              class="btn btn-sm btn-light border-0 rounded-circle action-btn hover-danger" 
+              @click="promptDelete(item)"
+              title="Remove Recipient"
+            >
+              <i class="bi bi-trash-fill text-danger"></i>
+            </button>
+          </div>
+        </template>
+      </AppTable>
 
       <!-- Pagination Footer -->
       <PaginationControl
@@ -588,6 +1057,21 @@ onMounted(() => {
             <span class="fw-semibold text-body font-monospace text-xs">{{ viewingItem ? (viewingItem.member?.phone || getMemberPhone(viewingItem.member_id)) : '—' }}</span>
           </div>
           <div class="col-md-6">
+            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Email Address</span>
+            <span class="fw-semibold text-body font-monospace text-xs">{{ viewingItem ? (getFullMember(viewingItem)?.email || '—') : '—' }}</span>
+          </div>
+          <div class="col-md-6">
+            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Location Branch</span>
+            <span class="fw-semibold text-body text-xs">{{ viewingItem ? getLocationName(getFullMember(viewingItem)?.location_id) : '—' }}</span>
+          </div>
+          <div class="col-md-6">
+            <span class="text-xs text-muted text-uppercase fw-semibold d-block">Status & Exemption</span>
+            <span class="fw-semibold text-body text-xs text-capitalize">
+              {{ viewingItem ? (getFullMember(viewingItem)?.member_status || 'Active') : '—' }}
+              <span v-if="getFullMember(viewingItem)?.fee_exemption === 'yes'" class="badge badge-exempted ms-1 px-2 py-0.5 rounded-pill">Exempted</span>
+            </span>
+          </div>
+          <div class="col-md-6">
             <span class="text-xs text-muted text-uppercase fw-semibold d-block">Assigned Broadcast</span>
             <span class="fw-semibold text-body text-xs">{{ viewingItem ? (viewingItem.notification?.name || getNotificationTitle(viewingItem.notification_id)) : '—' }}</span>
           </div>
@@ -599,300 +1083,140 @@ onMounted(() => {
       </div>
     </ViewDetailModal>
 
-    <!-- Custom Delete Confirmation Modal -->
-    <div v-if="isDeleteModalOpen" class="modal-backdrop fade show" style="z-index: 1060;"></div>
-    
-    <div v-if="isDeleteModalOpen" class="modal fade show d-block" tabindex="-1" role="dialog" style="z-index: 1065;" @click.self="cancelDelete">
-      <div class="modal-dialog modal-dialog-centered modal-sm">
-        <div class="modal-content amms-surface border-0 shadow-lg rounded-4 overflow-hidden text-center p-4">
-          <div class="d-inline-flex align-items-center justify-content-center bg-danger bg-opacity-10 text-danger rounded-circle p-3 mx-auto mb-3" style="width: 56px; height: 56px;">
-            <i class="bi bi-trash3-fill fs-3"></i>
+    <DeleteConfirmModal
+      v-model="isDeleteModalOpen"
+      message="Are you sure you want to permanently remove this recipient from the notification?"
+        :itemTitle="itemToDelete ? `&quot;${itemToDelete.member?.first_name} ${itemToDelete.member?.last_name}&quot;` : ''"
+      :loading="isDeleting"
+      confirmText="Remove Recipient"
+      @confirm="confirmDelete"
+    />
+
+    <!-- Shared Broadcast Recipient / Dispatch Studio Modal -->
+    <SharedBroadcastRecipientModal
+      v-if="isModalOpen"
+      @close="closeModal"
+      @saved="loadData"
+    />
+
+    <!-- Direct Campaign Dispatch Modal -->
+    <div v-if="isDirectDispatchModalOpen" class="modal-backdrop fade show" style="z-index: 1060;"></div>
+    <div v-if="isDirectDispatchModalOpen" class="modal fade show d-block" tabindex="-1" role="dialog" style="z-index: 1065;" @click.self="closeDirectDispatchModal">
+      <div class="modal-dialog modal-dialog-centered modal-md">
+        <div class="modal-content amms-surface border-0 shadow-lg rounded-4 overflow-hidden">
+          <div class="modal-header border-bottom px-4 py-3 bg-body-tertiary">
+            <div class="d-flex align-items-center gap-2.5">
+              <div class="rounded-3 d-flex align-items-center justify-content-center flex-shrink-0 shadow-2xs" style="width: 38px; height: 38px; background-color: var(--amms-primary); color: #fff;">
+                <i class="bi bi-broadcast fs-5"></i>
+              </div>
+              <div>
+                <h5 class="modal-title fw-bold text-primary text-sm mb-0">Dispatch Broadcast Campaign</h5>
+                <small class="text-muted text-xs">Execute immediate delivery to all linked recipients</small>
+              </div>
+            </div>
+            <button type="button" class="btn-close" @click="closeDirectDispatchModal" aria-label="Close"></button>
           </div>
-          <h5 class="fw-bold text-primary text-sm mb-1">Confirm Removal</h5>
-          <p class="text-secondary-amms text-xs mb-2">Are you sure you want to remove this member recipient assignment?</p>
-          <p class="fw-bold text-danger text-xs mb-4 font-monospace bg-danger bg-opacity-10 py-1.5 px-3 rounded-3 d-inline-block mx-auto">
-            {{ itemToDelete ? getMemberName(itemToDelete.member_id) : '' }}
-          </p>
-          <div class="d-flex align-items-center justify-content-center gap-2">
-            <button type="button" class="btn btn-sm btn-light border rounded-pill px-3.5 text-xs fw-semibold" @click="cancelDelete">Cancel</button>
-            <button type="button" class="btn btn-sm btn-danger rounded-pill px-4 text-xs fw-semibold d-flex align-items-center gap-1.5 shadow-sm" :disabled="isDeleting" @click="confirmDelete">
-              <span v-if="isDeleting" class="spinner-border spinner-border-sm" role="status"></span>
-              <span>{{ isDeleting ? 'Deleting...' : 'Remove Assignment' }}</span>
+          
+          <div class="modal-body p-4">
+            <div class="bg-body-tertiary rounded-3 p-3 border mb-3">
+              <span class="text-xs text-muted text-uppercase fw-semibold d-block mb-1">Target Campaign</span>
+              <h6 class="fw-bold text-primary mb-1">{{ getNotificationTitle(directDispatchNotifId) }}</h6>
+              <span class="badge bg-primary text-white rounded-pill text-xs font-monospace">
+                {{ directDispatchRecipientCount }} Assigned Member(s) Linked
+              </span>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label text-xs fw-semibold text-secondary-amms text-uppercase mb-1.5">
+                Select Delivery Channel *
+              </label>
+              <div class="row g-2">
+                <div class="col-4">
+                  <div 
+                    class="channel-card p-2.5 rounded-3 border text-center cursor-pointer transition-all"
+                    :class="directDispatchChannel === 'email' ? 'active-channel-card border-primary shadow-2xs' : 'bg-body border'"
+                    @click="directDispatchChannel = 'email'"
+                  >
+                    <i class="bi bi-envelope-fill fs-5 d-block mb-1 text-primary"></i>
+                    <span class="fw-bold text-xs d-block text-body">Email</span>
+                    <small class="text-muted text-2xs">SendGrid</small>
+                  </div>
+                </div>
+                <div class="col-4">
+                  <div 
+                    class="channel-card p-2.5 rounded-3 border text-center cursor-pointer transition-all"
+                    :class="directDispatchChannel === 'sms' ? 'active-channel-card border-primary shadow-2xs' : 'bg-body border'"
+                    @click="directDispatchChannel = 'sms'"
+                  >
+                    <i class="bi bi-chat-text-fill fs-5 d-block mb-1 text-success"></i>
+                    <span class="fw-bold text-xs d-block text-body">SMS</span>
+                    <small class="text-muted text-2xs">Beem SMS</small>
+                  </div>
+                </div>
+                <div class="col-4">
+                  <div 
+                    class="channel-card p-2.5 rounded-3 border text-center cursor-pointer transition-all"
+                    :class="directDispatchChannel === 'both' ? 'active-channel-card border-primary shadow-2xs' : 'bg-body border'"
+                    @click="directDispatchChannel = 'both'"
+                  >
+                    <i class="bi bi-broadcast fs-5 d-block mb-1 text-warning"></i>
+                    <span class="fw-bold text-xs d-block text-body">Both</span>
+                    <small class="text-muted text-2xs">Email + SMS</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="alert alert-warning border-0 rounded-3 p-2.5 text-xs text-secondary-amms mb-0 d-flex align-items-center gap-2">
+              <i class="bi bi-info-circle-fill text-warning fs-6 flex-shrink-0"></i>
+              <span>This triggers actual live dispatch to all {{ directDispatchRecipientCount }} member(s) linked to this campaign.</span>
+            </div>
+          </div>
+
+          <div class="modal-footer border-top px-4 py-3 bg-body-tertiary d-flex align-items-center justify-content-end gap-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3.5 text-xs" @click="closeDirectDispatchModal" :disabled="isBroadcasting">
+              Cancel
+            </button>
+            <button 
+              type="button" 
+              class="btn btn-sm btn-primary rounded-pill px-4 text-xs fw-semibold d-flex align-items-center gap-2 shadow-sm"
+              :disabled="isBroadcasting || directDispatchRecipientCount === 0"
+              @click="executeDirectDispatch"
+            >
+              <span v-if="isBroadcasting" class="spinner-border spinner-border-sm" role="status"></span>
+              <i v-else class="bi bi-send-fill"></i>
+              <span>{{ isBroadcasting ? 'Dispatching...' : `Dispatch via ${directDispatchChannel.toUpperCase()}` }}</span>
             </button>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- TWO-COLUMN BROADCAST RECIPIENT COMPOSER MODAL -->
-    <div v-if="isModalOpen" class="modal-backdrop fade show" style="z-index: 1060;"></div>
-    
-    <div v-if="isModalOpen" class="modal fade show d-block" tabindex="-1" role="dialog" style="z-index: 1065;" @click.self="closeModal">
-      <div class="modal-dialog modal-dialog-centered modal-xl" style="max-width: 1140px;">
-        <div class="modal-content amms-surface border-0 shadow-lg rounded-4 overflow-hidden d-flex flex-column" style="max-height: 90vh;">
-          
-          <!-- Modal Header -->
-          <div class="modal-header border-bottom px-4 py-3 bg-body-tertiary d-flex align-items-center justify-content-between">
-            <div class="d-flex align-items-center gap-2">
-              <div class="rounded-circle p-2 bg-primary bg-opacity-10 text-primary d-flex align-items-center justify-content-center" style="width: 36px; height: 36px;">
-                <i class="bi bi-send-check-fill fs-5"></i>
-              </div>
-              <div>
-                <h5 class="modal-title fw-bold text-primary text-sm mb-0">Assign Broadcast Recipients</h5>
-                <small class="text-muted text-xs">Select target members and preview message template dispatch</small>
-              </div>
-            </div>
-            <button type="button" class="btn-close" @click="closeModal" aria-label="Close"></button>
+    <!-- Delivery Results Summary Modal -->
+    <div v-if="isSummaryModalOpen" class="modal-backdrop fade show" style="z-index: 1070;"></div>
+    <div v-if="isSummaryModalOpen" class="modal fade show d-block" tabindex="-1" role="dialog" style="z-index: 1075;" @click.self="isSummaryModalOpen = false">
+      <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content amms-surface border-0 shadow-lg rounded-4 overflow-hidden text-center p-4">
+          <div class="d-inline-flex align-items-center justify-content-center bg-success bg-opacity-10 text-success rounded-circle p-3 mx-auto mb-3" style="width: 56px; height: 56px;">
+            <i class="bi bi-check2-circle fs-2 text-success"></i>
           </div>
-
-          <!-- Two-Column Modal Body -->
-          <div class="modal-body p-0 overflow-hidden d-flex flex-column flex-grow-1">
-            <div v-if="modalError" class="alert alert-danger py-2 px-4 mb-0 rounded-0 small border-bottom d-flex align-items-center gap-2">
-              <i class="bi bi-exclamation-triangle-fill"></i>
-              <span>{{ modalError }}</span>
+          <h5 class="fw-bold text-primary text-sm mb-1">Broadcast Dispatched!</h5>
+          <p class="text-secondary-amms text-xs mb-3">
+            Delivery initiated across <strong class="text-uppercase text-primary">{{ broadcastSummary?.channel }}</strong>.
+          </p>
+          <div class="bg-body-tertiary rounded-3 p-2.5 border mb-3 font-monospace text-xs text-start">
+            <div class="d-flex justify-content-between mb-1">
+              <span class="text-muted">Delivered/Sent:</span>
+              <strong class="text-success">{{ broadcastSummary?.sent || 0 }}</strong>
             </div>
-
-            <div class="row g-0 flex-grow-1" style="min-height: 480px; max-height: calc(85vh - 140px);">
-              
-              <!-- LEFT COLUMN: MEMBER SELECTION DIRECTORY -->
-              <div class="col-lg-6 border-end d-flex flex-column bg-body-tertiary bg-opacity-50 p-3 p-md-4 overflow-hidden">
-                <div class="d-flex align-items-center justify-content-between mb-2.5">
-                  <span class="text-xs fw-bold text-primary text-uppercase font-monospace">
-                    <i class="bi bi-people-fill me-1"></i> Member Directory ({{ availableFilteredMembers.length }})
-                  </span>
-                  <div class="d-flex align-items-center gap-1.5">
-                    <button 
-                      type="button" 
-                      class="btn btn-xs btn-outline-primary rounded-pill px-2.5 py-0.5 text-xs fw-semibold"
-                      @click="selectAllFiltered"
-                    >
-                      Select All
-                    </button>
-                    <button 
-                      type="button" 
-                      class="btn btn-xs btn-light border rounded-pill px-2.5 py-0.5 text-xs text-muted"
-                      @click="deselectAllFiltered"
-                    >
-                      Clear
-                    </button>
-                  </div>
-                </div>
-
-                <!-- Member Search & Filters -->
-                <div class="d-flex flex-column gap-2 mb-3">
-                  <div class="input-group input-group-sm rounded-3 border bg-body overflow-hidden">
-                    <span class="input-group-text bg-transparent border-0 text-muted ps-2.5">
-                      <i class="bi bi-search"></i>
-                    </span>
-                    <input 
-                      type="search" 
-                      v-model="memberFilterSearch" 
-                      class="form-control border-0 bg-transparent ps-1 text-xs shadow-none" 
-                      placeholder="Search member by name or phone..."
-                    />
-                  </div>
-
-                  <div class="row g-2">
-                    <div class="col-6">
-                      <select v-model="memberFilterLocation" class="form-select form-select-sm rounded-3 text-xs bg-body shadow-none">
-                        <option value="">All Branches / Regions</option>
-                        <option v-for="loc in locations" :key="loc.id" :value="String(loc.id)">
-                          {{ loc.name }}
-                        </option>
-                      </select>
-                    </div>
-                    <div class="col-6">
-                      <select v-model="memberFilterStatus" class="form-select form-select-sm rounded-3 text-xs bg-body shadow-none">
-                        <option value="">All Member Statuses</option>
-                        <option value="active">Active Only</option>
-                        <option value="inactive">Inactive Only</option>
-                        <option value="deceased">Deceased Only</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Scrollable Member List Checkbox Tray -->
-                <div class="member-list-scroll flex-grow-1 overflow-y-auto rounded-3 border bg-body p-2 d-flex flex-column gap-1.5">
-                  <div 
-                    v-if="availableFilteredMembers.length === 0" 
-                    class="text-center py-5 text-muted text-xs"
-                  >
-                    <i class="bi bi-search fs-3 d-block mb-1 text-opacity-50"></i>
-                    No members match your filter criteria.
-                  </div>
-
-                  <div 
-                    v-for="m in availableFilteredMembers" 
-                    :key="m.id"
-                    class="member-picker-row d-flex align-items-center justify-content-between p-2 rounded-3 transition-all cursor-pointer border"
-                    :class="{
-                      'bg-primary bg-opacity-10 border-primary': selectedMemberIds.includes(Number(m.id)),
-                      'border-light bg-body': !selectedMemberIds.includes(Number(m.id)),
-                      'opacity-50 pe-none bg-light': isMemberAlreadyAssigned(Number(m.id))
-                    }"
-                    @click="!isMemberAlreadyAssigned(Number(m.id)) && toggleMemberSelection(Number(m.id))"
-                  >
-                    <div class="d-flex align-items-center gap-2.5 min-w-0">
-                      <input 
-                        type="checkbox" 
-                        class="form-check-input mt-0 flex-shrink-0 cursor-pointer"
-                        :checked="selectedMemberIds.includes(Number(m.id)) || isMemberAlreadyAssigned(Number(m.id))"
-                        :disabled="isMemberAlreadyAssigned(Number(m.id))"
-                        @click.stop="!isMemberAlreadyAssigned(Number(m.id)) && toggleMemberSelection(Number(m.id))"
-                      />
-                      <div class="avatar-sm-circle rounded-circle bg-primary bg-opacity-15 text-primary fw-bold text-xs d-flex align-items-center justify-content-center flex-shrink-0">
-                        {{ m.first_name[0] }}{{ m.last_name[0] }}
-                      </div>
-                      <div class="text-truncate">
-                        <span class="d-block fw-semibold text-primary text-xs text-truncate">
-                          {{ m.first_name }} {{ m.last_name }}
-                        </span>
-                        <small class="text-muted font-monospace text-xs d-block text-truncate">
-                          <i class="bi bi-telephone me-1"></i>{{ m.phone || 'No phone' }} • {{ getLocationName(m.location_id) }}
-                        </small>
-                      </div>
-                    </div>
-
-                    <div class="flex-shrink-0 ms-2 text-end">
-                      <span v-if="isMemberAlreadyAssigned(Number(m.id))" class="badge bg-secondary bg-opacity-15 text-secondary px-2 py-0.5 rounded-pill text-xs">
-                        <i class="bi bi-check-circle me-1"></i>Assigned
-                      </span>
-                      <span v-else-if="selectedMemberIds.includes(Number(m.id))" class="badge bg-primary px-2 py-0.5 rounded-pill text-xs text-white">
-                        Selected
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- RIGHT COLUMN: TEMPLATE SELECTION, MESSAGE CONTENT & STAGED RECIPIENTS PREVIEW -->
-              <div class="col-lg-6 d-flex flex-column bg-body p-3 p-md-4 overflow-y-auto">
-                
-                <!-- Target Campaign Selection -->
-                <div class="mb-3">
-                  <label for="composeNotifId" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase font-monospace mb-1">
-                    1. Target Broadcast Campaign *
-                  </label>
-                  <select id="composeNotifId" v-model="notificationId" class="form-select form-select-sm py-2 text-xs rounded-3 shadow-none border" required>
-                    <option v-for="n in notifications" :key="n.id" :value="n.id">
-                      {{ n.name }}
-                    </option>
-                  </select>
-                </div>
-
-                <!-- Template Selector -->
-                <div class="mb-3">
-                  <label for="composeTmplId" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase font-monospace mb-1">
-                    2. Load Message Template (Optional)
-                  </label>
-                  <select id="composeTmplId" v-model="selectedTemplateId" class="form-select form-select-sm py-2 text-xs rounded-3 shadow-none border">
-                    <option value="">Select template to load content...</option>
-                    <option v-for="t in templates" :key="t.id" :value="t.id">
-                      {{ t.name }}
-                    </option>
-                  </select>
-                </div>
-
-                <!-- Message Content Box & Dynamic Tags -->
-                <div class="mb-3">
-                  <div class="d-flex align-items-center justify-content-between mb-1">
-                    <label class="form-label text-xs fw-semibold text-secondary-amms text-uppercase font-monospace mb-0">
-                      3. Message Content Preview
-                    </label>
-                    <small class="text-muted text-xs font-monospace">
-                      {{ messageContent.length }} characters • {{ Math.ceil(messageContent.length / 160) || 1 }} SMS part(s)
-                    </small>
-                  </div>
-
-                  <textarea 
-                    v-model="messageContent" 
-                    rows="3" 
-                    class="form-control text-xs rounded-3 shadow-none bg-body-tertiary border"
-                    placeholder="Message text to be delivered to assigned members..."
-                  ></textarea>
-
-                  <!-- Dynamic Tags Quick Insert -->
-                  <div class="d-flex align-items-center gap-1.5 mt-1.5 flex-wrap">
-                    <small class="text-muted text-xs me-1">Insert tag:</small>
-                    <button 
-                      v-for="ph in availablePlaceholders" 
-                      :key="ph.tag"
-                      type="button" 
-                      class="badge bg-body-tertiary text-primary border rounded-pill px-2 py-0.5 cursor-pointer text-xs"
-                      @click="insertPlaceholder(ph.tag)"
-                    >
-                      + {{ ph.label }}
-                    </button>
-                  </div>
-                </div>
-
-                <!-- Staged Recipients Preview Tray -->
-                <div class="flex-grow-1 d-flex flex-column rounded-3 border bg-body-tertiary p-3">
-                  <div class="d-flex align-items-center justify-content-between mb-2">
-                    <span class="text-xs fw-bold text-primary text-uppercase font-monospace">
-                      <i class="bi bi-send-check me-1"></i> Queued Recipients ({{ selectedMemberIds.length }})
-                    </span>
-                    <button 
-                      v-if="selectedMemberIds.length > 0"
-                      type="button" 
-                      class="btn btn-xs btn-link text-danger text-decoration-none text-xs p-0"
-                      @click="clearAllSelected"
-                    >
-                      Clear Selection
-                    </button>
-                  </div>
-
-                  <!-- Chips / Badges Container -->
-                  <div class="selected-recipients-tray flex-grow-1 overflow-y-auto d-flex flex-wrap gap-1.5 align-content-start" style="max-height: 150px;">
-                    <div 
-                      v-if="selectedMemberIds.length === 0" 
-                      class="text-muted text-xs py-3 text-center w-100"
-                    >
-                      <i class="bi bi-person-plus fs-4 d-block mb-1 text-opacity-50"></i>
-                      No recipients selected yet. Check members in the left directory to queue them.
-                    </div>
-
-                    <div 
-                      v-for="sm in selectedMembersObjects" 
-                      :key="sm.id"
-                      class="badge bg-body text-body border rounded-pill px-2.5 py-1 text-xs d-flex align-items-center gap-1.5 shadow-2xs"
-                    >
-                      <span class="fw-semibold text-primary">{{ sm.first_name }} {{ sm.last_name }}</span>
-                      <small class="text-muted font-monospace">({{ sm.phone || 'No phone' }})</small>
-                      <i 
-                        class="bi bi-x-circle-fill text-muted hover-danger cursor-pointer ms-1 text-xs"
-                        @click="removeSelectedMember(Number(sm.id))"
-                        title="Remove member"
-                      ></i>
-                    </div>
-                  </div>
-                </div>
-
-              </div>
+            <div class="d-flex justify-content-between" v-if="broadcastSummary?.failed">
+              <span class="text-muted">Failed/Skipped:</span>
+              <strong class="text-danger">{{ broadcastSummary.failed }}</strong>
             </div>
           </div>
-
-          <!-- Modal Action Footer -->
-          <div class="modal-footer border-top px-4 py-3 bg-body-tertiary d-flex align-items-center justify-content-between">
-            <div class="text-xs text-muted font-monospace">
-              Ready to assign <span class="fw-bold text-primary">{{ selectedMemberIds.length }}</span> member(s)
-            </div>
-            <div class="d-flex align-items-center gap-2">
-              <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3 text-xs" @click="closeModal">Cancel</button>
-              <button 
-                type="button" 
-                class="btn btn-sm btn-primary rounded-pill px-4 text-xs fw-semibold d-flex align-items-center gap-2 shadow-sm"
-                :disabled="isSubmitting || selectedMemberIds.length === 0 || !notificationId"
-                @click="handleSaveBatch"
-              >
-                <span v-if="isSubmitting" class="spinner-border spinner-border-sm" role="status"></span>
-                <i v-else class="bi bi-send-fill"></i>
-                <span>{{ isSubmitting ? 'Assigning Recipients...' : `Assign ${selectedMemberIds.length} Recipient(s)` }}</span>
-              </button>
-            </div>
-          </div>
-
+          <button type="button" class="btn btn-sm btn-primary rounded-pill px-4 text-xs fw-semibold w-100 shadow-sm" @click="isSummaryModalOpen = false">
+            Done
+          </button>
         </div>
       </div>
     </div>
@@ -934,9 +1258,9 @@ onMounted(() => {
 }
 
 .recip-badge {
-  width: 28px;
-  height: 28px;
-  background-color: rgba(27, 42, 74, 0.08);
+  width: 32px;
+  height: 32px;
+  background-color: rgba(67, 118, 108, 0.1);
 }
 
 .avatar-sm-circle {
@@ -965,4 +1289,25 @@ onMounted(() => {
 .hover-danger:hover {
   color: #dc3545 !important;
 }
+
+.channel-card {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+}
+
+.channel-card:hover {
+  border-color: var(--amms-primary, #43766C) !important;
+  transform: translateY(-1px);
+}
+
+.channel-card.active-channel-card {
+  background: linear-gradient(135deg, rgba(67, 118, 108, 0.08) 0%, rgba(67, 118, 108, 0.16) 100%) !important;
+  border-color: var(--amms-primary, #43766C) !important;
+  box-shadow: 0 2px 8px rgba(67, 118, 108, 0.14);
+}
+
+.text-2xs { font-size: 0.7rem; }
+.shadow-2xs { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); }
 </style>
+
+

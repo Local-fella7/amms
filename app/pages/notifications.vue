@@ -21,28 +21,8 @@ interface NotificationTemplateOption {
   content: string
 }
 
-interface NotificationMemberItem {
-  id: number
-  notification_id: number | string
-  member_id: number | string
-  member?: {
-    id: number
-    first_name: string
-    last_name: string
-    phone?: string
-  }
-}
-
-interface MemberOption {
-  id: number
-  first_name: string
-  last_name: string
-  phone?: string
-}
-
-const { data: notificationsResponse, loading, error, execute: fetchNotifications, fetchWithAuth } = useApi<any>()
+const { data: notificationsResponse, loading, error, execute: fetchNotifications, fetchWithAuth } = useApi<NotificationItem[] | { data: NotificationItem[] }>()
 const { data: templates, execute: fetchTemplates } = useApi<NotificationTemplateOption[]>()
-const { data: allMembers, execute: fetchAllMembers } = useApi<MemberOption[]>()
 
 const searchQuery = ref('')
 const isSubmitting = ref(false)
@@ -54,14 +34,6 @@ const isModalOpen = ref(false)
 const name = ref('')
 const notificationTemplateId = ref<number | string>('')
 const content = ref('')
-
-// Recipient Members Drawer State
-const selectedBroadcastForRecipients = ref<NotificationItem | null>(null)
-const isRecipientsDrawerOpen = ref(false)
-const recipientsList = ref<NotificationMemberItem[]>([])
-const loadingRecipients = ref(false)
-const addingMemberId = ref<number | string>('')
-const isAddingRecipient = ref(false)
 
 // View Modal State
 const viewingNotification = ref<NotificationItem | null>(null)
@@ -80,7 +52,8 @@ const availablePlaceholders = [
   { tag: '{{first_name}}', label: 'First Name', tooltip: 'Replaced with recipient member\'s first name' },
   { tag: '{{last_name}}', label: 'Last Name', tooltip: 'Replaced with recipient member\'s last name' },
   { tag: '{{fee_year}}', label: 'Fee Year', tooltip: 'Replaced with current fee schedule year' },
-  { tag: '{{phone}}', label: 'Phone Number', tooltip: 'Replaced with recipient member\'s phone number' }
+  { tag: '{{phone}}', label: 'Phone Number', tooltip: 'Replaced with recipient member\'s phone number' },
+  { tag: '{{outstanding_balance}}', label: 'Outstanding Balance', tooltip: 'Replaced with recipient member\'s outstanding balance' }
 ]
 
 const schema = z.object({
@@ -92,72 +65,10 @@ const loadData = async () => {
   try {
     await Promise.all([
       fetchNotifications((api) => api('/api/notifications')),
-      fetchTemplates((api) => api('/api/notification-templates')).catch(() => []),
-      fetchAllMembers((api) => api('/api/members')).catch(() => [])
+      fetchTemplates((api) => api('/api/notification-templates')).catch(() => [])
     ])
   } catch (err) {
     // Handled by composable
-  }
-}
-
-const openRecipientsDrawer = async (n: NotificationItem) => {
-  selectedBroadcastForRecipients.value = n
-  isRecipientsDrawerOpen.value = true
-  loadingRecipients.value = true
-  recipientsList.value = []
-  
-  try {
-    const res: any = await fetchWithAuth('/api/notification-members')
-    const list = Array.isArray(res) ? res : (res?.data?.data || res?.data || [])
-    recipientsList.value = list.filter((item: any) => Number(item.notification_id) === Number(n.id))
-  } catch (err) {
-    console.error('Fetch notification members error:', err)
-  } finally {
-    loadingRecipients.value = false
-  }
-
-  if (allMembers.value && allMembers.value.length > 0) {
-    addingMemberId.value = allMembers.value[0].id
-  }
-}
-
-const closeRecipientsDrawer = () => {
-  selectedBroadcastForRecipients.value = null
-  isRecipientsDrawerOpen.value = false
-  recipientsList.value = []
-}
-
-const addRecipientMember = async () => {
-  if (!selectedBroadcastForRecipients.value || !addingMemberId.value) return
-  
-  isAddingRecipient.value = true
-  try {
-    await fetchWithAuth('/api/notification-members', {
-      method: 'POST',
-      body: {
-        notification_id: Number(selectedBroadcastForRecipients.value.id),
-        member_id: Number(addingMemberId.value)
-      }
-    })
-    push.success('Member assigned to broadcast successfully!')
-    await openRecipientsDrawer(selectedBroadcastForRecipients.value)
-  } catch (err: any) {
-    const msg = err?.data?.message || 'Failed to add member to broadcast'
-    push.error(msg)
-  } finally {
-    isAddingRecipient.value = false
-  }
-}
-
-const removeRecipientMember = async (nmId: number) => {
-  try {
-    await fetchWithAuth(`/api/notification-members/${nmId}`, { method: 'DELETE' })
-    push.success('Member removed from broadcast!')
-    if (selectedBroadcastForRecipients.value) {
-      await openRecipientsDrawer(selectedBroadcastForRecipients.value)
-    }
-  } catch (err: any) {
-    push.error('Failed to remove recipient member')
   }
 }
 
@@ -203,17 +114,17 @@ watch([searchQuery, itemsPerPage], () => {
 
 // Auto-fill content when template is selected
 watch(notificationTemplateId, (newId) => {
-  if (!newId || editingNotification.value) return
-  if (templates.value) {
+  if (newId && templates.value) {
     const selectedTmpl = templates.value.find(t => Number(t.id) === Number(newId))
-    if (selectedTmpl) {
-      content.value = selectedTmpl.content
+    if (selectedTmpl && selectedTmpl.content) {
+      content.value = selectedTmpl.content.replace(/\{\{fee_year\}\}/g, String(new Date().getFullYear()))
     }
   }
 })
 
 const insertPlaceholder = (tag: string) => {
-  content.value += ` ${tag} `
+  const valueToInsert = tag === '{{fee_year}}' ? String(new Date().getFullYear()) : tag
+  content.value += ` ${valueToInsert} `
 }
 
 const openAddModal = () => {
@@ -260,9 +171,13 @@ const formatDateDisplay = (val?: string) => {
 
 const handleSave = async () => {
   modalError.value = ''
-  const payload: any = {
-    name: name.value.trim(),
-    content: content.value.trim()
+  const payload: {
+    name: string
+    content: string
+    notification_template_id?: number
+  } = {
+    name: name.value.trim().replace(/\{\{fee_year\}\}/g, String(new Date().getFullYear())),
+    content: content.value.trim().replace(/\{\{fee_year\}\}/g, String(new Date().getFullYear()))
   }
 
   if (notificationTemplateId.value) {
@@ -294,9 +209,8 @@ const handleSave = async () => {
     
     closeModal()
     await loadData()
-  } catch (err: any) {
-    const serverErrors = err?.data?.errors ? Object.values(err.data.errors).flat().join(', ') : null
-    modalError.value = serverErrors || err?.data?.message || err?.message || 'Failed to save broadcast notification'
+  } catch (err: unknown) {
+    modalError.value = extractErrorMessage(err, 'Failed to save broadcast notification')
     push.error(modalError.value)
   } finally {
     isSubmitting.value = false
@@ -314,20 +228,16 @@ const cancelDelete = () => {
 }
 
 const confirmDelete = async () => {
-  if (!itemToDelete.value) return
-  
-  isDeleting.value = true
-  try {
-    await fetchWithAuth(`/api/notifications/${itemToDelete.value.id}`, { method: 'DELETE' })
-    push.success('Broadcast notification log deleted successfully!')
-    cancelDelete()
-    await loadData()
-  } catch (err: any) {
-    const msg = err?.data?.message || 'Failed to delete broadcast notification'
-    push.error(msg)
-  } finally {
-    isDeleting.value = false
-  }
+    if (!itemToDelete.value) return
+    
+    const success = await mutate(api => api(`/api/notifications/${itemToDelete.value.id}`, { method: 'DELETE' }), {
+      successMessage: 'Broadcast notification log deleted successfully!'
+    })
+    
+    if (success) {
+      cancelDelete()
+      await loadData()
+    }
 }
 
 onMounted(() => {
@@ -339,14 +249,14 @@ onMounted(() => {
   <div>
     <!-- Page Header -->
     <PageHeader
-      title="Broadcast Notifications"
-      subtitle="Dispatch and log SMS / Email announcements to association members"
+      title="Broadcasts Templates"
+      subtitle="Manage broadcast message templates and dispatch logs"
       v-model:searchQuery="searchQuery"
       searchPlaceholder="Search broadcast title or content..."
       :loading="loading"
       hideRefresh
       showAddButton
-      addButtonText="Create Broadcast"
+      addButtonText="Create Template"
       @add="openAddModal"
     />
 
@@ -366,13 +276,6 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- Center Loading Spinner Overlay -->
-      <div v-if="loading" class="position-absolute top-0 start-0 w-100 h-100 bg-body bg-opacity-75 d-flex flex-column align-items-center justify-content-center z-3">
-        <div class="spinner-border text-primary" role="status" style="width: 2.5rem; height: 2.5rem;">
-          <span class="visually-hidden">Loading...</span>
-        </div>
-        <span class="text-xs fw-semibold text-primary mt-2">Loading broadcast logs...</span>
-      </div>
 
       <!-- Error Alert -->
       <div v-if="error" class="alert alert-danger rounded-0 mb-0 py-3 px-4 d-flex align-items-center justify-content-between">
@@ -383,99 +286,83 @@ onMounted(() => {
         <button class="btn btn-sm btn-outline-danger rounded-pill" @click="loadData">Retry</button>
       </div>
 
-      <div class="table-responsive">
-        <table class="table align-middle mb-0 custom-amms-table">
-          <thead>
-            <tr>
-              <th class="ps-4" style="width: 80px;"># ID</th>
-              <th>Broadcast Title</th>
-              <th>Template Used</th>
-              <th>Message Content Snippet</th>
-              <th>Dispatch Date</th>
-              <th class="text-end pe-4" style="width: 140px;">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <!-- Loading Skeleton -->
-            <template v-if="loading && rawNotificationsList.length === 0">
-              <tr v-for="i in 5" :key="i">
-                <td class="ps-4"><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-8"></span></td>
-                <td><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-10"></span></td>
-                <td><span class="placeholder col-6"></span></td>
-                <td class="pe-4 text-end"><span class="placeholder col-10"></span></td>
-              </tr>
-            </template>
+      
+    <!-- Replaced by AppTable Component -->
+    <AppTable
+      :columns="[
+        { key: 'id', label: '# ID', width: '70px', headerClass: 'ps-4 d-none d-xl-table-cell', cellClass: 'ps-4 font-monospace text-muted text-xs d-none d-xl-table-cell' },
+        { key: 'broadcast-title', label: 'Broadcast Title', cellClass: 'fw-semibold text-primary' },
+        { key: 'template-used', label: 'Template Used', headerClass: 'd-none d-md-table-cell', cellClass: 'd-none d-md-table-cell' },
+        { key: 'message-content-snippet', label: 'Message Content Snippet', headerClass: 'd-none d-lg-table-cell', cellClass: 'text-xs text-body text-truncate d-none d-lg-table-cell' },
+        { key: 'dispatch-date', label: 'Dispatch Date', headerClass: 'd-none d-sm-table-cell', cellClass: 'font-monospace text-xs text-body d-none d-sm-table-cell' },
+        { key: 'actions', label: 'Actions', align: 'right', width: '120px', headerClass: 'pe-4', cellClass: 'pe-4' }
+      ]"
+      :items="paginatedNotifications"
+      :loading="loading"
+      emptyIcon="bi bi-broadcast"
+      emptyTitle="No broadcast notifications found"
+      emptySubtitle="Click 'Create Broadcast' above to send an SMS or Email announcement."
 
-            <!-- Empty State -->
-            <tr v-else-if="filteredNotifications.length === 0">
-              <td colspan="6" class="text-center py-5 text-muted">
-                <i class="bi bi-broadcast fs-1 d-block mb-2 text-opacity-50"></i>
-                <p class="mb-0 fw-medium">No broadcast notifications found</p>
-                <small>Click "Create Broadcast" above to send an SMS or Email announcement.</small>
-              </td>
-            </tr>
+    >
+      <template #cell-id="{ item }">
+#{{ item.id }}
+      </template>
+      <template #cell-broadcast-title="{ item }">
 
-            <!-- Broadcast Rows -->
-            <tr v-for="n in paginatedNotifications" :key="n.id">
-              <td class="ps-4 font-monospace text-muted text-xs">#{{ n.id }}</td>
-              <td class="fw-semibold text-primary">
                 <div class="d-flex align-items-center gap-2.5">
                   <div class="broadcast-icon-badge rounded-circle d-flex align-items-center justify-content-center">
                     <i class="bi bi-megaphone-fill text-primary text-xs"></i>
                   </div>
-                  <span>{{ n.name }}</span>
+                  <span>{{ item.name }}</span>
                 </div>
-              </td>
-              <td>
+              
+      </template>
+      <template #cell-template-used="{ item }">
+
                 <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-20 px-2.5 py-1 rounded-pill text-xs">
                   <i class="bi bi-file-text me-1"></i>
-                  {{ n.template?.name || getTemplateName(n.notification_template_id) }}
+                  {{ item.template?.name || getTemplateName(item.notification_template_id) }}
                 </span>
-              </td>
-              <td class="text-xs text-body text-truncate" style="max-width: 280px;">
-                {{ n.content }}
-              </td>
-              <td class="font-monospace text-xs text-body">
-                {{ formatDateDisplay(n.created_at) }}
-              </td>
-              <td class="pe-4 text-end">
+              
+      </template>
+      <template #cell-message-content-snippet="{ item }">
+
+                {{ item.content }}
+              
+      </template>
+      <template #cell-dispatch-date="{ item }">
+
+                {{ formatDateDisplay(item.created_at) }}
+              
+      </template>
+      <template #cell-actions="{ item }">
+
                 <div class="d-flex align-items-center justify-content-end gap-1">
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
-                    @click="openRecipientsDrawer(n)"
-                    title="Manage Recipient Members"
-                  >
-                    <i class="bi bi-people-fill text-primary"></i>
-                  </button>
-                  <button 
-                    class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
-                    @click="openViewModal(n)"
+                    @click="openViewModal(item)"
                     title="View Broadcast Log Details"
                   >
                     <i class="bi bi-eye-fill text-primary"></i>
                   </button>
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
-                    @click="openEditModal(n)"
+                    @click="openEditModal(item)"
                     title="Edit Broadcast"
                   >
                     <i class="bi bi-pencil-fill text-muted"></i>
                   </button>
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn hover-danger" 
-                    @click="promptDelete(n)"
+                    @click="promptDelete(item)"
                     title="Delete Broadcast Log"
                   >
                     <i class="bi bi-trash-fill text-danger"></i>
                   </button>
                 </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+              
+      </template>
+    </AppTable>
 
       <!-- Reusable Pagination Control Footer -->
       <PaginationControl
@@ -486,123 +373,6 @@ onMounted(() => {
         :totalItems="filteredNotifications.length"
       />
 
-    </div>
-
-    <!-- Manage Recipient Members Drawer Modal -->
-    <div v-if="isRecipientsDrawerOpen" class="modal-backdrop fade show" style="z-index: 1060;"></div>
-    
-    <div 
-      v-if="isRecipientsDrawerOpen" 
-      class="modal fade show d-block" 
-      tabindex="-1" 
-      role="dialog"
-      style="z-index: 1065;"
-      @click.self="closeRecipientsDrawer"
-    >
-      <div class="modal-dialog modal-dialog-centered modal-lg">
-        <div class="modal-content amms-surface border-0 shadow-lg rounded-4 overflow-hidden">
-          
-          <div class="modal-header border-bottom px-4 py-3 bg-body-tertiary position-relative justify-content-between">
-            <div class="d-flex align-items-center gap-2">
-              <i class="bi bi-people-fill text-primary fs-5"></i>
-              <div>
-                <h5 class="modal-title fw-bold text-primary text-sm mb-0">
-                  Recipient Members List
-                </h5>
-                <small class="text-muted text-xs">Broadcast: {{ selectedBroadcastForRecipients?.name }}</small>
-              </div>
-            </div>
-            <button 
-              type="button" 
-              class="btn-close" 
-              @click="closeRecipientsDrawer"
-              aria-label="Close"
-            ></button>
-          </div>
-
-          <div class="modal-body p-4">
-            <!-- Add Recipient Form Input Group -->
-            <div class="card p-3 bg-body-tertiary border rounded-3 mb-4">
-              <label class="form-label text-xs fw-semibold text-secondary-amms text-uppercase mb-2">
-                Assign Recipient Member
-              </label>
-              <div class="d-flex align-items-center gap-2">
-                <select v-model="addingMemberId" class="form-select form-select-sm py-2 text-xs" :disabled="isAddingRecipient">
-                  <option v-for="m in allMembers" :key="m.id" :value="m.id">
-                    {{ m.first_name }} {{ m.last_name }} ({{ m.phone || 'No phone' }})
-                  </option>
-                </select>
-                <button 
-                  type="button" 
-                  class="btn btn-sm btn-primary rounded-pill px-3 fw-semibold text-xs text-nowrap d-flex align-items-center gap-1.5"
-                  :disabled="isAddingRecipient || !addingMemberId"
-                  @click="addRecipientMember"
-                >
-                  <span v-if="isAddingRecipient" class="spinner-border spinner-border-sm" role="status"></span>
-                  <i v-else class="bi bi-plus-lg"></i>
-                  <span>Assign</span>
-                </button>
-              </div>
-            </div>
-
-            <!-- Assigned Recipients Table -->
-            <h6 class="fw-bold text-primary text-xs text-uppercase tracking-wider mb-2">
-              Assigned Recipients ({{ recipientsList.length }})
-            </h6>
-
-            <div v-if="loadingRecipients" class="text-center py-4 text-muted">
-              <div class="spinner-border spinner-border-sm text-primary me-2"></div>
-              <span class="text-xs">Loading recipient members...</span>
-            </div>
-
-            <div v-else-if="recipientsList.length === 0" class="text-center py-4 text-muted border rounded-3 bg-body">
-              <i class="bi bi-person-x fs-3 d-block mb-1 text-opacity-50"></i>
-              <span class="text-xs">No recipient members assigned to this broadcast yet.</span>
-            </div>
-
-            <div v-else class="table-responsive border rounded-3 overflow-hidden" style="max-height: 250px;">
-              <table class="table align-middle mb-0 text-xs">
-                <thead class="bg-light border-bottom">
-                  <tr>
-                    <th class="ps-3 py-2"># ID</th>
-                    <th class="py-2">Member Name</th>
-                    <th class="py-2">Phone Number</th>
-                    <th class="pe-3 text-end py-2">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="nm in recipientsList" :key="nm.id">
-                    <td class="ps-3 font-monospace text-muted">#{{ nm.id }}</td>
-                    <td class="fw-semibold text-primary">
-                      {{ nm.member ? `${nm.member.first_name} ${nm.member.last_name}` : `Member #${nm.member_id}` }}
-                    </td>
-                    <td class="font-monospace text-muted">
-                      {{ nm.member?.phone || '—' }}
-                    </td>
-                    <td class="pe-3 text-end">
-                      <button 
-                        class="btn btn-xs btn-outline-danger rounded-circle p-1"
-                        @click="removeRecipientMember(nm.id)"
-                        title="Remove Member"
-                      >
-                        <i class="bi bi-x-lg text-xs"></i>
-                      </button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-          </div>
-
-          <div class="modal-footer border-top px-4 py-2.5 bg-body-tertiary">
-            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-4" @click="closeRecipientsDrawer">
-              Close
-            </button>
-          </div>
-
-        </div>
-      </div>
     </div>
 
     <!-- View Broadcast Details Modal -->
@@ -641,165 +411,23 @@ onMounted(() => {
       </div>
     </ViewDetailModal>
 
-    <!-- Custom Delete Confirmation Modal -->
-    <div v-if="isDeleteModalOpen" class="modal-backdrop fade show" style="z-index: 1060;"></div>
-    
-    <div 
-      v-if="isDeleteModalOpen" 
-      class="modal fade show d-block" 
-      tabindex="-1" 
-      role="dialog"
-      style="z-index: 1065;"
-      @click.self="cancelDelete"
-    >
-      <div class="modal-dialog modal-dialog-centered modal-sm">
-        <div class="modal-content amms-surface border-0 shadow-lg rounded-4 overflow-hidden text-center p-4">
-          
-          <div class="d-inline-flex align-items-center justify-content-center bg-danger bg-opacity-10 text-danger rounded-circle p-3 mx-auto mb-3" style="width: 56px; height: 56px;">
-            <i class="bi bi-trash3-fill fs-3"></i>
-          </div>
+    <DeleteConfirmModal
+      v-model="isDeleteModalOpen"
+      message="Are you sure you want to permanently delete this notification?"
+        :itemTitle="itemToDelete ? `&quot;${itemToDelete.subject}&quot;` : ''"
+      :loading="isDeleting"
+      confirmText="Delete Notification"
+      @confirm="confirmDelete"
+    />
 
-          <h5 class="fw-bold text-primary text-sm mb-1">Confirm Deletion</h5>
-          <p class="text-secondary-amms text-xs mb-2">Are you sure you want to delete this broadcast log?</p>
-          
-          <p class="fw-bold text-danger text-xs mb-4 font-monospace bg-danger bg-opacity-10 py-1.5 px-3 rounded-3 d-inline-block mx-auto">
-            {{ itemToDelete?.name }}
-          </p>
 
-          <div class="d-flex align-items-center justify-content-center gap-2">
-            <button 
-              type="button" 
-              class="btn btn-sm btn-light border rounded-pill px-3.5 text-xs fw-semibold" 
-              @click="cancelDelete"
-            >
-              Cancel
-            </button>
-            <button 
-              type="button" 
-              class="btn btn-sm btn-danger rounded-pill px-4 text-xs fw-semibold d-flex align-items-center gap-1.5 shadow-sm"
-              :disabled="isDeleting"
-              @click="confirmDelete"
-            >
-              <span v-if="isDeleting" class="spinner-border spinner-border-sm" role="status"></span>
-              <span>{{ isDeleting ? 'Deleting...' : 'Delete Log' }}</span>
-            </button>
-          </div>
-
-        </div>
-      </div>
-    </div>
-
-    <!-- Create / Edit Broadcast Single Column Modal -->
-    <div v-if="isModalOpen" class="modal-backdrop fade show"></div>
-    
-    <div 
-      v-if="isModalOpen" 
-      class="modal fade show d-block" 
-      tabindex="-1" 
-      role="dialog"
-      @click.self="closeModal"
-    >
-      <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content amms-surface border-0 shadow-lg rounded-4 overflow-hidden">
-          
-          <div class="modal-header border-bottom px-4 py-3 bg-body-tertiary position-relative justify-content-center">
-            <h5 class="modal-title fw-bold text-primary text-sm mb-0 text-center">
-              <i class="bi bi-broadcast me-1.5 amms-accent"></i>
-              <span>{{ editingNotification ? 'Edit Broadcast' : 'Create Broadcast' }}</span>
-            </h5>
-            <button 
-              type="button" 
-              class="btn-close position-absolute end-0 me-3" 
-              @click="closeModal"
-              aria-label="Close"
-            ></button>
-          </div>
-
-          <form @submit.prevent="handleSave">
-            <div class="modal-body p-4">
-              <div v-if="modalError" class="alert alert-danger py-2 px-3 mb-3 rounded-3 small">
-                <i class="bi bi-exclamation-triangle-fill me-1"></i> {{ modalError }}
-              </div>
-
-              <!-- Broadcast Title -->
-              <div class="mb-3">
-                <label for="bcTitle" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">
-                  Broadcast Title *
-                </label>
-                <input id="bcTitle" v-model="name" type="text" class="form-control py-2.5 text-sm" placeholder="e.g. Annual General Meeting Notice" required />
-              </div>
-
-              <!-- Template Selector -->
-              <div class="mb-3">
-                <label for="bcTmpl" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase">
-                  Select Template (Optional)
-                </label>
-                <select id="bcTmpl" v-model="notificationTemplateId" class="form-select py-2.5 text-sm">
-                  <option value="">Custom Message (No Template)</option>
-                  <option v-for="t in templates" :key="t.id" :value="t.id">
-                    {{ t.name }}
-                  </option>
-                </select>
-              </div>
-
-              <!-- Message Content & Quick Placeholder Chips -->
-              <div class="mb-3">
-                <div class="d-flex align-items-center justify-content-between mb-1">
-                  <label for="bcContent" class="form-label text-xs fw-semibold text-secondary-amms text-uppercase mb-0">
-                    Message Content *
-                  </label>
-                  <span class="text-xs text-muted">Click chip to insert placeholder:</span>
-                </div>
-
-                <!-- Interactive Placeholder Tag Chips -->
-                <div class="d-flex flex-wrap gap-1.5 mb-2">
-                  <button
-                    v-for="p in availablePlaceholders"
-                    :key="p.tag"
-                    type="button"
-                    class="btn btn-xs btn-outline-primary rounded-pill px-2.5 py-1 text-xs fw-semibold placeholder-chip d-flex align-items-center gap-1"
-                    @click="insertPlaceholder(p.tag)"
-                    :title="p.tooltip"
-                  >
-                    <i class="bi bi-plus-circle text-xs"></i>
-                    <span>{{ p.tag }}</span>
-                  </button>
-                </div>
-
-                <textarea
-                  id="bcContent"
-                  v-model="content"
-                  rows="4"
-                  class="form-control py-2 text-sm font-monospace"
-                  placeholder="Type broadcast announcement message..."
-                  required
-                ></textarea>
-              </div>
-
-            </div>
-
-            <div class="modal-footer border-top px-4 py-3 bg-body-tertiary">
-              <button 
-                type="button" 
-                class="btn btn-sm btn-outline-secondary rounded-pill px-3" 
-                @click="closeModal"
-              >
-                Cancel
-              </button>
-              <button 
-                type="submit" 
-                class="btn btn-sm btn-primary rounded-pill px-4 fw-semibold d-flex align-items-center gap-2 shadow-sm"
-                :disabled="isSubmitting"
-              >
-                <span v-if="isSubmitting" class="spinner-border spinner-border-sm" role="status"></span>
-                <span>{{ isSubmitting ? 'Dispatching...' : (editingNotification ? 'Update Broadcast' : 'Dispatch Broadcast') }}</span>
-              </button>
-            </div>
-          </form>
-
-        </div>
-      </div>
-    </div>
+    <!-- Shared Broadcast Modal Component -->
+    <SharedBroadcastModal
+      v-if="isModalOpen"
+      :editing-notification="editingNotification"
+      @close="closeModal"
+      @saved="loadData"
+    />
 
   </div>
 </template>
@@ -855,3 +483,5 @@ onMounted(() => {
   background-color: rgba(220, 53, 69, 0.12) !important;
 }
 </style>
+
+

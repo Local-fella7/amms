@@ -23,7 +23,7 @@ interface RoleOption {
   name: string
 }
 
-const { data: usersResponse, loading, error, execute: fetchUsers, fetchWithAuth } = useApi<any>()
+const { data: usersResponse, loading, error, execute: fetchUsers, fetchWithAuth } = useApi<UserItem[] | { data: UserItem[] }>()
 const { data: roles, execute: fetchRoles } = useApi<RoleOption[]>()
 
 const searchQuery = ref('')
@@ -143,7 +143,7 @@ const openEditModal = (u: UserItem) => {
   lastName.value = u.last_name
   email.value = u.email
   phone.value = u.phone || ''
-  status.value = (u.status as any) || 'active'
+  status.value = u.status === 'inactive' ? 'inactive' : 'active'
   password.value = ''
   roleId.value = u.role_id
   modalError.value = ''
@@ -166,7 +166,15 @@ const closeModal = () => {
 
 const handleSave = async () => {
   modalError.value = ''
-  const payload: any = {
+  const payload: {
+    first_name: string
+    last_name: string
+    email: string
+    phone?: string
+    status: 'active' | 'inactive'
+    role_id: number
+    password?: string
+  } = {
     first_name: firstName.value.trim(),
     last_name: lastName.value.trim(),
     email: email.value.trim(),
@@ -208,9 +216,8 @@ const handleSave = async () => {
     
     closeModal()
     await loadData()
-  } catch (err: any) {
-    const serverErrors = err?.data?.errors ? Object.values(err.data.errors).flat().join(', ') : null
-    modalError.value = serverErrors || err?.data?.message || err?.message || 'Failed to save system user'
+  } catch (err: unknown) {
+    modalError.value = extractErrorMessage(err, 'Failed to save system user')
     push.error(modalError.value)
   } finally {
     isSubmitting.value = false
@@ -228,20 +235,16 @@ const cancelDelete = () => {
 }
 
 const confirmDelete = async () => {
-  if (!itemToDelete.value) return
-  
-  isDeleting.value = true
-  try {
-    await fetchWithAuth(`/api/users/${itemToDelete.value.id}`, { method: 'DELETE' })
-    push.success('System user deleted successfully!')
-    cancelDelete()
-    await loadData()
-  } catch (err: any) {
-    const msg = err?.data?.message || 'Failed to delete system user'
-    push.error(msg)
-  } finally {
-    isDeleting.value = false
-  }
+    if (!itemToDelete.value) return
+    
+    const success = await mutate(api => api(`/api/users/${itemToDelete.value.id}`, { method: 'DELETE' }), {
+      successMessage: 'System user deleted successfully!'
+    })
+    
+    if (success) {
+      cancelDelete()
+      await loadData()
+    }
 }
 
 onMounted(() => {
@@ -310,13 +313,6 @@ onMounted(() => {
         </div>
       </div>
 
-      <div v-if="loading" class="position-absolute top-0 start-0 w-100 h-100 bg-body bg-opacity-75 d-flex flex-column align-items-center justify-content-center z-3">
-        <div class="spinner-border text-primary" role="status" style="width: 2.5rem; height: 2.5rem;">
-          <span class="visually-hidden">Loading...</span>
-        </div>
-        <span class="text-xs fw-semibold text-primary mt-2">Loading system users...</span>
-      </div>
-
       <div v-if="error" class="alert alert-danger rounded-0 mb-0 py-3 px-4 d-flex align-items-center justify-content-between">
         <div class="d-flex align-items-center gap-2">
           <i class="bi bi-exclamation-triangle-fill fs-5"></i>
@@ -325,84 +321,71 @@ onMounted(() => {
         <button class="btn btn-sm btn-outline-danger rounded-pill" @click="loadData">Retry</button>
       </div>
 
-      <div class="table-responsive">
-        <table class="table align-middle mb-0 custom-amms-table">
-          <thead>
-            <tr>
-              <th class="ps-4" style="width: 70px;"># ID</th>
-              <th>User Name</th>
-              <th>Email & Phone</th>
-              <th>Assigned Role</th>
-              <th>Status</th>
-              <th class="text-end pe-4" style="width: 140px;">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <template v-if="loading && rawUsersList.length === 0">
-              <tr v-for="i in 5" :key="i">
-                <td class="ps-4"><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-8"></span></td>
-                <td><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-4"></span></td>
-                <td class="pe-4 text-end"><span class="placeholder col-10"></span></td>
-              </tr>
-            </template>
+      
+    <!-- Replaced by AppTable Component -->
+    <AppTable
+      :columns="[{key: 'id', label: '# ID', width: '70px', headerClass: 'ps-4', cellClass: 'ps-4 font-monospace text-muted text-xs'}, {key: 'user-name', label: 'User Name', cellClass: 'fw-semibold text-primary'}, {key: 'email-phone', label: 'Email & Phone'}, {key: 'assigned-role', label: 'Assigned Role'}, {key: 'status', label: 'Status'}, {key: 'actions', label: 'Actions', align: 'right', width: '140px', headerClass: 'pe-4', cellClass: 'pe-4'}]"
+      :items="paginatedUsers"
+      :loading="loading"
+      emptyIcon="bi bi-person-x"
+      emptyTitle="No system users found"
+      emptySubtitle="Click 'Add System User' above to create one."
 
-            <tr v-else-if="filteredUsers.length === 0">
-              <td colspan="6" class="text-center py-5 text-muted">
-                <i class="bi bi-person-x fs-1 d-block mb-2 text-opacity-50"></i>
-                <p class="mb-0 fw-medium">No system users found</p>
-                <small>Click "Add System User" above to create one.</small>
-              </td>
-            </tr>
+    >
+      <template #cell-id="{ item }">
+#{{ item.id }}
+      </template>
+      <template #cell-user-name="{ item }">
 
-            <tr v-for="u in paginatedUsers" :key="u.id">
-              <td class="ps-4 font-monospace text-muted text-xs">#{{ u.id }}</td>
-              <td class="fw-semibold text-primary">
                 <div class="d-flex align-items-center gap-2.5">
                   <div class="user-avatar-badge rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold text-xs">
-                    {{ u.first_name ? u.first_name[0] : 'U' }}
+                    {{ item.first_name ? item.first_name[0] : 'U' }}
                   </div>
-                  <span>{{ u.first_name }} {{ u.last_name }}</span>
+                  <span>{{ item.first_name }} {{ item.last_name }}</span>
                 </div>
-              </td>
-              <td>
-                <div class="text-xs font-monospace text-body">{{ u.email }}</div>
-                <small v-if="u.phone" class="text-muted font-monospace text-xs">{{ u.phone }}</small>
-              </td>
-              <td>
+              
+      </template>
+      <template #cell-email-phone="{ item }">
+
+                <div class="text-xs font-monospace text-body">{{ item.email }}</div>
+                <small v-if="item.phone" class="text-muted font-monospace text-xs">{{ item.phone }}</small>
+              
+      </template>
+      <template #cell-assigned-role="{ item }">
+
                 <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-20 px-2.5 py-1 rounded-pill text-xs">
                   <i class="bi bi-shield-check me-1"></i>
-                  {{ u.role?.name || getRoleName(u.role_id) }}
+                  {{ item.role?.name || getRoleName(item.role_id) }}
                 </span>
-              </td>
-              <td>
+              
+      </template>
+      <template #cell-status="{ item }">
+
                 <span 
                   class="badge px-2.5 py-1 rounded-pill text-xs fw-semibold"
-                  :class="u.status === 'inactive' ? 'bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-20' : 'bg-success bg-opacity-10 text-success border border-success border-opacity-20'"
+                  :class="item.status === 'inactive' ? 'bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-20' : 'bg-success bg-opacity-10 text-success border border-success border-opacity-20'"
                 >
-                  <i :class="u.status === 'inactive' ? 'bi bi-dash-circle-fill me-1' : 'bi bi-check-circle-fill me-1'"></i>
-                  {{ u.status === 'inactive' ? 'Inactive' : 'Active' }}
+                  <i :class="item.status === 'inactive' ? 'bi bi-dash-circle-fill me-1' : 'bi bi-check-circle-fill me-1'"></i>
+                  {{ item.status === 'inactive' ? 'Inactive' : 'Active' }}
                 </span>
-              </td>
-              <td class="pe-4 text-end">
+              
+      </template>
+      <template #cell-actions="{ item }">
+
                 <div class="d-flex align-items-center justify-content-end gap-1">
-                  <button class="btn btn-sm btn-light border-0 rounded-circle action-btn" @click="openViewModal(u)" title="View User Details">
+                  <button class="btn btn-sm btn-light border-0 rounded-circle action-btn" @click="openViewModal(item)" title="View User Details">
                     <i class="bi bi-eye-fill text-primary"></i>
                   </button>
-                  <button class="btn btn-sm btn-light border-0 rounded-circle action-btn" @click="openEditModal(u)" title="Edit User">
+                  <button class="btn btn-sm btn-light border-0 rounded-circle action-btn" @click="openEditModal(item)" title="Edit User">
                     <i class="bi bi-pencil-fill text-muted"></i>
                   </button>
-                  <button class="btn btn-sm btn-light border-0 rounded-circle action-btn hover-danger" @click="promptDelete(u)" title="Delete User">
+                  <button class="btn btn-sm btn-light border-0 rounded-circle action-btn hover-danger" @click="promptDelete(item)" title="Delete User">
                     <i class="bi bi-trash-fill text-danger"></i>
                   </button>
                 </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+              
+      </template>
+    </AppTable>
 
       <PaginationControl
         v-if="filteredUsers.length > 0"
@@ -458,30 +441,14 @@ onMounted(() => {
       </div>
     </ViewDetailModal>
 
-    <!-- Custom Delete Confirmation Modal -->
-    <div v-if="isDeleteModalOpen" class="modal-backdrop fade show" style="z-index: 1060;"></div>
-    
-    <div v-if="isDeleteModalOpen" class="modal fade show d-block" tabindex="-1" role="dialog" style="z-index: 1065;" @click.self="cancelDelete">
-      <div class="modal-dialog modal-dialog-centered modal-sm">
-        <div class="modal-content amms-surface border-0 shadow-lg rounded-4 overflow-hidden text-center p-4">
-          <div class="d-inline-flex align-items-center justify-content-center bg-danger bg-opacity-10 text-danger rounded-circle p-3 mx-auto mb-3" style="width: 56px; height: 56px;">
-            <i class="bi bi-trash3-fill fs-3"></i>
-          </div>
-          <h5 class="fw-bold text-primary text-sm mb-1">Confirm Deletion</h5>
-          <p class="text-secondary-amms text-xs mb-2">Are you sure you want to delete this user account?</p>
-          <p class="fw-bold text-danger text-xs mb-4 font-monospace bg-danger bg-opacity-10 py-1.5 px-3 rounded-3 d-inline-block mx-auto">
-            {{ itemToDelete ? `${itemToDelete.first_name} ${itemToDelete.last_name}` : '' }}
-          </p>
-          <div class="d-flex align-items-center justify-content-center gap-2">
-            <button type="button" class="btn btn-sm btn-light border rounded-pill px-3.5 text-xs fw-semibold" @click="cancelDelete">Cancel</button>
-            <button type="button" class="btn btn-sm btn-danger rounded-pill px-4 text-xs fw-semibold d-flex align-items-center gap-1.5 shadow-sm" :disabled="isDeleting" @click="confirmDelete">
-              <span v-if="isDeleting" class="spinner-border spinner-border-sm" role="status"></span>
-              <span>{{ isDeleting ? 'Deleting...' : 'Delete User' }}</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <DeleteConfirmModal
+      v-model="isDeleteModalOpen"
+      message="Are you sure you want to permanently delete this user?"
+        :itemTitle="itemToDelete ? `&quot;${itemToDelete.name}&quot;` : ''"
+      :loading="isDeleting"
+      confirmText="Delete User"
+      @confirm="confirmDelete"
+    />
 
     <!-- Create / Edit Modal -->
     <div v-if="isModalOpen" class="modal-backdrop fade show"></div>
@@ -611,3 +578,6 @@ onMounted(() => {
   background-color: rgba(220, 53, 69, 0.12) !important;
 }
 </style>
+
+
+

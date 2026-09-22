@@ -11,32 +11,33 @@ export interface ApiState<T> {
 export function useApi<T>() {
   const data = ref<T | null>(null) as Ref<T | null>
   const loading = ref(false)
+  const isMutating = ref(false)
   const error = ref<string | null>(null)
   const authStore = useAuthStore()
   const apiBase = useApiBase()
 
-  const fetchWithAuth = (url: string, opts: any = {}) => {
+  const fetchWithAuth = <R = unknown>(url: string, opts: Record<string, unknown> = {}) => {
     const resolvedUrl = apiUrl(url, apiBase)
-    const headers = { ...opts.headers }
+    const headers: Record<string, string> = { ...((opts.headers as Record<string, string>) || {}) }
     if (authStore.token) {
       headers['Authorization'] = `Bearer ${authStore.token}`
     }
-    return $fetch(resolvedUrl, { ...opts, headers })
+    return $fetch<R>(resolvedUrl, { ...opts, headers })
   }
 
-  const execute = async (
-    requestFn: (apiFetch: typeof $fetch) => Promise<any>,
-    options?: { onSuccess?: (res: any) => void; onError?: (err: any) => void }
+  const execute = async <R = T>(
+    requestFn: (apiFetch: typeof $fetch) => Promise<R>,
+    options?: { onSuccess?: (res: R) => void; onError?: (err: unknown) => void }
   ) => {
     loading.value = true
     error.value = null
     try {
-      const response = await requestFn(fetchWithAuth as any)
-      data.value = response?.data !== undefined ? response.data : response
+      const response = await requestFn(fetchWithAuth as unknown as typeof $fetch)
+      data.value = (response as { data?: T })?.data !== undefined ? (response as { data: T }).data : (response as unknown as T)
       if (options?.onSuccess) options.onSuccess(response)
       return response
-    } catch (err: any) {
-      const message = err?.data?.message || err?.response?._data?.message || err?.message || 'An unexpected error occurred'
+    } catch (err: unknown) {
+      const message = extractErrorMessage(err, 'An unexpected error occurred')
       error.value = message
       if (options?.onError) options.onError(err)
       throw err
@@ -45,12 +46,41 @@ export function useApi<T>() {
     }
   }
 
+  /**
+   * Helper for mutation actions (POST, PUT, DELETE). 
+   * Wraps execute, catches errors, and pushes notivue notifications automatically.
+   * Returns a boolean indicating success.
+   */
+  const mutate = async <R = unknown>(
+    requestFn: (apiFetch: typeof $fetch) => Promise<R>,
+    options?: { successMessage?: string, errorMessage?: string, onSuccess?: (res: R) => void }
+  ): Promise<boolean> => {
+    isMutating.value = true
+    error.value = null
+    try {
+      const response = await requestFn(fetchWithAuth as unknown as typeof $fetch)
+      if (options?.successMessage) push.success(options.successMessage)
+      if (options?.onSuccess) options.onSuccess(response)
+      return true
+    } catch (err: unknown) {
+      const message = options?.errorMessage || extractErrorMessage(err, 'An unexpected error occurred')
+      error.value = message
+      push.error(message)
+      return false
+    } finally {
+      isMutating.value = false
+    }
+  }
+
   return {
     data,
+    isMutating,
     loading,
     error,
     execute,
+    mutate,
     fetchWithAuth
   }
 }
+
 

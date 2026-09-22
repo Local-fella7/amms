@@ -10,6 +10,15 @@ vi.stubGlobal('useRoute',     () => ({ params: {}, query: {} }))
 vi.stubGlobal('definePageMeta', vi.fn())
 vi.stubGlobal('$fetch',       vi.fn())
 vi.stubGlobal('useRuntimeConfig', () => ({ public: {} }))
+vi.stubGlobal('push', {
+  success: vi.fn(),
+  error: vi.fn(),
+  warning: vi.fn(),
+  info: vi.fn()
+})
+
+import { extractErrorMessage } from '../app/utils/error'
+vi.stubGlobal('extractErrorMessage', extractErrorMessage)
 
 // Mock NuxtLink globally for all component tests
 config.global.stubs = {

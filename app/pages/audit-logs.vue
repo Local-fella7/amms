@@ -33,7 +33,7 @@ interface FeatureOption {
   name: string
 }
 
-const { data: logsResponse, loading, error, execute: fetchLogs, fetchWithAuth } = useApi<any>()
+const { data: logsResponse, loading, error, execute: fetchLogs, fetchWithAuth } = useApi<AuditLogItem[] | { data: AuditLogItem[] }>()
 const { data: users, execute: fetchUsers } = useApi<UserOption[]>()
 const { data: features, execute: fetchFeatures } = useApi<FeatureOption[]>()
 
@@ -163,20 +163,16 @@ const cancelDelete = () => {
 }
 
 const confirmDelete = async () => {
-  if (!itemToDelete.value) return
-  
-  isDeleting.value = true
-  try {
-    await fetchWithAuth(`/api/logs/${itemToDelete.value.id}`, { method: 'DELETE' })
-    push.success('Audit log record deleted successfully!')
-    cancelDelete()
-    await loadData()
-  } catch (err: any) {
-    const msg = err?.data?.message || 'Failed to delete audit log'
-    push.error(msg)
-  } finally {
-    isDeleting.value = false
-  }
+    if (!itemToDelete.value) return
+    
+    const success = await mutate(api => api(`/api/logs/${itemToDelete.value.id}`, { method: 'DELETE' }), {
+      successMessage: 'Audit log record deleted successfully!'
+    })
+    
+    if (success) {
+      cancelDelete()
+      await loadData()
+    }
 }
 
 onMounted(() => {
@@ -236,13 +232,6 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- Center Loading Spinner Overlay -->
-      <div v-if="loading" class="position-absolute top-0 start-0 w-100 h-100 bg-body bg-opacity-75 d-flex flex-column align-items-center justify-content-center z-3">
-        <div class="spinner-border text-primary" role="status" style="width: 2.5rem; height: 2.5rem;">
-          <span class="visually-hidden">Loading...</span>
-        </div>
-        <span class="text-xs fw-semibold text-primary mt-2">Loading audit logs...</span>
-      </div>
 
       <!-- Error Alert -->
       <div v-if="error" class="alert alert-danger rounded-0 mb-0 py-3 px-4 d-flex align-items-center justify-content-between">
@@ -253,80 +242,64 @@ onMounted(() => {
         <button class="btn btn-sm btn-outline-danger rounded-pill" @click="loadData">Retry</button>
       </div>
 
-      <div class="table-responsive">
-        <table class="table align-middle mb-0 custom-amms-table">
-          <thead>
-            <tr>
-              <th class="ps-4" style="width: 80px;"># ID</th>
-              <th>Executing User</th>
-              <th>System Feature / Action</th>
-              <th>Timestamp</th>
-              <th class="text-end pe-4" style="width: 140px;">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <!-- Loading Skeleton -->
-            <template v-if="loading && rawLogsList.length === 0">
-              <tr v-for="i in 5" :key="i">
-                <td class="ps-4"><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-8"></span></td>
-                <td><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-6"></span></td>
-                <td class="pe-4 text-end"><span class="placeholder col-10"></span></td>
-              </tr>
-            </template>
+      
+    <!-- Replaced by AppTable Component -->
+    <AppTable
+      :columns="[{key: 'id', label: '# ID', width: '80px', headerClass: 'ps-4', cellClass: 'ps-4 font-monospace text-muted text-xs'}, {key: 'executing-user', label: 'Executing User', cellClass: 'fw-semibold text-primary'}, {key: 'actions', label: 'System Feature / Action'}, {key: 'timestamp', label: 'Timestamp', cellClass: 'font-monospace text-xs text-body'}, {key: 'actions-2', label: 'Actions', align: 'right', width: '140px', headerClass: 'pe-4', cellClass: 'pe-4'}]"
+      :items="paginatedLogs"
+      :loading="loading"
+      emptyIcon="bi bi-journal-x"
+      emptyTitle="No audit log records found"
+      emptySubtitle="System action events will be logged here automatically."
 
-            <!-- Empty State -->
-            <tr v-else-if="filteredLogs.length === 0">
-              <td colspan="5" class="text-center py-5 text-muted">
-                <i class="bi bi-journal-x fs-1 d-block mb-2 text-opacity-50"></i>
-                <p class="mb-0 fw-medium">No audit log records found</p>
-                <small>System action events will be logged here automatically.</small>
-              </td>
-            </tr>
+    >
+      <template #cell-id="{ item }">
+#{{ item.id }}
+      </template>
+      <template #cell-executing-user="{ item }">
 
-            <!-- Log Rows -->
-            <tr v-for="l in paginatedLogs" :key="l.id">
-              <td class="ps-4 font-monospace text-muted text-xs">#{{ l.id }}</td>
-              <td class="fw-semibold text-primary">
                 <div class="d-flex align-items-center gap-2.5">
                   <div class="user-avatar-badge rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold text-xs">
-                    {{ l.user?.first_name ? l.user.first_name[0] : 'A' }}
+                    {{ item.user?.first_name ? item.user.first_name[0] : 'A' }}
                   </div>
-                  <span>{{ l.user ? `${l.user.first_name} ${l.user.last_name}` : getUserName(l.user_id) }}</span>
+                  <span>{{ item.user ? `${item.user.first_name} ${item.user.last_name}` : getUserName(item.user_id) }}</span>
                 </div>
-              </td>
-              <td>
+              
+      </template>
+      <template #cell-actions="{ item }">
+
                 <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-20 px-2.5 py-1 rounded-pill text-xs">
                   <i class="bi bi-shield-check me-1"></i>
-                  {{ l.feature?.name || getFeatureName(l.feature_id) }}
+                  {{ item.feature?.name || getFeatureName(item.feature_id) }}
                 </span>
-              </td>
-              <td class="font-monospace text-xs text-body">
-                {{ formatDateDisplay(l.datetime || l.created_at) }}
-              </td>
-              <td class="pe-4 text-end">
+              
+      </template>
+      <template #cell-timestamp="{ item }">
+
+                {{ formatDateDisplay(item.datetime || item.created_at) }}
+              
+      </template>
+      <template #cell-actions-2="{ item }">
+
                 <div class="d-flex align-items-center justify-content-end gap-1">
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
-                    @click="openViewModal(l)"
+                    @click="openViewModal(item)"
                     title="View Audit Log Details & Diffs"
                   >
                     <i class="bi bi-eye-fill text-primary"></i>
                   </button>
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn hover-danger" 
-                    @click="promptDelete(l)"
+                    @click="promptDelete(item)"
                     title="Delete Audit Log"
                   >
                     <i class="bi bi-trash-fill text-danger"></i>
                   </button>
                 </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+              
+      </template>
+    </AppTable>
 
       <!-- Reusable Pagination Control Footer -->
       <PaginationControl
@@ -385,53 +358,14 @@ onMounted(() => {
       </div>
     </ViewDetailModal>
 
-    <!-- Custom Delete Confirmation Modal -->
-    <div v-if="isDeleteModalOpen" class="modal-backdrop fade show" style="z-index: 1060;"></div>
-    
-    <div 
-      v-if="isDeleteModalOpen" 
-      class="modal fade show d-block" 
-      tabindex="-1" 
-      role="dialog"
-      style="z-index: 1065;"
-      @click.self="cancelDelete"
-    >
-      <div class="modal-dialog modal-dialog-centered modal-sm">
-        <div class="modal-content amms-surface border-0 shadow-lg rounded-4 overflow-hidden text-center p-4">
-          
-          <div class="d-inline-flex align-items-center justify-content-center bg-danger bg-opacity-10 text-danger rounded-circle p-3 mx-auto mb-3" style="width: 56px; height: 56px;">
-            <i class="bi bi-trash3-fill fs-3"></i>
-          </div>
-
-          <h5 class="fw-bold text-primary text-sm mb-1">Confirm Deletion</h5>
-          <p class="text-secondary-amms text-xs mb-2">Are you sure you want to delete this audit log entry?</p>
-          
-          <p class="fw-bold text-danger text-xs mb-4 font-monospace bg-danger bg-opacity-10 py-1.5 px-3 rounded-3 d-inline-block mx-auto">
-            Log #{{ itemToDelete?.id }} - {{ itemToDelete ? getFeatureName(itemToDelete.feature_id) : '' }}
-          </p>
-
-          <div class="d-flex align-items-center justify-content-center gap-2">
-            <button 
-              type="button" 
-              class="btn btn-sm btn-light border rounded-pill px-3.5 text-xs fw-semibold" 
-              @click="cancelDelete"
-            >
-              Cancel
-            </button>
-            <button 
-              type="button" 
-              class="btn btn-sm btn-danger rounded-pill px-4 text-xs fw-semibold d-flex align-items-center gap-1.5 shadow-sm"
-              :disabled="isDeleting"
-              @click="confirmDelete"
-            >
-              <span v-if="isDeleting" class="spinner-border spinner-border-sm" role="status"></span>
-              <span>{{ isDeleting ? 'Deleting...' : 'Delete Log' }}</span>
-            </button>
-          </div>
-
-        </div>
-      </div>
-    </div>
+    <DeleteConfirmModal
+      v-model="isDeleteModalOpen"
+      message="Are you sure you want to permanently delete this audit log record?"
+        :itemTitle="itemToDelete ? `&quot;Log #${itemToDelete.id}&quot;` : ''"
+      :loading="isDeleting"
+      confirmText="Delete Log"
+      @confirm="confirmDelete"
+    />
 
   </div>
 </template>
@@ -487,3 +421,6 @@ onMounted(() => {
   background-color: rgba(220, 53, 69, 0.12) !important;
 }
 </style>
+
+
+

@@ -17,17 +17,19 @@ import {
   Filler
 } from 'chart.js'
 
+import type { Member, FeePayment, NotificationItem, Location, AgeGroup, Fee } from '~/types'
+
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Title, Tooltip, Legend, Filler)
 
 const authStore = useAuthStore()
 if (!authStore.isAuthenticated) await navigateTo('/login')
 
-const { data: membersResponse,       execute: fetchMembers,       fetchWithAuth } = useApi<any>()
-const { data: paymentsResponse,      execute: fetchPayments     } = useApi<any>()
-const { data: notificationsResponse, execute: fetchNotifications } = useApi<any>()
-const { data: locations,             execute: fetchLocations     } = useApi<any[]>()
-const { data: ageGroups,             execute: fetchAgeGroups     } = useApi<any[]>()
-const { data: fees,                  execute: fetchFees          } = useApi<any[]>()
+const { data: membersResponse,       execute: fetchMembers,       fetchWithAuth } = useApi<Member[] | { data: Member[] }>()
+const { data: paymentsResponse,      execute: fetchPayments     } = useApi<FeePayment[] | { data: FeePayment[] }>()
+const { data: notificationsResponse, execute: fetchNotifications } = useApi<NotificationItem[] | { data: NotificationItem[] }>()
+const { data: locations,             execute: fetchLocations     } = useApi<Location[] | { data: Location[] }>()
+const { data: ageGroups,             execute: fetchAgeGroups     } = useApi<AgeGroup[] | { data: AgeGroup[] }>()
+const { data: fees,                  execute: fetchFees          } = useApi<Fee[] | { data: Fee[] }>()
 
 const loading = ref(true)
 const error   = ref<string | null>(null)
@@ -44,28 +46,33 @@ const loadDashboard = async () => {
       fetchAgeGroups    ((api) => api('/api/age-groups')).catch(() => null),
       fetchFees         ((api) => api('/api/fees')).catch(() => null),
     ])
-  } catch (e: any) {
-    error.value = e?.message || 'Failed to load dashboard data'
+  } catch (e: unknown) {
+    error.value = extractErrorMessage(e, 'Failed to load dashboard data')
   } finally {
     loading.value = false
   }
 }
 onMounted(loadDashboard)
 
-const toArray = (res: any): any[] => {
+function toArray<T>(res: unknown): T[] {
   if (!res) return []
-  if (Array.isArray(res)) return res
-  if (Array.isArray(res.data)) return res.data
-  if (res.data && Array.isArray(res.data.data)) return res.data.data
+  if (Array.isArray(res)) return res as T[]
+  if (typeof res === 'object' && res !== null) {
+    const obj = res as Record<string, unknown>
+    if (Array.isArray(obj.data)) return obj.data as T[]
+    if (obj.data && typeof obj.data === 'object' && Array.isArray((obj.data as Record<string, unknown>).data)) {
+      return (obj.data as Record<string, unknown>).data as T[]
+    }
+  }
   return []
 }
 
-const rawMembers       = computed(() => toArray(membersResponse.value))
-const rawPayments      = computed(() => toArray(paymentsResponse.value))
-const rawNotifications = computed(() => toArray(notificationsResponse.value))
-const locationList     = computed(() => toArray(locations.value))
-const ageGroupList     = computed(() => toArray(ageGroups.value))
-const feeList          = computed(() => toArray(fees.value))
+const rawMembers       = computed<Member[]>(() => toArray<Member>(membersResponse.value))
+const rawPayments      = computed<FeePayment[]>(() => toArray<FeePayment>(paymentsResponse.value))
+const rawNotifications = computed<NotificationItem[]>(() => toArray<NotificationItem>(notificationsResponse.value))
+const locationList     = computed<Location[]>(() => toArray<Location>(locations.value))
+const ageGroupList     = computed<AgeGroup[]>(() => toArray<AgeGroup>(ageGroups.value))
+const feeList          = computed<Fee[]>(() => toArray<Fee>(fees.value))
 
 const formatCompact = (val: number) => {
   const n = val || 0
@@ -78,47 +85,48 @@ const formatDate = (val?: string) => {
   const d = new Date(val)
   return isNaN(d.getTime()) ? val : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 }
-const getLocationName = (id: any) => locationList.value.find((l: any) => Number(l.id) === Number(id))?.name ?? '\u2014'
-const getAgeGroupName = (id: any) => ageGroupList.value.find((g: any) => Number(g.id) === Number(id))?.name ?? '\u2014'
-const initials = (m: any) => `${(m.first_name || '?')[0]}${(m.last_name || '')[0] || ''}`.toUpperCase()
+const getLocationName = (id?: number | string) => locationList.value.find((l: Location) => Number(l.id) === Number(id))?.name ?? '\u2014'
+const getAgeGroupName = (id?: number | string) => ageGroupList.value.find((g: AgeGroup) => Number(g.id) === Number(id))?.name ?? '\u2014'
+const initials = (m: Partial<Member>) => `${(m.first_name || '?')[0]}${(m.last_name || '')[0] || ''}`.toUpperCase()
 
 const currentYear = new Date().getFullYear()
 
 const totalMembers    = computed(() => rawMembers.value.length)
-const activeMembers   = computed(() => rawMembers.value.filter((m: any) => m.member_status === 'active').length)
+const activeMembers   = computed(() => rawMembers.value.filter((m: Member) => m.member_status === 'active').length)
 const inactiveMembers = computed(() => totalMembers.value - activeMembers.value)
-const exemptedMembers = computed(() => rawMembers.value.filter((m: any) => m.fee_exemption === 'yes').length)
+const exemptedMembers = computed(() => rawMembers.value.filter((m: Member) => m.fee_exemption === 'yes').length)
 const activeRate      = computed(() => totalMembers.value ? Math.round((activeMembers.value / totalMembers.value) * 100) : 0)
 const broadcastCount  = computed(() => rawNotifications.value.length)
 
 const revenueYTD = computed(() =>
   rawPayments.value
-    .filter((p: any) => (p.date || p.created_at || '').startsWith(String(currentYear)))
-    .reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0)
+    .filter((p: FeePayment) => (p.date || p.created_at || '').startsWith(String(currentYear)))
+    .reduce((s: number, p: FeePayment) => s + (Number(p.amount) || 0), 0)
 )
-const totalRevenue = computed(() => rawPayments.value.reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0))
+const totalRevenue = computed(() => rawPayments.value.reduce((s: number, p: FeePayment) => s + (Number(p.amount) || 0), 0))
 
 const paidThisYear = computed(() => {
   const ids = new Set<number>()
-  rawPayments.value.forEach((p: any) => {
+  rawPayments.value.forEach((p: FeePayment) => {
     if ((p.date || p.created_at || '').startsWith(String(currentYear))) ids.add(Number(p.member_id))
   })
   return ids
 })
-const overdueCount   = computed(() => rawMembers.value.filter((m: any) => m.member_status === 'active' && !paidThisYear.value.has(Number(m.id))).length)
-const overdueMembers = computed(() => rawMembers.value.filter((m: any) => m.member_status === 'active' && !paidThisYear.value.has(Number(m.id))).slice(0, 6))
+const overdueCount   = computed(() => rawMembers.value.filter((m: Member) => m.member_status === 'active' && !paidThisYear.value.has(Number(m.id))).length)
+const overdueMembers = computed(() => rawMembers.value.filter((m: Member) => m.member_status === 'active' && !paidThisYear.value.has(Number(m.id))).slice(0, 6))
 const complianceRate = computed(() => activeMembers.value ? Math.round((paidThisYear.value.size / activeMembers.value) * 100) : 0)
 
-const recentMembers    = computed(() => [...rawMembers.value].sort((a: any, b: any) => new Date(b.registration_date||b.created_at||0).getTime()-new Date(a.registration_date||a.created_at||0).getTime()).slice(0,5))
-const recentPayments   = computed(() => [...rawPayments.value].sort((a: any, b: any) => new Date(b.date||b.created_at||0).getTime()-new Date(a.date||a.created_at||0).getTime()).slice(0,5))
-const recentBroadcasts = computed(() => [...rawNotifications.value].sort((a: any, b: any) => new Date(b.created_at||0).getTime()-new Date(a.created_at||0).getTime()).slice(0,4))
+const recentMembers    = computed(() => [...rawMembers.value].sort((a: Member, b: Member) => new Date(b.registration_date||b.created_at||0).getTime()-new Date(a.registration_date||a.created_at||0).getTime()).slice(0,5))
+const recentPayments   = computed(() => [...rawPayments.value].sort((a: FeePayment, b: FeePayment) => new Date(b.date||b.created_at||0).getTime()-new Date(a.date||a.created_at||0).getTime()).slice(0,5))
+const recentBroadcasts = computed(() => [...rawNotifications.value].sort((a: NotificationItem, b: NotificationItem) => new Date(b.created_at||0).getTime()-new Date(a.created_at||0).getTime()).slice(0,4))
 
-const getMemberName = (p: any) => {
+const getMemberName = (p: FeePayment) => {
   if (p.member) return `${p.member.first_name} ${p.member.last_name}`
-  const m = rawMembers.value.find((m: any) => Number(m.id) === Number(p.member_id))
+  const m = rawMembers.value.find((m: Member) => Number(m.id) === Number(p.member_id))
   return m ? `${m.first_name} ${m.last_name}` : `Member #${p.member_id}`
 }
-const getMemberInitials = (p: any) => { const parts = getMemberName(p).split(' '); return `${(parts[0]||'?')[0]}${(parts[1]||'')[0]||''}`.toUpperCase() }
+const getFullMember = (p: FeePayment) => rawMembers.value.find((m: Member) => Number(m.id) === Number(p.member_id)) || p.member
+const getMemberInitials = (p: FeePayment) => { const parts = getMemberName(p).split(' '); return `${(parts[0]||'?')[0]}${(parts[1]||'')[0]||''}`.toUpperCase() }
 
 const PALETTE = ['#43766C','#B19470','#76453B','#6B9E8C','#C4A882','#9E6358']
 
@@ -128,7 +136,7 @@ const revenueChartData = computed<ChartData<'line'>>(() => {
     const d = new Date(now.getFullYear(), now.getMonth()-i, 1)
     const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
     months.push(d.toLocaleString('en',{month:'short'}))
-    totals.push(rawPayments.value.filter((p: any)=>(p.date||p.created_at||'').startsWith(key)).reduce((s: number,p: any)=>s+(Number(p.amount)||0),0))
+    totals.push(rawPayments.value.filter((p: FeePayment)=>(p.date||p.created_at||'').startsWith(key)).reduce((s: number, p: FeePayment)=>s+(Number(p.amount)||0),0))
   }
   return {
     labels: months,
@@ -152,9 +160,9 @@ const growthChartData = computed<ChartData<'bar'>>(() => {
     const d = new Date(now.getFullYear(), now.getMonth()-i, 1)
     const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
     months.push(d.toLocaleString('en',{month:'short'}))
-    counts.push(rawMembers.value.filter((m: any)=>(m.registration_date||m.created_at||'').startsWith(key)).length)
+    counts.push(rawMembers.value.filter((m: Member)=>(m.registration_date||m.created_at||'').startsWith(key)).length)
   }
-  return { labels: months, datasets: [{ label: 'New Members', data: counts, backgroundColor: PALETTE, borderRadius: 7, borderSkipped: false as any }] }
+  return { labels: months, datasets: [{ label: 'New Members', data: counts, backgroundColor: PALETTE, borderRadius: 7, borderSkipped: false }] }
 })
 const growthChartOptions: ChartOptions<'bar'> = {
   responsive: true, maintainAspectRatio: false,
@@ -164,7 +172,7 @@ const growthChartOptions: ChartOptions<'bar'> = {
 
 const ageChartData = computed<ChartData<'doughnut'>>(() => {
   const counts: Record<string,number> = {}
-  rawMembers.value.forEach((m: any) => { const n=getAgeGroupName(m.age_group_id); counts[n]=(counts[n]||0)+1 })
+  rawMembers.value.forEach((m: Member) => { const n=getAgeGroupName(m.age_group_id); counts[n]=(counts[n]||0)+1 })
   return { labels: Object.keys(counts), datasets: [{ data: Object.values(counts), backgroundColor: PALETTE, borderWidth: 2, borderColor: '#fff', hoverOffset: 6 }] }
 })
 const doughnutOptions: ChartOptions<'doughnut'> = {
@@ -175,10 +183,10 @@ const doughnutOptions: ChartOptions<'doughnut'> = {
 
 const locationChartData = computed<ChartData<'bar'>>(() => {
   const counts: Record<string,number> = {}
-  locationList.value.forEach((l: any) => { counts[l.name] = 0 })
-  rawMembers.value.forEach((m: any) => { const n=getLocationName(m.location_id); counts[n]=(counts[n]||0)+1 })
+  locationList.value.forEach((l: Location) => { counts[l.name] = 0 })
+  rawMembers.value.forEach((m: Member) => { const n=getLocationName(m.location_id); counts[n]=(counts[n]||0)+1 })
   const entries = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,7)
-  return { labels: entries.map(e=>e[0]), datasets: [{ label: 'Members', data: entries.map(e=>e[1]), backgroundColor: PALETTE, borderRadius: 7, borderSkipped: false as any }] }
+  return { labels: entries.map(e=>e[0]), datasets: [{ label: 'Members', data: entries.map(e=>e[1]), backgroundColor: PALETTE, borderRadius: 7, borderSkipped: false }] }
 })
 const locationChartOptions: ChartOptions<'bar'> = {
   responsive: true, maintainAspectRatio: false,
@@ -190,14 +198,25 @@ const locationChartOptions: ChartOptions<'bar'> = {
 }
 
 const sendingReminderId = ref<number|null>(null)
-const sendReminder = async (m: any) => {
+const sendReminder = async (m: Member) => {
   sendingReminderId.value = m.id
   try {
     await fetchWithAuth('/api/notifications', { method: 'POST', body: { name: `Fee Reminder \u2014 ${m.first_name} ${m.last_name}`, content: `Dear ${m.first_name}, your annual membership fee for ${currentYear} is still outstanding. Kindly settle it at your earliest convenience.` } })
     push.success(`Reminder queued for ${m.first_name} ${m.last_name}`)
-  } catch(e: any) { push.error(e?.data?.message || 'Failed to send reminder') }
+  } catch(e: unknown) { push.error(extractErrorMessage(e, 'Failed to send reminder')) }
   finally { sendingReminderId.value = null }
 }
+
+// Quick Action modal state
+const isMemberModalOpen    = ref(false)
+const isPaymentModalOpen   = ref(false)
+const isBroadcastModalOpen = ref(false)
+const isOverdueModalOpen   = ref(false)
+
+// All overdue members (for OverdueRemindersModal)
+const allOverdueMembers = computed<Member[]>(() =>
+  rawMembers.value.filter((m: Member) => m.member_status === 'active' && !paidThisYear.value.has(Number(m.id)))
+)
 </script>
 
 <template>
@@ -244,7 +263,7 @@ const sendReminder = async (m: any) => {
     <template v-else>
       <!-- KPI STRIP -->
       <div class="row g-3 mb-4">
-        <div class="col-6 col-sm-4 col-xl">
+        <div class="col-12 col-sm-6 col-md-4 col-xl">
           <div class="kpi kpi--teal">
             <div class="kpi__body">
               <div class="kpi__label">Total Members</div>
@@ -257,7 +276,7 @@ const sendReminder = async (m: any) => {
             <div class="kpi__icon"><i class="bi bi-people-fill"></i></div>
           </div>
         </div>
-        <div class="col-6 col-sm-4 col-xl">
+        <div class="col-12 col-sm-6 col-md-4 col-xl">
           <div class="kpi kpi--gold">
             <div class="kpi__body">
               <div class="kpi__label">Revenue YTD</div>
@@ -267,7 +286,7 @@ const sendReminder = async (m: any) => {
             <div class="kpi__icon kpi__icon--gold"><i class="bi bi-wallet2"></i></div>
           </div>
         </div>
-        <div class="col-6 col-sm-4 col-xl">
+        <div class="col-12 col-sm-6 col-md-4 col-xl">
           <div class="kpi kpi--brown">
             <div class="kpi__body">
               <div class="kpi__label">Fee Compliance</div>
@@ -278,7 +297,7 @@ const sendReminder = async (m: any) => {
             <div class="kpi__icon kpi__icon--brown"><i class="bi bi-check2-circle"></i></div>
           </div>
         </div>
-        <div class="col-6 col-sm-4 col-xl">
+        <div class="col-12 col-sm-6 col-md-6 col-xl">
           <div class="kpi kpi--danger">
             <div class="kpi__body">
               <div class="kpi__label">Overdue Members</div>
@@ -291,7 +310,7 @@ const sendReminder = async (m: any) => {
             <div class="kpi__icon kpi__icon--red"><i class="bi bi-exclamation-triangle-fill"></i></div>
           </div>
         </div>
-        <div class="col-6 col-sm-4 col-xl">
+        <div class="col-12 col-sm-12 col-md-6 col-xl">
           <div class="kpi kpi--neutral">
             <div class="kpi__body">
               <div class="kpi__label">Broadcasts Sent</div>
@@ -307,15 +326,15 @@ const sendReminder = async (m: any) => {
       <div class="qpanel mb-4">
         <span class="sec-lbl"><i class="bi bi-lightning-charge-fill me-1" style="color:#B19470"></i> Quick Actions</span>
         <div class="qgrid">
-          <NuxtLink to="/members" class="qa"><span class="qa__icon" style="background:rgba(67,118,108,.12);color:#43766C"><i class="bi bi-person-plus-fill"></i></span><span class="qa__lbl">Register<br/>Member</span></NuxtLink>
+          <button class="qa bg-transparent border-0" @click="isMemberModalOpen = true"><span class="qa__icon" style="background:rgba(67,118,108,.12);color:#43766C"><i class="bi bi-person-plus-fill"></i></span><span class="qa__lbl">Register<br/>Member</span></button>
           <div class="qa-divider"></div>
-          <NuxtLink to="/fee-payments" class="qa"><span class="qa__icon" style="background:rgba(177,148,112,.15);color:#B19470"><i class="bi bi-credit-card-2-front-fill"></i></span><span class="qa__lbl">Record<br/>Payment</span></NuxtLink>
+          <button class="qa bg-transparent border-0" @click="isPaymentModalOpen = true"><span class="qa__icon" style="background:rgba(177,148,112,.15);color:#B19470"><i class="bi bi-credit-card-2-front-fill"></i></span><span class="qa__lbl">Record<br/>Payment</span></button>
           <div class="qa-divider"></div>
-          <NuxtLink to="/notifications" class="qa"><span class="qa__icon" style="background:rgba(118,69,59,.10);color:#76453B"><i class="bi bi-chat-dots-fill"></i></span><span class="qa__lbl">Send<br/>Broadcast</span></NuxtLink>
+          <button class="qa bg-transparent border-0" @click="isBroadcastModalOpen = true"><span class="qa__icon" style="background:rgba(118,69,59,.10);color:#76453B"><i class="bi bi-chat-dots-fill"></i></span><span class="qa__lbl">Send<br/>Broadcast</span></button>
           <div class="qa-divider"></div>
           <NuxtLink to="/reports" class="qa"><span class="qa__icon" style="background:rgba(67,118,108,.12);color:#43766C"><i class="bi bi-file-earmark-bar-graph-fill"></i></span><span class="qa__lbl">View<br/>Reports</span></NuxtLink>
           <div class="qa-divider"></div>
-          <NuxtLink to="/fee-payments" class="qa"><span class="qa__icon" style="background:rgba(220,53,69,.08);color:#dc3545"><i class="bi bi-bell-fill"></i></span><span class="qa__lbl">Remind<br/>Overdue</span></NuxtLink>
+          <button class="qa bg-transparent border-0" @click="isOverdueModalOpen = true"><span class="qa__icon" style="background:rgba(220,53,69,.08);color:#dc3545"><i class="bi bi-bell-fill"></i></span><span class="qa__lbl">Remind<br/>Overdue</span></button>
           <div class="qa-divider"></div>
           <NuxtLink to="/members" class="qa"><span class="qa__icon" style="background:rgba(67,118,108,.10);color:#43766C"><i class="bi bi-people"></i></span><span class="qa__lbl">View<br/>Members</span></NuxtLink>
           <div class="qa-divider"></div>
@@ -354,7 +373,7 @@ const sendReminder = async (m: any) => {
 
       <!-- ANALYTICS ROW 2 -->
       <div class="row g-4 mb-4">
-        <div class="col-lg-4">
+        <div class="col-12 col-md-6 col-lg-4">
           <div class="ccrd">
             <div class="ccrd__hd"><div><div class="ccrd__ttl">Age Demographics</div><div class="ccrd__sub">Members by age group bracket</div></div></div>
             <div style="height:220px">
@@ -363,7 +382,7 @@ const sendReminder = async (m: any) => {
             </div>
           </div>
         </div>
-        <div class="col-lg-4">
+        <div class="col-12 col-md-6 col-lg-4">
           <div class="ccrd">
             <div class="ccrd__hd"><div><div class="ccrd__ttl">Members by Branch</div><div class="ccrd__sub">Distribution across locations</div></div></div>
             <div style="height:220px">
@@ -372,7 +391,7 @@ const sendReminder = async (m: any) => {
             </div>
           </div>
         </div>
-        <div class="col-lg-4">
+        <div class="col-12 col-md-12 col-lg-4">
           <div class="ccrd h-100">
             <div class="ccrd__hd mb-2"><div><div class="ccrd__ttl">Compliance Snapshot</div><div class="ccrd__sub">{{ currentYear }} fee payment status</div></div></div>
             <div class="ring-wrap mb-3">
@@ -402,7 +421,7 @@ const sendReminder = async (m: any) => {
       <!-- ACTIVITY -->
       <div class="sec-lbl mb-3"><i class="bi bi-activity me-1" style="color:#B19470"></i> Activity</div>
       <div class="row g-4">
-        <div class="col-lg-4">
+        <div class="col-12 col-md-6 col-lg-4">
           <div class="acrd h-100">
             <div class="acrd__hd">
               <div class="d-flex align-items-center gap-2">
@@ -415,7 +434,7 @@ const sendReminder = async (m: any) => {
               <div v-if="!overdueMembers.length" class="eact"><i class="bi bi-check2-all text-success fs-3 d-block mb-2"></i><span>All active members are up to date!</span></div>
               <div v-else class="alist">
                 <div v-for="m in overdueMembers" :key="m.id" class="aitem">
-                  <div class="aav aav--red">{{ initials(m) }}</div>
+                  <MemberAvatar :member="m" style="width: 40px; height: 40px; font-size: 0.8rem;" />
                   <div class="ainf"><span class="aname">{{ m.first_name }} {{ m.last_name }}</span><span class="ameta">{{ getLocationName(m.location_id) }}</span></div>
                   <button class="arem" @click="sendReminder(m)" :disabled="sendingReminderId===m.id">
                     <i class="bi" :class="sendingReminderId===m.id?'bi-hourglass-split spin':'bi-bell-fill'"></i>
@@ -426,7 +445,7 @@ const sendReminder = async (m: any) => {
             </div>
           </div>
         </div>
-        <div class="col-lg-4">
+        <div class="col-12 col-md-6 col-lg-4">
           <div class="acrd h-100">
             <div class="acrd__hd">
               <div class="d-flex align-items-center gap-2"><span class="adot adot--teal"></span><span class="acrd__ttl">Recent Payments</span></div>
@@ -436,7 +455,7 @@ const sendReminder = async (m: any) => {
               <div v-if="!recentPayments.length" class="eact"><i class="bi bi-credit-card fs-3 d-block mb-2"></i><span>No payments recorded yet</span></div>
               <div v-else class="alist">
                 <div v-for="p in recentPayments" :key="p.id" class="aitem">
-                  <div class="aav aav--teal">{{ getMemberInitials(p) }}</div>
+                  <MemberAvatar :member="getFullMember(p)" style="width: 40px; height: 40px; font-size: 0.8rem;" />
                   <div class="ainf"><span class="aname">{{ getMemberName(p) }}</span><span class="ameta">{{ formatDate(p.date||p.created_at) }}</span></div>
                   <div class="aamt"><span class="aamt__v">{{ formatCompact(Number(p.amount)) }}</span><span class="aamt__l">paid</span></div>
                 </div>
@@ -444,7 +463,7 @@ const sendReminder = async (m: any) => {
             </div>
           </div>
         </div>
-        <div class="col-lg-4">
+        <div class="col-12 col-md-12 col-lg-4">
           <div class="acrd h-100">
             <div class="acrd__hd">
               <div class="d-flex align-items-center gap-2"><span class="adot adot--gold"></span><span class="acrd__ttl">Recent Registrations</span></div>
@@ -454,7 +473,7 @@ const sendReminder = async (m: any) => {
               <div v-if="!recentMembers.length" class="eact"><i class="bi bi-person-plus fs-3 d-block mb-2"></i><span>No members registered yet</span></div>
               <div v-else class="alist">
                 <div v-for="m in recentMembers" :key="m.id" class="aitem">
-                  <div class="aav aav--gold">{{ initials(m) }}</div>
+                  <MemberAvatar :member="m" style="width: 40px; height: 40px; font-size: 0.8rem;" />
                   <div class="ainf"><span class="aname">{{ m.first_name }} {{ m.last_name }}</span><span class="ameta">{{ getLocationName(m.location_id) }}</span></div>
                   <span class="asbadge" :class="m.member_status==='active'?'asbadge--active':'asbadge--inactive'">{{ m.member_status }}</span>
                 </div>
@@ -464,6 +483,32 @@ const sendReminder = async (m: any) => {
         </div>
       </div>
     </template>
+
+    <!-- Quick Action Modals -->
+    <SharedMemberModal
+      v-if="isMemberModalOpen"
+      :locations="locationList"
+      :age-groups="ageGroupList"
+      @close="isMemberModalOpen = false"
+      @saved="loadDashboard"
+    />
+    <SharedPaymentModal
+      v-if="isPaymentModalOpen"
+      @close="isPaymentModalOpen = false"
+      @saved="loadDashboard"
+    />
+    <SharedBroadcastRecipientModal
+      v-if="isBroadcastModalOpen"
+      @close="isBroadcastModalOpen = false"
+      @saved="loadDashboard"
+    />
+    <OverdueRemindersModal
+      v-if="isOverdueModalOpen"
+      :members="allOverdueMembers"
+      :locations="locationList"
+      @close="isOverdueModalOpen = false"
+      @dispatched="loadDashboard"
+    />
   </div>
 </template>
 
@@ -499,13 +544,21 @@ const sendReminder = async (m: any) => {
 .cbar{height:5px;border-radius:999px;background:rgba(0,0,0,.08);overflow:hidden}
 .cbar__fill{height:100%;border-radius:999px;background:var(--ct);transition:width .6s ease}
 .qpanel{background:var(--bs-body-bg,#fff);border:1px solid rgba(0,0,0,.06);border-radius:1rem;padding:1rem 1.25rem;box-shadow:0 1px 4px rgba(0,0,0,.04);display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap}
-.qgrid{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center}
+.qgrid{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;width:100%}
 .qa-divider{width:1px;height:52px;background:rgba(0,0,0,.08);margin:0 .35rem;flex-shrink:0}
 .qa{display:flex;flex-direction:column;align-items:center;gap:.45rem;width:84px;padding:.7rem .4rem;border-radius:.85rem;text-decoration:none;color:inherit;text-align:center;transition:transform var(--tr),background var(--tr)}
 .qa:hover{transform:translateY(-2px);background:rgba(0,0,0,.03)}
 .qa__icon{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.2rem;transition:transform var(--tr),box-shadow var(--tr)}
 .qa:hover .qa__icon{transform:scale(1.06);box-shadow:0 6px 16px rgba(0,0,0,.1)}
 .qa__lbl{font-size:.7rem;font-weight:600;line-height:1.2;color:#666}
+
+@media (max-width: 767.98px) {
+  .qpanel{flex-direction:column;align-items:flex-start;gap:.8rem;padding:.85rem 1rem}
+  .qgrid{display:grid;grid-template-columns:repeat(auto-fill, minmax(72px, 1fr));gap:.5rem;justify-items:center}
+  .qa-divider{display:none}
+  .qa{width:100%;max-width:85px;padding:.5rem .2rem}
+  .qa__icon{width:42px;height:42px;font-size:1.1rem}
+}
 .ccrd{background:var(--bs-body-bg,#fff);border:1px solid rgba(0,0,0,.06);border-radius:1rem;padding:1.25rem 1.25rem 1rem;box-shadow:0 2px 10px rgba(0,0,0,.04);height:100%}
 .ccrd__hd{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:1rem;gap:.75rem}
 .ccrd__ttl{font-size:.9rem;font-weight:700;color:#333}

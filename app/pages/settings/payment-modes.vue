@@ -125,10 +125,9 @@ const handleSave = async () => {
     
     closeModal()
     await loadData()
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Save payment mode error:', err)
-    const serverErrors = err?.data?.errors ? Object.values(err.data.errors).flat().join(', ') : null
-    modalError.value = serverErrors || err?.data?.message || err?.message || 'Failed to save payment mode'
+    modalError.value = extractErrorMessage(err, 'Failed to save payment mode')
     push.error(modalError.value)
   } finally {
     isSubmitting.value = false
@@ -146,20 +145,16 @@ const cancelDelete = () => {
 }
 
 const confirmDelete = async () => {
-  if (!itemToDelete.value) return
-  
-  isDeleting.value = true
-  try {
-    await fetchWithAuth(`/api/payment-modes/${itemToDelete.value.id}`, { method: 'DELETE' })
-    push.success(`Payment mode "${itemToDelete.value.name}" deleted successfully!`)
-    cancelDelete()
-    await loadData()
-  } catch (err: any) {
-    const msg = err?.data?.message || 'Failed to delete payment mode'
-    push.error(msg)
-  } finally {
-    isDeleting.value = false
-  }
+    if (!itemToDelete.value) return
+    
+    const success = await mutate(api => api(`/api/payment-modes/${itemToDelete.value.id}`, { method: 'DELETE' }), {
+      successMessage: `Payment mode "${itemToDelete.value.name}" deleted successfully!`
+    })
+    
+    if (success) {
+      cancelDelete()
+      await loadData()
+    }
 }
 
 onMounted(() => {
@@ -182,105 +177,62 @@ onMounted(() => {
       @add="openAddModal"
     />
 
-    <!-- Main Data Table Container -->
-    <div class="card amms-surface border-0 shadow-sm rounded-4 overflow-hidden mb-4 position-relative">
-      
-      <!-- Center Loading Spinner Overlay -->
-      <div v-if="loading" class="position-absolute top-0 start-0 w-100 h-100 bg-body bg-opacity-75 d-flex flex-column align-items-center justify-content-center z-3">
-        <div class="spinner-border text-primary" role="status" style="width: 2.5rem; height: 2.5rem;">
-          <span class="visually-hidden">Loading payment modes...</span>
+        <!-- Main Data Table Container using Reusable AppTable -->
+    <AppTable
+      :columns="[
+        { key: 'id', label: '# ID', width: '90px', cellClass: 'ps-4', headerClass: 'ps-4' },
+        { key: 'name', label: 'Payment Mode' },
+        { key: 'actions', label: 'Actions', width: '150px', align: 'right', cellClass: 'pe-4', headerClass: 'pe-4' }
+      ]"
+      :items="paginatedPaymentModes"
+      :loading="loading"
+      emptyIcon="bi bi-credit-card"
+      emptyTitle="No payment modes found"
+      emptySubtitle="Click 'New Payment Mode' above to add an accepted payment channel.'
+      v-model:currentPage='currentPage"
+      v-model:itemsPerPage="itemsPerPage"
+      :totalPages="totalPages"
+      :totalItems="filteredPaymentModes.length"
+    >
+      <template #cell-id="{ item }">
+        <span class="font-monospace text-muted text-xs">#{{ item.id }}</span>
+      </template>
+
+      <template #cell-name="{ item }">
+        <div class="fw-semibold text-primary d-flex align-items-center gap-2.5">
+          <div class="mode-icon-badge rounded-circle d-flex align-items-center justify-content-center">
+            <i class="bi bi-credit-card-2-front text-primary text-xs"></i>
+          </div>
+          <span>{{ item.name }}</span>
         </div>
-        <span class="text-xs fw-semibold text-primary mt-2">Loading payment mode data...</span>
-      </div>
+      </template>
 
-      <!-- Error Alert -->
-      <div v-if="error" class="alert alert-danger rounded-0 mb-0 py-3 px-4 d-flex align-items-center justify-content-between">
-        <div class="d-flex align-items-center gap-2">
-          <i class="bi bi-exclamation-triangle-fill fs-5"></i>
-          <span>{{ error }}</span>
+      <template #cell-actions="{ item }">
+        <div class="d-flex align-items-center justify-content-end gap-1">
+          <button 
+            class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
+            @click="openViewModal(item)"
+            title="View Payment Mode Details"
+          >
+            <i class="bi bi-eye-fill text-primary"></i>
+          </button>
+          <button 
+            class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
+            @click="openEditModal(item)"
+            title="Edit Payment Mode"
+          >
+            <i class="bi bi-pencil-fill text-muted"></i>
+          </button>
+          <button 
+            class="btn btn-sm btn-light border-0 rounded-circle action-btn hover-danger" 
+            @click="promptDelete(item)"
+            title="Delete Payment Mode"
+          >
+            <i class="bi bi-trash-fill text-danger"></i>
+          </button>
         </div>
-        <button class="btn btn-sm btn-outline-danger rounded-pill" @click="loadData">Retry</button>
-      </div>
-
-      <div class="table-responsive">
-        <table class="table align-middle mb-0 custom-amms-table">
-          <thead>
-            <tr>
-              <th class="ps-4" style="width: 90px;"># ID</th>
-              <th>Mode Name</th>
-              <th class="text-end pe-4" style="width: 140px;">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <!-- Loading Skeleton -->
-            <template v-if="loading && (!paymentModes || paymentModes.length === 0)">
-              <tr v-for="i in 4" :key="i">
-                <td class="ps-4"><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-8"></span></td>
-                <td class="pe-4 text-end"><span class="placeholder col-10"></span></td>
-              </tr>
-            </template>
-
-            <!-- Empty State -->
-            <tr v-else-if="filteredPaymentModes.length === 0">
-              <td colspan="3" class="text-center py-5 text-muted">
-                <i class="bi bi-credit-card fs-1 d-block mb-2 text-opacity-50"></i>
-                <p class="mb-0 fw-medium">No payment modes found</p>
-                <small>Click "New Payment Mode" above to add an accepted payment channel.</small>
-              </td>
-            </tr>
-
-            <!-- Payment Mode Rows -->
-            <tr v-for="mode in paginatedPaymentModes" :key="mode.id">
-              <td class="ps-4 font-monospace text-muted text-xs">#{{ mode.id }}</td>
-              <td class="fw-semibold text-primary">
-                <div class="d-flex align-items-center gap-2.5">
-                  <div class="mode-icon-badge rounded-circle d-flex align-items-center justify-content-center">
-                    <i class="bi bi-credit-card-2-front text-primary text-xs"></i>
-                  </div>
-                  <span>{{ mode.name }}</span>
-                </div>
-              </td>
-              <td class="pe-4 text-end">
-                <div class="d-flex align-items-center justify-content-end gap-1">
-                  <button 
-                    class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
-                    @click="openViewModal(mode)"
-                    title="View Payment Mode Details"
-                  >
-                    <i class="bi bi-eye-fill text-primary"></i>
-                  </button>
-                  <button 
-                    class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
-                    @click="openEditModal(mode)"
-                    title="Edit Payment Mode"
-                  >
-                    <i class="bi bi-pencil-fill text-muted"></i>
-                  </button>
-                  <button 
-                    class="btn btn-sm btn-light border-0 rounded-circle action-btn hover-danger" 
-                    @click="promptDelete(mode)"
-                    title="Delete Payment Mode"
-                  >
-                    <i class="bi bi-trash-fill text-danger"></i>
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <!-- Reusable Pagination Control Footer -->
-      <PaginationControl
-        v-if="filteredPaymentModes.length > 0"
-        v-model:currentPage="currentPage"
-        v-model:itemsPerPage="itemsPerPage"
-        :totalPages="totalPages"
-        :totalItems="filteredPaymentModes.length"
-      />
-
-    </div>
+      </template>
+    </AppTable>
 
     <!-- View Payment Mode Details Modal -->
     <ViewDetailModal
@@ -308,53 +260,14 @@ onMounted(() => {
       </div>
     </ViewDetailModal>
 
-    <!-- Custom Delete Confirmation Modal -->
-    <div v-if="isDeleteModalOpen" class="modal-backdrop fade show" style="z-index: 1060;"></div>
-    
-    <div 
-      v-if="isDeleteModalOpen" 
-      class="modal fade show d-block" 
-      tabindex="-1" 
-      role="dialog"
-      style="z-index: 1065;"
-      @click.self="cancelDelete"
-    >
-      <div class="modal-dialog modal-dialog-centered modal-sm">
-        <div class="modal-content amms-surface border-0 shadow-lg rounded-4 overflow-hidden text-center p-4">
-          
-          <div class="d-inline-flex align-items-center justify-content-center bg-danger bg-opacity-10 text-danger rounded-circle p-3 mx-auto mb-3" style="width: 56px; height: 56px;">
-            <i class="bi bi-trash3-fill fs-3"></i>
-          </div>
-
-          <h5 class="fw-bold text-primary text-sm mb-1">Confirm Deletion</h5>
-          <p class="text-secondary-amms text-xs mb-2">Are you sure you want to permanently delete this payment mode?</p>
-          
-          <p class="fw-bold text-danger text-xs mb-4 font-monospace bg-danger bg-opacity-10 py-1.5 px-3 rounded-3 d-inline-block mx-auto">
-            "{{ itemToDelete?.name }}"
-          </p>
-
-          <div class="d-flex align-items-center justify-content-center gap-2">
-            <button 
-              type="button" 
-              class="btn btn-sm btn-light border rounded-pill px-3.5 text-xs fw-semibold" 
-              @click="cancelDelete"
-            >
-              Cancel
-            </button>
-            <button 
-              type="button" 
-              class="btn btn-sm btn-danger rounded-pill px-4 text-xs fw-semibold d-flex align-items-center gap-1.5 shadow-sm"
-              :disabled="isDeleting"
-              @click="confirmDelete"
-            >
-              <span v-if="isDeleting" class="spinner-border spinner-border-sm" role="status"></span>
-              <span>{{ isDeleting ? 'Deleting...' : 'Delete Mode' }}</span>
-            </button>
-          </div>
-
-        </div>
-      </div>
-    </div>
+    <DeleteConfirmModal
+      v-model="isDeleteModalOpen"
+      message="Are you sure you want to permanently delete this payment mode?"
+        :itemTitle="itemToDelete ? `&quot;${itemToDelete.name}&quot;` : ''"
+      :loading="isDeleting"
+      confirmText="Delete Mode"
+      @confirm="confirmDelete"
+    />
 
     <!-- Create / Edit Vue Pure Modal -->
     <div v-if="isModalOpen" class="modal-backdrop fade show"></div>
@@ -479,3 +392,7 @@ onMounted(() => {
   background-color: rgba(220, 53, 69, 0.12) !important;
 }
 </style>
+
+
+
+

@@ -127,7 +127,13 @@ const handleSave = async () => {
   const descText = description.value.trim() || `Annual Fee ${feeYear.value}`
   
   // Backend expects name, description, year, and fee_year
-  const payload: any = {
+  const payload: {
+    name: string
+    description: string
+    year: number
+    fee_year: number
+    amount: number
+  } = {
     name: descText,
     description: descText,
     year: Number(feeYear.value),
@@ -173,10 +179,9 @@ const handleSave = async () => {
     
     closeModal()
     await loadData()
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Save fee schedule error:', err)
-    const serverErrors = err?.data?.errors ? Object.values(err.data.errors).flat().join(', ') : null
-    modalError.value = serverErrors || err?.data?.message || err?.message || 'Failed to save fee schedule'
+    modalError.value = extractErrorMessage(err, 'Failed to save fee schedule')
     push.error(modalError.value)
   } finally {
     isSubmitting.value = false
@@ -194,20 +199,16 @@ const cancelDelete = () => {
 }
 
 const confirmDelete = async () => {
-  if (!itemToDelete.value) return
-  
-  isDeleting.value = true
-  try {
-    await fetchWithAuth(`/api/fees/${itemToDelete.value.id}`, { method: 'DELETE' })
-    push.success(`Fee schedule for year ${itemToDelete.value.fee_year} deleted successfully!`)
-    cancelDelete()
-    await loadData()
-  } catch (err: any) {
-    const msg = err?.data?.message || 'Failed to delete fee schedule'
-    push.error(msg)
-  } finally {
-    isDeleting.value = false
-  }
+    if (!itemToDelete.value) return
+    
+    const success = await mutate(api => api(`/api/fees/${itemToDelete.value.id}`, { method: 'DELETE' }), {
+      successMessage: `Fee schedule for year ${itemToDelete.value.fee_year} deleted successfully!`
+    })
+    
+    if (success) {
+      cancelDelete()
+      await loadData()
+    }
 }
 
 const formatCurrency = (val: number) => {
@@ -237,13 +238,6 @@ onMounted(() => {
     <!-- Main Data Table Container -->
     <div class="card amms-surface border-0 shadow-sm rounded-4 overflow-hidden mb-4 position-relative">
       
-      <!-- Center Loading Spinner Overlay -->
-      <div v-if="loading" class="position-absolute top-0 start-0 w-100 h-100 bg-body bg-opacity-75 d-flex flex-column align-items-center justify-content-center z-3">
-        <div class="spinner-border text-primary" role="status" style="width: 2.5rem; height: 2.5rem;">
-          <span class="visually-hidden">Loading fee schedules...</span>
-        </div>
-        <span class="text-xs fw-semibold text-primary mt-2">Loading fee schedule data...</span>
-      </div>
 
       <!-- Error Alert -->
       <div v-if="error" class="alert alert-danger rounded-0 mb-0 py-3 px-4 d-flex align-items-center justify-content-between">
@@ -254,82 +248,66 @@ onMounted(() => {
         <button class="btn btn-sm btn-outline-danger rounded-pill" @click="loadData">Retry</button>
       </div>
 
-      <div class="table-responsive">
-        <table class="table align-middle mb-0 custom-amms-table">
-          <thead>
-            <tr>
-              <th class="ps-4" style="width: 90px;"># ID</th>
-              <th>Fee Year</th>
-              <th>Annual Amount</th>
-              <th>Description</th>
-              <th class="text-end pe-4" style="width: 140px;">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <!-- Loading Skeleton -->
-            <template v-if="loading && (!fees || fees.length === 0)">
-              <tr v-for="i in 4" :key="i">
-                <td class="ps-4"><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-6"></span></td>
-                <td><span class="placeholder col-8"></span></td>
-                <td><span class="placeholder col-10"></span></td>
-                <td class="pe-4 text-end"><span class="placeholder col-10"></span></td>
-              </tr>
-            </template>
+      
+    <!-- Replaced by AppTable Component -->
+    <AppTable
+      :columns="[{key: 'id', label: '# ID', width: '90px', headerClass: 'ps-4', cellClass: 'ps-4 font-monospace text-muted text-xs'}, {key: 'fee-year', label: 'Fee Year'}, {key: 'annual-amount', label: 'Annual Amount', cellClass: 'fw-bold text-success font-monospace fs-6'}, {key: 'description', label: 'Description', cellClass: 'text-secondary-amms text-xs'}, {key: 'actions', label: 'Actions', align: 'right', width: '140px', headerClass: 'pe-4', cellClass: 'pe-4'}]"
+      :items="paginatedFees"
+      :loading="loading"
+      emptyIcon="bi bi-receipt"
+      emptyTitle="No fee schedules found"
+      emptySubtitle="Click 'New Fee Schedule' above to define an annual fee rate."
 
-            <!-- Empty State -->
-            <tr v-else-if="filteredFees.length === 0">
-              <td colspan="5" class="text-center py-5 text-muted">
-                <i class="bi bi-receipt fs-1 d-block mb-2 text-opacity-50"></i>
-                <p class="mb-0 fw-medium">No fee schedules found</p>
-                <small>Click "New Fee Schedule" above to define an annual fee rate.</small>
-              </td>
-            </tr>
+    >
+      <template #cell-id="{ item }">
+#{{ item.id }}
+      </template>
+      <template #cell-fee-year="{ item }">
 
-            <!-- Fee Schedule Rows -->
-            <tr v-for="fee in paginatedFees" :key="fee.id">
-              <td class="ps-4 font-monospace text-muted text-xs">#{{ fee.id }}</td>
-              <td>
                 <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-20 px-3 py-1.5 rounded-pill font-monospace fw-semibold">
                   <i class="bi bi-calendar-event me-1"></i>
-                  {{ getFeeYear(fee) }}
+                  {{ getFeeYear(item) }}
                 </span>
-              </td>
-              <td class="fw-bold text-success font-monospace fs-6">
-                {{ formatCurrency(fee.amount) }}
-              </td>
-              <td class="text-secondary-amms text-xs">
-                {{ fee.description || fee.name || '—' }}
-              </td>
-              <td class="pe-4 text-end">
+              
+      </template>
+      <template #cell-annual-amount="{ item }">
+
+                {{ formatCurrency(item.amount) }}
+              
+      </template>
+      <template #cell-description="{ item }">
+
+                {{ item.description || item.name || '—' }}
+              
+      </template>
+      <template #cell-actions="{ item }">
+
                 <div class="d-flex align-items-center justify-content-end gap-1">
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
-                    @click="openViewModal(fee)"
+                    @click="openViewModal(item)"
                     title="View Fee Schedule Details"
                   >
                     <i class="bi bi-eye-fill text-primary"></i>
                   </button>
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn" 
-                    @click="openEditModal(fee)"
+                    @click="openEditModal(item)"
                     title="Edit Fee Schedule"
                   >
                     <i class="bi bi-pencil-fill text-muted"></i>
                   </button>
                   <button 
                     class="btn btn-sm btn-light border-0 rounded-circle action-btn hover-danger" 
-                    @click="promptDelete(fee)"
+                    @click="promptDelete(item)"
                     title="Delete Fee Schedule"
                   >
                     <i class="bi bi-trash-fill text-danger"></i>
                   </button>
                 </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+              
+      </template>
+    </AppTable>
 
       <!-- Reusable Pagination Control Footer -->
       <PaginationControl
@@ -376,53 +354,14 @@ onMounted(() => {
       </div>
     </ViewDetailModal>
 
-    <!-- Custom Delete Confirmation Modal -->
-    <div v-if="isDeleteModalOpen" class="modal-backdrop fade show" style="z-index: 1060;"></div>
-    
-    <div 
-      v-if="isDeleteModalOpen" 
-      class="modal fade show d-block" 
-      tabindex="-1" 
-      role="dialog"
-      style="z-index: 1065;"
-      @click.self="cancelDelete"
-    >
-      <div class="modal-dialog modal-dialog-centered modal-sm">
-        <div class="modal-content amms-surface border-0 shadow-lg rounded-4 overflow-hidden text-center p-4">
-          
-          <div class="d-inline-flex align-items-center justify-content-center bg-danger bg-opacity-10 text-danger rounded-circle p-3 mx-auto mb-3" style="width: 56px; height: 56px;">
-            <i class="bi bi-trash3-fill fs-3"></i>
-          </div>
-
-          <h5 class="fw-bold text-primary text-sm mb-1">Confirm Deletion</h5>
-          <p class="text-secondary-amms text-xs mb-2">Are you sure you want to permanently delete this annual fee schedule?</p>
-          
-          <p class="fw-bold text-danger text-xs mb-4 font-monospace bg-danger bg-opacity-10 py-1.5 px-3 rounded-3 d-inline-block mx-auto">
-            Year {{ itemToDelete ? getFeeYear(itemToDelete) : '' }} ({{ itemToDelete ? formatCurrency(itemToDelete.amount) : '' }})
-          </p>
-
-          <div class="d-flex align-items-center justify-content-center gap-2">
-            <button 
-              type="button" 
-              class="btn btn-sm btn-light border rounded-pill px-3.5 text-xs fw-semibold" 
-              @click="cancelDelete"
-            >
-              Cancel
-            </button>
-            <button 
-              type="button" 
-              class="btn btn-sm btn-danger rounded-pill px-4 text-xs fw-semibold d-flex align-items-center gap-1.5 shadow-sm"
-              :disabled="isDeleting"
-              @click="confirmDelete"
-            >
-              <span v-if="isDeleting" class="spinner-border spinner-border-sm" role="status"></span>
-              <span>{{ isDeleting ? 'Deleting...' : 'Delete Fee' }}</span>
-            </button>
-          </div>
-
-        </div>
-      </div>
-    </div>
+    <DeleteConfirmModal
+      v-model="isDeleteModalOpen"
+      message="Are you sure you want to permanently delete this annual fee schedule?"
+        :itemTitle="itemToDelete ? `Year ${getFeeYear(itemToDelete)} (${formatCurrency(itemToDelete.amount)})` : ''"
+      :loading="isDeleting"
+      confirmText="Delete Fee"
+      @confirm="confirmDelete"
+    />
 
     <!-- Create / Edit Vue Pure Modal -->
     <div v-if="isModalOpen" class="modal-backdrop fade show"></div>
@@ -580,3 +519,5 @@ onMounted(() => {
   background-color: rgba(220, 53, 69, 0.12) !important;
 }
 </style>
+
+

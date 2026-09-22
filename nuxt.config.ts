@@ -1,12 +1,24 @@
-// Browser-facing API base: what the SPA calls from the browser.
-// - Local dev:  /api            (the Nitro dev server proxies /api/** to the backend)
-// - Production: /backend/api    (static cPanel build, no Node server — call backend directly)
-const browserApiBase = process.env.NUXT_PUBLIC_API_BASE || '/api'
+const isDev = process.env.NODE_ENV !== 'production'
 
-// Server-side proxy target: the real backend URL. Used only by the Nitro
-// dev/preview server (server/api/[...].ts and nitro.routeRules).
-const backendTarget = process.env.NUXT_API_BASE || 'http://192.168.100.100/amms/public/api'
+const rawBrowserBase = process.env.NUXT_PUBLIC_API_BASE || '/api'
+let backendTarget = process.env.NUXT_API_BASE
+
+// If NUXT_PUBLIC_API_BASE is an absolute URL (e.g. https://asa.or.tz/backend/api)
+// but NUXT_API_BASE is not set, adopt it as the backend target.
+if (!backendTarget && /^https?:\/\//i.test(rawBrowserBase)) {
+  backendTarget = rawBrowserBase
+}
+backendTarget = (backendTarget || 'http://192.168.100.100/amms/public/api').replace(/\/+$/, '')
+if (!backendTarget.endsWith('/api')) {
+  backendTarget = `${backendTarget}/api`
+}
 const backendBase = backendTarget.replace(/\/api\/?$/, '')
+
+// In local development, if browser base is an external origin (like https://...),
+// browser CORS policies will block requests from localhost. Route through local /api proxy instead.
+const browserApiBase = (isDev && /^https?:\/\//i.test(rawBrowserBase))
+  ? '/api'
+  : rawBrowserBase.replace(/\/+$/, '')
 
 const routeRules: Record<string, { proxy: string }> = {
   '/uploads/**': {
@@ -29,7 +41,8 @@ export default defineNuxtConfig({
     apiBase: backendTarget,
     public: {
       // Exposed to the client: used to build API URLs in the browser.
-      apiBase: browserApiBase
+      apiBase: browserApiBase,
+      backendUrl: backendBase
     }
   },
   nitro: {
