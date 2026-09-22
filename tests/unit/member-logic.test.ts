@@ -202,13 +202,13 @@ describe('Member Logic & Formatting', () => {
 
     it('attaches photo file and skips undefined/null fields', () => {
       const payload = { first_name: 'Ahmed', mothers_name: undefined, fathers_name: null }
-      const fakePhoto = { name: 'avatar.webp', size: 1234 }
+      const fakePhoto = new File(['fake content'], 'avatar.webp', { type: 'image/webp' })
       const fd = buildMemberUpdateFormData(payload, fakePhoto)
       expect(fd.get('_method')).toBe('PUT')
       expect(fd.get('first_name')).toBe('Ahmed')
       expect(fd.get('mothers_name')).toBeNull()
       expect(fd.get('fathers_name')).toBeNull()
-      expect(fd.get('photo')).toEqual(fakePhoto)
+      expect(fd.get('photo')).toBe(fakePhoto)
     })
   })
 })
