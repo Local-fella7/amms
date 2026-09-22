@@ -1,6 +1,6 @@
-<script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { z } from 'zod'
+import { resolveAssetUrl } from '~/utils/image'
 import type { Member, Location, AgeGroup } from '~/types'
 
 const props = defineProps<{
@@ -15,16 +15,6 @@ const emit = defineEmits<{
 }>()
 
 const { fetchWithAuth } = useApi<Member>()
-const config = useRuntimeConfig()
-const backendBase = computed(() => {
-  const backendUrl = (config.public?.backendUrl as string) || ''
-  if (backendUrl) return backendUrl.replace(/\/+$/, '')
-  const api = (config.public?.apiBase as string) || ''
-  if (/^https?:\/\//i.test(api)) {
-    return api.replace(/\/api\/?$/, '')
-  }
-  return ''
-})
 
 const isSubmitting = ref(false)
 const modalError = ref('')
@@ -72,11 +62,7 @@ const schema = z.object({
 })
 
 const getMemberPhotoUrl = (pic?: string) => {
-  if (!pic) return ''
-  if (pic.startsWith('http') || pic.startsWith('data:') || pic.startsWith('blob:')) return pic
-  const cleanPath = pic.replace(/^\/+/, '')
-  const base = backendBase.value ? backendBase.value.replace(/\/+$/, '') : ''
-  return base ? `${base}/${cleanPath}` : `/${cleanPath}`
+  return resolveAssetUrl(pic)
 }
 
 // Initialize form when editing member changes

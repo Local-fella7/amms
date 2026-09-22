@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { z } from 'zod'
+import { resolveAssetUrl } from '~/utils/image'
 
 interface Association {
   id?: number
@@ -16,16 +17,6 @@ interface Association {
 }
 
 const { data: associationData, loading, error, execute: fetchAssociation, fetchWithAuth } = useApi<AssociationRecord | AssociationRecord[] | { data: AssociationRecord | AssociationRecord[] }>()
-const config = useRuntimeConfig()
-const backendBase = computed(() => {
-  const backendUrl = (config.public?.backendUrl as string) || ''
-  if (backendUrl) return backendUrl.replace(/\/+$/, '')
-  const api = (config.public?.apiBase as string) || ''
-  if (/^https?:\/\//i.test(api)) {
-    return api.replace(/\/api\/?$/, '')
-  }
-  return ''
-})
 
 const isSaving = ref(false)
 const formError = ref('')
@@ -49,12 +40,7 @@ const logoTimestamp = ref<number>(Date.now())
 
 const getLogoUrl = (path?: string | null) => {
   if (!path) return ''
-  if (path.startsWith('blob:') || path.startsWith('data:')) return path
-  const cleanPath = path.replace(/^\/+/, '')
-  const base = backendBase.value ? backendBase.value.replace(/\/+$/, '') : ''
-  const fullUrl = base ? `${base}/${cleanPath}` : `/${cleanPath}`
-  const separator = fullUrl.includes('?') ? '&' : '?'
-  return `${fullUrl}${separator}t=${logoTimestamp.value}`
+  return resolveAssetUrl(path, { timestamp: logoTimestamp.value })
 }
 
 const onLogoError = () => {

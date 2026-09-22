@@ -139,6 +139,41 @@ describe('MemberAvatar.vue', () => {
       expect(wrapper.find('img').attributes('src')).toBe('/uploads/photo.jpg?v=2026-09-22%2010%3A00%3A00')
     })
 
+    it('sanitizes private LAN IP in photo path and resolves via backend base', () => {
+      vi.stubGlobal('useRuntimeConfig', () => ({
+        public: {
+          apiBase: '/backend/api'
+        }
+      }))
+
+      const wrapper = mount(MemberAvatar, {
+        props: {
+          member: {
+            photo: 'http://192.168.100.100/amms/public/uploads/members/7.webp',
+            updated_at: '2026-09-21 13:12:30'
+          }
+        }
+      })
+      const src = wrapper.find('img').attributes('src')
+      expect(src).toBe('/backend/uploads/members/7.webp?v=2026-09-21%2013%3A12%3A30')
+      expect(src).not.toContain('192.168.100.100')
+    })
+
+    it('derives backend base from relative apiBase /backend/api', () => {
+      vi.stubGlobal('useRuntimeConfig', () => ({
+        public: {
+          apiBase: '/backend/api'
+        }
+      }))
+
+      const wrapper = mount(MemberAvatar, {
+        props: {
+          member: { photo: 'uploads/members/4.webp' }
+        }
+      })
+      expect(wrapper.find('img').attributes('src')).toBe('/backend/uploads/members/4.webp')
+    })
+
     it('attaches cache-busting param with & when url already contains ?', () => {
       const wrapper = mount(MemberAvatar, {
         props: {

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { z } from 'zod'
 import { useAuthStore } from '~/stores/useAuthStore'
+import { resolveAssetUrl } from '~/utils/image'
 import type { User } from '~/types'
 import { apiUrl, useApiBase } from '~/composables/useApiBase'
 
@@ -38,21 +39,9 @@ const currentTheme = ref('light')
 const logoPath = ref<string | null>('uploads/logos/logo.jpg')
 const logoLoadError = ref(false)
 
-const backendBase = computed(() => {
-  const backendUrl = (config.public?.backendUrl as string) || ''
-  if (backendUrl) return backendUrl.replace(/\/+$/, '')
-  const api = (config.public?.apiBase as string) || ''
-  if (/^https?:\/\//i.test(api)) {
-    return api.replace(/\/api\/?$/, '')
-  }
-  return ''
-})
-
 const logoUrl = computed(() => {
   if (logoLoadError.value || !logoPath.value) return ''
-  const cleanPath = logoPath.value.replace(/^\/+/, '')
-  const base = backendBase.value ? backendBase.value.replace(/\/+$/, '') : ''
-  return base ? `${base}/${cleanPath}` : `/${cleanPath}`
+  return resolveAssetUrl(logoPath.value)
 })
 
 onMounted(() => {

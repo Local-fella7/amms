@@ -2,6 +2,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { z } from 'zod'
 import { useReportPdf } from '~/composables/useReportPdf'
+import { resolveAssetUrl } from '~/utils/image'
 
 type Gender = 'male' | 'female'
 type MemberStatus = 'active' | 'inactive' | 'deceased'
@@ -51,16 +52,6 @@ const { data: membersResponse, loading, error, execute: fetchMembers, fetchWithA
 const { data: locations, execute: fetchLocations } = useApi<LocationItem[]>()
 const { data: ageGroups, execute: fetchAgeGroups } = useApi<AgeGroupItem[]>()
 const { downloadPdf, openPdfInNewTab, isGenerating: isDownloadingPdf } = useReportPdf()
-const config = useRuntimeConfig()
-const backendBase = computed(() => {
-  const backendUrl = (config.public?.backendUrl as string) || ''
-  if (backendUrl) return backendUrl.replace(/\/+$/, '')
-  const api = (config.public?.apiBase as string) || ''
-  if (/^https?:\/\//i.test(api)) {
-    return api.replace(/\/api\/?$/, '')
-  }
-  return ''
-})
 
 const failedImageMemberIds = ref<Set<number>>(new Set())
 const onMemberPhotoError = (memberId: number) => {
@@ -362,11 +353,7 @@ const getMemberPhotoPath = (m?: Member | null): string => {
 }
 
 const getMemberPhotoUrl = (pic?: string) => {
-  if (!pic) return ''
-  if (pic.startsWith('http') || pic.startsWith('data:') || pic.startsWith('blob:')) return pic
-  const cleanPath = pic.replace(/^\/+/, '')
-  const base = backendBase.value ? backendBase.value.replace(/\/+$/, '') : ''
-  return base ? `${base}/${cleanPath}` : `/${cleanPath}`
+  return resolveAssetUrl(pic)
 }
 
 const openAddModal = () => {

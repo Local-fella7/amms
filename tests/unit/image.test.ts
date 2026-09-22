@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { optimizeImageFile } from '../../app/utils/image'
+import { optimizeImageFile, resolveAssetUrl } from '../../app/utils/image'
 
 describe('optimizeImageFile', () => {
   it('returns small files (<= 1MB) directly without processing', async () => {
@@ -192,4 +192,75 @@ describe('optimizeImageFile', () => {
       expect(result).toBe(largeFile)
     })
   })
+
+  describe('resolveAssetUrl', () => {
+    beforeEach(() => {
+      vi.unstubAllGlobals()
+    })
+
+    it('returns empty string for null, undefined, or empty path', () => {
+      expect(resolveAssetUrl(null)).toBe('')
+      expect(resolveAssetUrl(undefined)).toBe('')
+      expect(resolveAssetUrl('')).toBe('')
+      expect(resolveAssetUrl('   ')).toBe('')
+    })
+
+    it('preserves data: and blob: URLs untouched', () => {
+      const dataUri = 'data:image/png;base64,iVBORw0KGgo='
+      const blobUri = 'blob:https://asa.or.tz/123-abc'
+      expect(resolveAssetUrl(dataUri)).toBe(dataUri)
+      expect(resolveAssetUrl(blobUri)).toBe(blobUri)
+    })
+
+    it('sanitizes private LAN IP URLs containing /uploads/', () => {
+      vi.stubGlobal('useRuntimeConfig', () => ({
+        public: {
+          apiBase: '/backend/api'
+        }
+      }))
+
+      const rawLanUrl = 'http://192.168.100.100/amms/public/uploads/members/7.webp'
+      const resolved = resolveAssetUrl(rawLanUrl)
+      expect(resolved).toBe('/backend/uploads/members/7.webp')
+      expect(resolved).not.toContain('192.168.100.100')
+      expect(resolved).not.toContain('amms/public')
+    })
+
+    it('appends cache buster using updatedAt and timestamp', () => {
+      expect(resolveAssetUrl('uploads/logo.jpg', { updatedAt: '2026-09-22 10:00:00' }))
+        .toContain('?v=2026-09-22%2010%3A00%3A00')
+
+      expect(resolveAssetUrl('/backend/logo.jpg?foo=bar', { timestamp: 12345 }))
+        .toContain('&v=12345')
+    })
+
+    it('strips "amms/public/" if present in relative path', () => {
+      vi.stubGlobal('useRuntimeConfig', () => ({
+        public: {
+          apiBase: '/backend/api'
+        }
+      }))
+      expect(resolveAssetUrl('amms/public/uploads/members/5.webp'))
+        .toBe('/backend/uploads/members/5.webp')
+    })
+
+    it('upgrades http: to https: when window.location.protocol is https:', () => {
+      const origLocation = window.location
+      Object.defineProperty(window, 'location', {
+        value: { protocol: 'https:', hostname: 'asa.or.tz' },
+        writable: true,
+        configurable: true
+      })
+
+      const result = resolveAssetUrl('http://cdn.example.com/logo.png')
+      expect(result).toBe('https://cdn.example.com/logo.png')
+
+      Object.defineProperty(window, 'location', {
+        value: origLocation,
+        writable: true,
+        configurable: true
+      })
+    })
+  })
 })
+

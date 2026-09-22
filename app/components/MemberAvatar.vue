@@ -1,21 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import type { Member } from '~/types'
+import { resolveAssetUrl } from '~/utils/image'
 
 const props = defineProps<{
   member?: Partial<Member> | null
 }>()
-
-const config = useRuntimeConfig()
-const backendBase = computed(() => {
-  const backendUrl = (config.public?.backendUrl as string) || ''
-  if (backendUrl) return backendUrl.replace(/\/+$/, '')
-  const api = (config.public?.apiBase as string) || ''
-  if (/^https?:\/\//i.test(api)) {
-    return api.replace(/\/api\/?$/, '')
-  }
-  return ''
-})
 
 const photoError = ref(false)
 
@@ -32,25 +22,11 @@ watch(
   }
 )
 
-const getMemberPhotoUrl = (pic?: string) => {
-  if (!pic) return ''
-  if (pic.startsWith('data:') || pic.startsWith('blob:')) return pic
-  let url = ''
-  if (pic.startsWith('http')) {
-    url = pic
-  } else {
-    const cleanPath = pic.replace(/^\/+/, '')
-    const base = backendBase.value ? backendBase.value.replace(/\/+$/, '') : ''
-    url = base ? `${base}/${cleanPath}` : `/${cleanPath}`
-  }
-
-  // Cache buster if updated_at is present so browser immediately reflects fresh uploads
-  if (props.member?.updated_at) {
-    const sep = url.includes('?') ? '&' : '?'
-    url = `${url}${sep}v=${encodeURIComponent(props.member.updated_at)}`
-  }
-  return url
-}
+const photoUrl = computed(() => {
+  const path = getMemberPhotoPath(props.member)
+  if (!path || photoError.value) return ''
+  return resolveAssetUrl(path, { updatedAt: props.member?.updated_at })
+})
 
 const hasValidPhoto = computed(() => {
   return !photoError.value && !!getMemberPhotoPath(props.member)
@@ -71,7 +47,7 @@ const onPhotoError = () => {
 <template>
   <div v-if="hasValidPhoto" class="avatar-badge rounded-circle overflow-hidden d-flex align-items-center justify-content-center flex-shrink-0">
     <img 
-      :src="getMemberPhotoUrl(getMemberPhotoPath(member))" 
+      :src="photoUrl" 
       :alt="member?.first_name" 
       class="w-100 h-100 object-fit-cover" 
       @error="onPhotoError"

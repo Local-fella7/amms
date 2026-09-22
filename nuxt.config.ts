@@ -8,7 +8,7 @@ let backendTarget = process.env.NUXT_API_BASE
 if (!backendTarget && /^https?:\/\//i.test(rawBrowserBase)) {
   backendTarget = rawBrowserBase
 }
-backendTarget = (backendTarget || 'http://192.168.100.100/amms/public/api').replace(/\/+$/, '')
+backendTarget = (backendTarget || 'https://asa.or.tz/backend/api').replace(/\/+$/, '')
 if (!backendTarget.endsWith('/api')) {
   backendTarget = `${backendTarget}/api`
 }
@@ -19,6 +19,11 @@ const backendBase = backendTarget.replace(/\/api\/?$/, '')
 const browserApiBase = (isDev && /^https?:\/\//i.test(rawBrowserBase))
   ? '/api'
   : rawBrowserBase.replace(/\/+$/, '')
+
+// In production, default browser-facing backend URL to relative '/backend' to match same-origin static deployment
+const browserBackendUrl = isDev
+  ? backendBase
+  : (backendBase.startsWith('http') ? backendBase.replace(/^https?:\/\/[^/]+/, '') || '/backend' : backendBase)
 
 const routeRules: Record<string, { proxy: string }> = {
   '/uploads/**': {
@@ -42,7 +47,7 @@ export default defineNuxtConfig({
     public: {
       // Exposed to the client: used to build API URLs in the browser.
       apiBase: browserApiBase,
-      backendUrl: backendBase
+      backendUrl: browserBackendUrl
     }
   },
   nitro: {
