@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount, ref, computed, watch } from 'vue'
 import { useAuthStore } from '~/stores/useAuthStore'
+import { useAssociationStore } from '~/stores/useAssociationStore'
 import { resolveAssetUrl } from '~/utils/image'
 import type { Association } from '~/types'
 
 const route = useRoute()
 const config = useRuntimeConfig()
 const authStore = useAuthStore()
+const associationStore = useAssociationStore()
 const { execute: fetchAssociation, fetchWithAuth } = useApi<Association | Association[] | { data: Association | Association[] }>()
 
 const isSidebarCollapsed = ref(false)
@@ -20,9 +22,7 @@ watch(() => route.fullPath, () => {
   isSearchDropdownOpen.value = false
 })
 
-const associationName = ref('')
-const logoPath = ref<string | null>(null)
-const logoLoadError = ref(false)
+const associationName = computed(() => associationStore.name)
 
 // Global Search State
 const globalSearchQuery = ref('')
@@ -125,8 +125,7 @@ const clearSearch = () => {
 }
 
 const logoUrl = computed(() => {
-  if (logoLoadError.value || !logoPath.value) return ''
-  return resolveAssetUrl(logoPath.value)
+  return associationStore.logoUrl
 })
 
 const toggleSidebar = () => {
@@ -150,13 +149,10 @@ const loadAssociation = async () => {
     const res = await fetchAssociation((api) => api('/api/association'))
     const record = Array.isArray(res) ? res[0] : (res?.data ? (Array.isArray(res.data) ? res.data[0] : res.data) : res)
     if (record) {
-      associationName.value = record.name || ''
-      if (record.logo) {
-        logoPath.value = record.logo
-        if (import.meta.client) {
-          localStorage.setItem('amms_association_logo', record.logo)
-        }
-      }
+      associationStore.setAssociation({
+        name: record.name,
+        logo: record.logo
+      })
     }
   } catch {
     // Fallback to defaults
@@ -174,6 +170,7 @@ const handleDocumentClick = (e: MouseEvent) => {
 }
 
 onMounted(() => {
+  associationStore.init()
   const savedTheme = import.meta.client ? localStorage.getItem('amms_theme') : null
   const theme = savedTheme || document.documentElement.getAttribute('data-bs-theme') || 'light'
   currentTheme.value = theme
@@ -221,11 +218,11 @@ onBeforeUnmount(() => {
           <NuxtLink to="/" class="d-flex align-items-center gap-3 text-decoration-none overflow-hidden pe-2">
             <div class="brand-logo-box rounded-3 overflow-hidden d-flex align-items-center justify-content-center flex-shrink-0 shadow-2xs">
               <img 
-                v-if="logoUrl && !logoLoadError" 
+                v-if="logoUrl" 
                 :src="logoUrl" 
                 alt="Logo" 
                 class="w-100 h-100 object-fit-cover"
-                @error="logoLoadError = true"
+                @error="associationStore.setLogoLoadError(true)"
               />
               <div v-else class="brand-badge rounded-3 d-flex align-items-center justify-content-center text-white w-100 h-100">
                 <i class="bi bi-shield-check fs-5 text-white"></i>
@@ -256,11 +253,11 @@ onBeforeUnmount(() => {
             title="Click to expand navigation"
           >
             <img 
-              v-if="logoUrl && !logoLoadError" 
+              v-if="logoUrl" 
               :src="logoUrl" 
               alt="Logo" 
               class="w-100 h-100 object-fit-cover"
-              @error="logoLoadError = true"
+              @error="associationStore.setLogoLoadError(true)"
             />
             <div v-else class="brand-badge rounded-3 d-flex align-items-center justify-content-center text-white w-100 h-100">
               <i class="bi bi-shield-check fs-5 text-white"></i>

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { z } from 'zod'
-import { resolveAssetUrl } from '~/utils/image'
+import { resolveAssetUrl, optimizeImageFile } from '~/utils/image'
+import { useAssociationStore } from '~/stores/useAssociationStore'
 
 interface Association {
   id?: number
@@ -17,6 +18,7 @@ interface Association {
 }
 
 const { data: associationData, loading, error, execute: fetchAssociation, fetchWithAuth } = useApi<AssociationRecord | AssociationRecord[] | { data: AssociationRecord | AssociationRecord[] }>()
+const associationStore = useAssociationStore()
 
 const isSaving = ref(false)
 const formError = ref('')
@@ -93,12 +95,15 @@ const loadData = async () => {
       logoTimestamp.value = Date.now()
       if (record.logo) {
         logoPreview.value = getLogoUrl(record.logo)
-        if (import.meta.client) {
-          localStorage.setItem('amms_association_logo', record.logo)
-        }
       } else {
         logoPreview.value = null
       }
+
+      associationStore.setAssociation({
+        name: record.name,
+        logo: record.logo,
+        logoUpdatedAt: logoTimestamp.value
+      })
     }
   } catch (err) {
     // Error handled by composable
@@ -155,8 +160,16 @@ const handleSave = async () => {
     }
     
     selectedLogoFile.value = null
-    logoTimestamp.value = Date.now()
+    const newTs = Date.now()
+    logoTimestamp.value = newTs
     push.success('Association profile updated successfully!')
+    
+    associationStore.setAssociation({
+      name: name.value.trim(),
+      logo: currentLogoPath.value || 'uploads/logos/logo.jpg',
+      logoUpdatedAt: newTs
+    })
+    
     await loadData()
   } catch (err: unknown) {
     console.error('Save association error:', err)
