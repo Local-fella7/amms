@@ -1,3 +1,4 @@
+<script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { z } from 'zod'
 import { resolveAssetUrl } from '~/utils/image'
