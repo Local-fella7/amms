@@ -44,5 +44,7 @@ describe('useAuthStore', () => {
     expect(store.isAuthenticated).toBe(false)
     expect(cookieMock.value).toBeNull()
     expect(navigateMock).toHaveBeenCalledWith('/login')
+    expect((globalThis as unknown as { push: { info: ReturnType<typeof vi.fn> } }).push.info)
+      .toHaveBeenCalledWith('Logged out successfully')
   })
 })

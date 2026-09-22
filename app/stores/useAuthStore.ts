@@ -29,6 +29,9 @@ export const useAuthStore = defineStore('auth', {
       this.user = null
       const cookie = useCookie('jwt_token')
       cookie.value = null
+      if (typeof push !== 'undefined') {
+        push.info('Logged out successfully')
+      }
       navigateTo('/login')
     }
   }

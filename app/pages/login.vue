@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { z } from 'zod'
 import { useAuthStore } from '~/stores/useAuthStore'
+import { useAssociationStore } from '~/stores/useAssociationStore'
 import { resolveAssetUrl } from '~/utils/image'
 import type { User } from '~/types'
 import { apiUrl, useApiBase } from '~/composables/useApiBase'
@@ -27,6 +28,7 @@ definePageMeta({
 
 const config = useRuntimeConfig()
 const authStore = useAuthStore()
+const associationStore = useAssociationStore()
 const apiBase = useApiBase()
 const email = ref('admin@amms.local')
 const password = ref('admin123')
@@ -36,21 +38,16 @@ const loading = ref(false)
 const errorMessage = ref('')
 const currentTheme = ref('light')
 
-const logoPath = ref<string | null>('uploads/logos/logo.jpg')
-const logoLoadError = ref(false)
-
 const logoUrl = computed(() => {
-  if (logoLoadError.value || !logoPath.value) return ''
-  return resolveAssetUrl(logoPath.value)
+  return associationStore.logoUrl
+})
+
+const associationDisplayName = computed(() => {
+  return associationStore.name || 'ASA'
 })
 
 onMounted(() => {
-  if (import.meta.client) {
-    const cached = localStorage.getItem('amms_association_logo')
-    if (cached) {
-      logoPath.value = cached
-    }
-  }
+  associationStore.init()
 })
 
 const toggleTheme = () => {
@@ -86,7 +83,9 @@ const handleLogin = async () => {
   
   const validation = schema.safeParse({ email: email.value, password: password.value })
   if (!validation.success) {
-    errorMessage.value = validation.error.issues[0].message
+    const valMsg = validation.error.issues[0].message
+    errorMessage.value = valMsg
+    push.error(valMsg)
     return
   }
 
@@ -111,6 +110,8 @@ const handleLogin = async () => {
 
     if (token) {
       authStore.setToken(token, user)
+      const welcomeName = user?.first_name ? `Welcome back, ${user.first_name}!` : 'Logged in successfully'
+      push.success(welcomeName)
 
       if (requiresPasswordChange) {
         currentPasswordInput.value = password.value
@@ -119,11 +120,21 @@ const handleLogin = async () => {
         await navigateTo('/', { replace: true })
       }
     } else {
-      errorMessage.value = response?.message || response?.error || 'Login failed. Please check your credentials.'
+      let rawMsg = response?.message || response?.error || 'Unable to log in please'
+      if (/invalid credentials|inactive account|check your credentials/i.test(rawMsg)) {
+        rawMsg = 'Unable to log in please'
+      }
+      errorMessage.value = rawMsg
+      push.error(rawMsg)
     }
   } catch (err: unknown) {
     console.error('Login submit error:', err)
-    errorMessage.value = extractErrorMessage(err, 'An error occurred during authentication.')
+    let msg = extractErrorMessage(err, 'Unable to log in please')
+    if (/invalid credentials|inactive account|check your credentials/i.test(msg)) {
+      msg = 'Unable to log in please'
+    }
+    errorMessage.value = msg
+    push.error(msg)
   } finally {
     loading.value = false
   }
@@ -160,9 +171,12 @@ const submitPasswordChange = async () => {
     })
 
     isChangePasswordModalOpen.value = false
+    push.success('Password updated successfully')
     await navigateTo('/', { replace: true })
   } catch (err: unknown) {
-    changePasswordError.value = extractErrorMessage(err, 'Failed to update password')
+    const msg = extractErrorMessage(err, 'Failed to update password')
+    changePasswordError.value = msg
+    push.error(msg)
   } finally {
     isChangingPassword.value = false
   }
@@ -179,14 +193,14 @@ const submitPasswordChange = async () => {
         <!-- Brand Header (Enlarged & Centered) -->
         <div class="position-relative z-1 text-center w-100 py-3 mt-4">
           <div class="mb-4">
-            <img v-if="logoUrl" :src="logoUrl" @error="logoLoadError = true" alt="Logo" class="login-logo shadow-sm" />
+            <img v-if="logoUrl" :src="logoUrl" @error="associationStore.setLogoLoadError(true)" alt="Logo" class="login-logo" />
             <div v-else class="brand-icon-wrapper rounded-4 d-inline-flex align-items-center justify-content-center shadow-sm">
-              <i class="bi bi-shield-check display-4"></i>
+              <i class="bi bi-shield-check display-3"></i>
             </div>
           </div>
           <div>
-            <h1 class="display-3 fw-bold mb-1 text-white tracking-tight">ASA</h1>
-            <p class="fs-4 fw-normal mb-0 text-white-50">Arusha Somali Association</p>
+            <h1 class="display-3 fw-bold mb-1 text-white tracking-tight">{{ associationDisplayName }}</h1>
+            <p class="fs-4 fw-normal mb-0 text-white-50">{{ associationStore.name || 'Arusha Somali Association' }}</p>
           </div>
         </div>
 
@@ -207,7 +221,7 @@ const submitPasswordChange = async () => {
 
         <!-- Footer / Quote -->
         <div class="position-relative z-1 pt-4 border-top border-white border-opacity-10 d-flex justify-content-between align-items-center">
-          <small class="text-white-50">&copy; {{ new Date().getFullYear() }} ASA Civic Registry</small>
+          <small class="text-white-50">&copy; {{ new Date().getFullYear() }} {{ associationDisplayName }} Civic Registry</small>
         </div>
       </div>
 
@@ -231,11 +245,11 @@ const submitPasswordChange = async () => {
           
           <!-- Mobile Brand Logo -->
           <div class="d-lg-none text-center mb-5">
-            <img v-if="logoUrl" :src="logoUrl" @error="logoLoadError = true" alt="Logo" class="mobile-login-logo shadow-sm mb-3" />
+            <img v-if="logoUrl" :src="logoUrl" @error="associationStore.setLogoLoadError(true)" alt="Logo" class="mobile-login-logo shadow-sm mb-3" />
             <div v-else class="d-inline-flex align-items-center justify-content-center bg-primary bg-opacity-10 p-3 rounded-circle mb-3">
               <i class="bi bi-shield-check fs-1 text-primary"></i>
             </div>
-            <h2 class="fw-bold text-primary mb-0">ASA Portal</h2>
+            <h2 class="fw-bold text-primary mb-0">{{ associationDisplayName }} Portal</h2>
           </div>
 
           <div class="mb-4 text-center text-lg-start">
@@ -411,19 +425,23 @@ const submitPasswordChange = async () => {
 
 <style scoped>
 .login-logo {
-  width: 90px;
-  height: 90px;
+  width: 140px;
+  height: 140px;
   object-fit: contain;
   background-color: white;
-  border-radius: 1rem;
+  border-radius: 1.25rem;
+  padding: 0.6rem;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.25), 0 8px 10px -6px rgba(0, 0, 0, 0.15);
 }
 
 .mobile-login-logo {
-  width: 72px;
-  height: 72px;
+  width: 96px;
+  height: 96px;
   object-fit: contain;
   background-color: white;
-  border-radius: 50%;
+  border-radius: 1.25rem;
+  padding: 0.4rem;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
 }
 
 .left-banner {
@@ -433,10 +451,11 @@ const submitPasswordChange = async () => {
 }
 
 .brand-icon-wrapper {
-  width: 90px;
-  height: 90px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  width: 140px;
+  height: 140px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1.5px solid rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(8px);
 }
 
 .amms-accent {
