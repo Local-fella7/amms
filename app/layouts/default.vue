@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount, ref, computed, watch } from 'vue'
 import { useAuthStore } from '~/stores/useAuthStore'
+import { resolveAssetUrl } from '~/utils/image'
 import type { Association } from '~/types'
 
 const route = useRoute()
@@ -123,21 +124,9 @@ const clearSearch = () => {
   matchedPayments.value = []
 }
 
-const backendBase = computed(() => {
-  const backendUrl = (config.public?.backendUrl as string) || ''
-  if (backendUrl) return backendUrl.replace(/\/+$/, '')
-  const api = (config.public?.apiBase as string) || ''
-  if (/^https?:\/\//i.test(api)) {
-    return api.replace(/\/api\/?$/, '')
-  }
-  return ''
-})
-
 const logoUrl = computed(() => {
   if (logoLoadError.value || !logoPath.value) return ''
-  const cleanPath = logoPath.value.replace(/^\/+/, '')
-  const base = backendBase.value ? backendBase.value.replace(/\/+$/, '') : ''
-  return base ? `${base}/${cleanPath}` : `/${cleanPath}`
+  return resolveAssetUrl(logoPath.value)
 })
 
 const toggleSidebar = () => {
