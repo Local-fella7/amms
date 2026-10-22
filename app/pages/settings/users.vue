@@ -23,7 +23,7 @@ interface RoleOption {
   name: string
 }
 
-const { data: usersResponse, loading, error, execute: fetchUsers, fetchWithAuth } = useApi<UserItem[] | { data: UserItem[] }>()
+const { data: usersResponse, loading, error, execute: fetchUsers, fetchWithAuth, mutate, isMutating: isDeleting } = useApi<UserItem[] | { data: UserItem[] }>()
 const { data: roles, execute: fetchRoles } = useApi<RoleOption[]>()
 
 const searchQuery = ref('')
@@ -50,7 +50,6 @@ const isViewModalOpen = ref(false)
 // Delete Modal State
 const itemToDelete = ref<UserItem | null>(null)
 const isDeleteModalOpen = ref(false)
-const isDeleting = ref(false)
 
 // Pagination State
 const currentPage = ref(1)
@@ -444,7 +443,7 @@ onMounted(() => {
     <DeleteConfirmModal
       v-model="isDeleteModalOpen"
       message="Are you sure you want to permanently delete this user?"
-        :itemTitle="itemToDelete ? `&quot;${itemToDelete.name}&quot;` : ''"
+      :itemTitle="itemToDelete ? `&quot;${itemToDelete.first_name} ${itemToDelete.last_name}&quot;` : ''"
       :loading="isDeleting"
       confirmText="Delete User"
       @confirm="confirmDelete"
@@ -578,6 +577,5 @@ onMounted(() => {
   background-color: rgba(220, 53, 69, 0.12) !important;
 }
 </style>
-
 
 

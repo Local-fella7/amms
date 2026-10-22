@@ -1,5 +1,16 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import { useAssociationStore } from '~/stores/useAssociationStore'
+
+const associationStore = useAssociationStore()
+
 useHead({
+  link: [
+    {
+      rel: 'icon',
+      href: computed(() => associationStore.logoUrl || '/favicon.ico')
+    }
+  ],
   script: [
     {
       innerHTML: `(function() {
